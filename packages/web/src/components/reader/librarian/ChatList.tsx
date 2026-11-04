@@ -8,7 +8,7 @@ import { bucketByDay } from '../../../lib/buckets';
 import { relativeTimeFromNow } from '../../../lib/relativeTime';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { useIntersectionPrefetch } from '../../../lib/useIntersectionPrefetch';
-import { LoadingState } from '../../../routes/shared/ListStates';
+import { EmptyState, LoadingState } from '../../../routes/shared/ListStates';
 import { DayGroupHeading } from '../../DayGroupHeading';
 import { Spinner } from '../../Spinner';
 import { ReaderIcon } from '../ReaderIcon';
@@ -188,8 +188,7 @@ export function ChatList({
         </button>
       </p>
     );
-  if (chats.length === 0)
-    return <p className="silo-chat-list-note">No chats yet. Use + to start one.</p>;
+  if (chats.length === 0) return <EmptyState title="No chats yet" body="Use + to start one." />;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the list only routes keys from its buttons.
     <div

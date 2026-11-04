@@ -310,7 +310,7 @@ it('falls back to the empty pane when the last chat is deleted', async () => {
   await screen.findByText('Answer 1');
   fireEvent.click(screen.getByRole('button', { name: 'Delete chat: Chat 1' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
-  await screen.findByText('No chats yet. Use + to start one.');
+  await screen.findByText('No chats yet');
   await waitFor(() => expect(where()).toBe(''));
   expect(screen.getByText('Select a chat')).toBeTruthy();
 });
@@ -328,7 +328,7 @@ it('moves through the list with the arrow keys and opens with Enter', async () =
 
 it('says so when there are no chats', async () => {
   setup([]);
-  await screen.findByText('No chats yet. Use + to start one.');
+  await screen.findByText('No chats yet');
   expect(screen.getByRole('button', { name: 'New chat' })).toBeTruthy();
 });
 
