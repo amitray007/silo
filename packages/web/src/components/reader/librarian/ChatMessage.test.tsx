@@ -1,9 +1,23 @@
+import { readFileSync } from 'node:fs';
 import type { UIMessage } from '@ai-sdk/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceModel } from '../listen/voiceModels';
 import { ChatMessage } from './ChatMessage';
+
+vi.mock('@streamdown/mermaid', () => ({
+  mermaid: {
+    name: 'mermaid',
+    type: 'diagram',
+    language: 'mermaid',
+    getMermaid: () => ({
+      render: async () => ({
+        svg: '<svg width="3000" height="100" viewBox="0 0 3000 100"><text>Wide diagram</text></svg>',
+      }),
+    }),
+  },
+}));
 
 vi.mock('../listen/voiceModels', () => ({ useVoiceModel: vi.fn() }));
 
@@ -35,6 +49,44 @@ function search(id: string, count: number) {
 }
 
 describe('ChatMessage', () => {
+  it('leaves horizontal and vertical diagram wheels to native scrolling', async () => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          queueMicrotask(() =>
+            callback(
+              [{ isIntersecting: true } as IntersectionObserverEntry],
+              this as unknown as IntersectionObserver,
+            ),
+          );
+        }
+        takeRecords() {
+          return [{ isIntersecting: true } as IntersectionObserverEntry];
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const { container } = render(
+      <ChatMessage message={reply('```mermaid\ngraph LR; A-->B\n```')} />,
+    );
+    const diagram = await waitFor(() => {
+      const element = container.querySelector('[data-streamdown="mermaid"] svg');
+      expect(element).toBeTruthy();
+      return element as SVGElement;
+    });
+    expect(readFileSync('src/styles/reader-librarian.css', 'utf8')).toMatch(
+      /\[data-streamdown="mermaid"\] :is\(div, \[role="application"\]\)\s*\{[^}]*touch-action: auto !important/s,
+    );
+    for (const delta of [{ deltaX: 120 }, { deltaY: 120 }]) {
+      const wheel = new WheelEvent('wheel', { ...delta, bubbles: true, cancelable: true });
+      diagram.dispatchEvent(wheel);
+      expect(wheel.defaultPrevented).toBe(false);
+    }
+  });
+
   it('gives an answer with no steps and no reasoning no line above its text', () => {
     const { container, rerender } = render(
       <ChatMessage message={{ id: 'q', role: 'assistant', parts: [] }} streaming fixedTrace />,
@@ -62,6 +114,28 @@ describe('ChatMessage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Used 3 tools' }));
     expect(screen.getAllByText('Searched your library')).toHaveLength(1);
     expect(screen.getByText('17 links')).toBeTruthy();
+  });
+
+  it('highlights fenced code and typesets $$ maths once their plugins load', async () => {
+    const { container } = render(
+      <ChatMessage
+        message={reply('```ts\nconst answer: number = 42;\n```\n\nIt is $$x^2 + y^2$$ here.')}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('.katex')).toBeTruthy(), { timeout: 8000 });
+    await waitFor(
+      () =>
+        expect(
+          container.querySelector('[data-streamdown="code-block-body"] span[style*="--sdm-c"]'),
+        ).toBeTruthy(),
+      { timeout: 8000 },
+    );
+  }, 20000);
+
+  it('leaves a plain answer without code, maths or diagram blocks', () => {
+    const { container } = render(<ChatMessage message={reply('Just words, and a $5 price.')} />);
+    expect(container.querySelector('[data-streamdown="code-block"], .katex')).toBeNull();
+    expect(container.textContent).toContain('$5 price');
   });
 
   it('shows text written before a tool call as a muted step, apart from the answer', () => {

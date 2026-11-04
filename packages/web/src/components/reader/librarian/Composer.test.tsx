@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { Composer, type QuickAction } from './Composer';
+import { Composer, ComposerBar, type QuickAction } from './Composer';
 
 afterEach(cleanup);
 
@@ -103,4 +103,21 @@ it('appends follow-ups after quick actions and sends their text', () => {
 it('shows three static pending follow-up chips', () => {
   render(composer({ suggestions: { status: 'pending' } }));
   expect(screen.getAllByRole('button', { name: 'Loading follow-up' })).toHaveLength(3);
+});
+
+it('puts the bar hint inside the bar, announced, and drops it when cleared', () => {
+  const props = {
+    value: '',
+    onChange: () => {},
+    onSend: () => {},
+    label: 'Ask',
+    placeholder: 'Ask…',
+  };
+  const { container, rerender } = render(<ComposerBar {...props} hint="Allow or deny first." />);
+  const bar = container.querySelector('.silo-chat-bar') as HTMLElement;
+  const hint = screen.getByRole('status');
+  expect(hint.textContent).toBe('Allow or deny first.');
+  expect(bar.contains(hint)).toBe(true);
+  rerender(<ComposerBar {...props} />);
+  expect(screen.queryByRole('status')).toBeNull();
 });
