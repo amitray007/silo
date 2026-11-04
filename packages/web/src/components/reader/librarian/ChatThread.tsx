@@ -12,6 +12,8 @@ import { reducedMotion } from '../../../lib/motion';
 import { Spinner } from '../../Spinner';
 import { stopAnswerSpeech } from '../listen/answerSpeech';
 import { ReaderIcon } from '../ReaderIcon';
+import type { AnswerControls } from './AnswerActions';
+import { pagerOrder } from './answerVersions';
 import { ChatMessage } from './ChatMessage';
 import { ComposerBar, type QuickAction } from './Composer';
 import { messageReasoning } from './Reasoning';
@@ -139,6 +141,9 @@ export function ChatThread({
     lastAssistant,
     canShowSuggestions(chat, active, suggestFollowups),
   );
+  // Selecting a version swaps ids, so the pager order outlives each message's mount.
+  const versionOrder = useRef<string[]>([]);
+  const answerControls = controlsOf(chat, lastAssistant?.id, versionOrder);
   const reasoningShown = showsLiveReasoning(lastAssistant, wholeAnswers);
   const status = statusLabel(chat.messages);
   const send = (text: string, action?: string) => {
@@ -171,6 +176,7 @@ export function ChatThread({
               linkId={linkId}
               expired={message.id !== lastAssistant?.id}
               streaming={chat.busy && message.id === lastAssistant?.id}
+              controls={message.id === lastAssistant?.id ? answerControls : undefined}
               held={wholeAnswers && chat.busy && message.id === chat.messages.at(-1)?.id}
               onApproval={chat.addToolApprovalResponse}
             />
@@ -268,6 +274,26 @@ export function ChatThread({
       />
     </div>
   );
+}
+
+function controlsOf(
+  chat: ThreadChat,
+  liveId: string | undefined,
+  order: { current: string[] },
+): AnswerControls | undefined {
+  if (!chat.canRegenerate || !liveId) return undefined;
+  const pager = pagerOrder(
+    order.current,
+    { id: liveId, model: chat.answerModel?.label },
+    chat.versions,
+  );
+  order.current = pager.map((entry) => entry.id);
+  return {
+    answerModel: chat.answerModel,
+    pager,
+    onRegenerate: chat.regenerate,
+    onSelectVersion: chat.selectVersion,
+  };
 }
 
 function canShowSuggestions(chat: ThreadChat, active: boolean, wanted: boolean) {

@@ -120,6 +120,9 @@ needs Tailwind and shadcn; assistant-ui is headless but would replace our
 - Versions: the replaced answer is kept. A pager "‹ 2 / 3 ›" with the model's
   short name shows under the answer; the shown version is the one later turns
   build on. Storage and compaction rules are decided in the slice plan.
+- Keep at most five newest snapshots, each at most 1 MB of serialized JSON. Skip an
+  oversized old answer without truncation when regenerating. Version selection rejects
+  an oversized swap with `invalid_message`; snapshots use metadata read under the chat lock.
 - Unpark "Regenerate" in `docs/product/future-scope.md`.
 
 ## Verification (every slice)

@@ -4,6 +4,22 @@ import { useEffect, useMemo } from 'react';
 import { articleChips, libraryChips, resolveActions } from '../lib/librarianActions';
 import { ApiError, apiDelete, apiGet, apiPost, apiUrl } from './client';
 import { queryKeys, useAi, useSettings } from './hooks';
+import type { AiProviderKind } from './types';
+
+type LibrarianAnswerModel = { provider: AiProviderKind; id: string; label: string };
+type LibrarianAnswerVersion = {
+  id: string;
+  parts: UIMessage['parts'];
+  metadata: {
+    model?: LibrarianAnswerModel;
+    suggestions?: { kind: 'ask' | 'do'; text: string }[];
+    [key: string]: unknown;
+  };
+};
+export type LibrarianAnswerMetadata = {
+  model?: LibrarianAnswerModel;
+  versions?: LibrarianAnswerVersion[];
+};
 
 export type ChatSummary = {
   id: string;
@@ -32,6 +48,11 @@ export const librarianApi = {
     apiPost<ChatSummary>('/api/librarian/chats', linkId ? { linkId } : {}),
   get: (id: string) => apiGet<ChatDetail>(`/api/librarian/chats/${id}`),
   delete: (id: string) => apiDelete(`/api/librarian/chats/${id}`),
+  selectVersion: (id: string, messageId: string, versionId: string) =>
+    apiPost<{ messages: UIMessage[] }>(
+      `/api/librarian/chats/${id}/messages/${encodeURIComponent(messageId)}/versions/${encodeURIComponent(versionId)}/select`,
+      {},
+    ),
   messagesUrl: (id: string) => apiUrl(`/api/librarian/chats/${id}/messages`),
 };
 /** Whether the Librarian can answer: AI on, the feature on and a model chosen. Ask and its page show only then. */

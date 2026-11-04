@@ -37,9 +37,38 @@ describe('Librarian route access', () => {
       ['GET', '/librarian/chats/id'],
       ['DELETE', '/librarian/chats/id'],
       ['POST', '/librarian/chats/id/messages'],
+      ['POST', '/librarian/chats/id/messages/message/versions/version/select'],
     ] as const) {
       expect((await api.request(path ?? '', { method })).status).toBe(403);
     }
+  });
+  it('accepts strict regeneration bodies and rejects extra fields', async () => {
+    const { streamLibrarianReply } = await import('@silo/core');
+    const input = {
+      trigger: 'regenerate',
+      messageId: 'answer',
+      model: { provider: 'openai', id: 'gpt-5.4-mini' },
+    };
+    const url = '/librarian/chats/00000000-0000-4000-8000-000000000001/messages';
+    const response = await app('env_token').request(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    expect(response.status).toBe(409);
+    expect(streamLibrarianReply).toHaveBeenCalledWith({
+      chatId: '00000000-0000-4000-8000-000000000001',
+      regenerate: input,
+    });
+    expect(
+      (
+        await app('env_token').request(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...input, surprise: true }),
+        })
+      ).status,
+    ).toBe(400);
   });
   it('passes an assistant approval envelope through to core validation', async () => {
     const { streamLibrarianReply } = await import('@silo/core');

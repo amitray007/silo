@@ -1,7 +1,6 @@
 import { Command } from 'cmdk';
 import {
   type CSSProperties,
-  type KeyboardEvent,
   useEffect,
   useId,
   useLayoutEffect,
@@ -10,106 +9,19 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import type { AiProviderJson, AiProviderKind, SettingsMap } from '../../api/types';
-import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER } from '../../lib/aiModels';
+import type { AiProviderJson, AiProviderKind } from '../../api/types';
+import { AI_PROVIDER_NAMES } from '../../lib/aiModels';
 import { useEscapeLayer } from '../../lib/useEscapeLayer';
 import { trapDialogTab } from '../ModalShell';
+import {
+  filterModelGroups,
+  isolateCommandKeys,
+  keyedModelGroups,
+  type ModelChoice,
+  type ModelGroup,
+  ModelOptions,
+} from './modelOptions';
 import { ProviderLogo } from './ProviderLogo';
-
-type ModelChoice = NonNullable<SettingsMap['ai']['features'][string]['model']>;
-type Model = NonNullable<AiProviderJson['models']>[number];
-type ModelGroup = { kind: AiProviderKind; models: Model[] };
-
-function newestFirst(a: Model, b: Model) {
-  const time = (model: Model) => Date.parse(model.createdAt ?? '') || 0;
-  return time(b) - time(a);
-}
-
-function contextLabel(tokens: number) {
-  if (tokens >= 1_000_000) return `${Number((tokens / 1_000_000).toFixed(1))}M`;
-  return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : String(tokens);
-}
-
-function searchRank(model: Model, query: string) {
-  const label = model.label.toLowerCase();
-  const fields = [label, model.id.toLowerCase(), model.owner?.toLowerCase() ?? ''];
-  if (!query.split(' ').every((token) => fields.some((field) => field.includes(token)))) {
-    return -1;
-  }
-  if (label.startsWith(query)) return 0;
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (new RegExp(`\\b${escaped}`).test(label)) return 1;
-  return label.includes(query) ? 2 : 3;
-}
-
-function isolateCommandKeys(event: KeyboardEvent<HTMLButtonElement>) {
-  if (
-    ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(event.key) ||
-    (event.ctrlKey && ['n', 'j', 'p', 'k'].includes(event.key))
-  ) {
-    event.stopPropagation();
-  }
-}
-
-function ModelOptions({
-  groups,
-  value,
-  onPick,
-}: {
-  groups: ModelGroup[];
-  value: ModelChoice | null;
-  onPick: (choice: ModelChoice) => void;
-}) {
-  return groups.map(({ kind, models }) => (
-    <Command.Group
-      key={kind}
-      heading={
-        <>
-          <ProviderLogo kind={kind} size={14} />
-          {AI_PROVIDER_NAMES[kind]}
-        </>
-      }
-    >
-      {models.map((model) => {
-        const selected = value?.provider === kind && value.id === model.id;
-        return (
-          <Command.Item
-            key={model.id}
-            value={JSON.stringify([kind, model.id])}
-            keywords={[model.label, model.id, model.owner ?? '']}
-            className="silo-palette-row silo-model-option"
-            onSelect={() => onPick({ provider: kind, id: model.id })}
-          >
-            <div className="silo-model-option-copy">
-              <div className="silo-model-option-heading">
-                <span className="silo-model-option-label">{model.label}</span>
-                {model.contextWindow != null && (
-                  <span
-                    className="silo-model-context"
-                    title={`${model.contextWindow.toLocaleString()} tokens`}
-                  >
-                    {contextLabel(model.contextWindow)}
-                  </span>
-                )}
-                <span className="silo-model-check" data-current={selected || undefined}>
-                  {selected ? '✓' : ''}
-                </span>
-              </div>
-              {(model.id !== model.label || (kind === 'gateway' && model.owner)) && (
-                <span className="silo-model-option-meta">
-                  {model.id !== model.label && <span className="silo-model-id">{model.id}</span>}
-                  {kind === 'gateway' && model.owner && (
-                    <span className="silo-model-owner">{model.owner}</span>
-                  )}
-                </span>
-              )}
-            </div>
-          </Command.Item>
-        );
-      })}
-    </Command.Group>
-  ));
-}
 
 /** Mounted only while open, so each new search starts with all providers. */
 function ModelPickerPopover({
@@ -138,18 +50,14 @@ function ModelPickerPopover({
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const previousFilter = useRef({ search, provider });
-  const visibleGroups = useMemo(() => {
-    const query = search.trim().toLowerCase().split(/\s+/).join(' ');
-    return groups.flatMap((group) => {
-      if (provider !== 'all' && group.kind !== provider) return [];
-      const models = group.models
-        .map((model) => ({ model, rank: searchRank(model, query) }))
-        .filter(({ rank }) => rank >= 0)
-        .sort((a, b) => a.rank - b.rank || newestFirst(a.model, b.model))
-        .map(({ model }) => model);
-      return models.length ? [{ kind: group.kind, models }] : [];
-    });
-  }, [groups, provider, search]);
+  const visibleGroups = useMemo(
+    () =>
+      filterModelGroups(
+        provider === 'all' ? groups : groups.filter((group) => group.kind === provider),
+        search,
+      ),
+    [groups, provider, search],
+  );
   useEscapeLayer(true, onClose);
 
   useLayoutEffect(() => {
@@ -339,14 +247,7 @@ export function ModelPicker({
     }
   }, [disabled]);
   const id = useId();
-  const groups = useMemo(
-    () =>
-      AI_PROVIDER_ORDER.flatMap((kind) => {
-        const provider = providers.find((p) => p.kind === kind && p.configured && p.keyReadable);
-        return provider ? [{ kind, models: [...(provider.models ?? [])].sort(newestFirst) }] : [];
-      }),
-    [providers],
-  );
+  const groups = useMemo(() => keyedModelGroups(providers), [providers]);
   const chosen = providers
     .find((p) => p.kind === value?.provider)
     ?.models?.find((m) => m.id === value?.id);

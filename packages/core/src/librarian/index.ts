@@ -1,11 +1,17 @@
 import { librarianChats as chats, db, links, librarianMessages as messages } from '@silo/db';
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
-import { isAiFeatureOn } from '../ai/status.js';
+import { isAiFeatureOn, resolveAiCredential } from '../ai/status.js';
 import { decodeListCursor, encodeListCursor } from '../links/pagination.js';
 import { resolveAction, resolveMessageAction } from './action-resolution.js';
 import { isApprovalContinuation } from './approval.js';
 import { beginLibrarianRun, getLibrarianRunner } from './ports.js';
-import { incomingUserMessageSchema, type LibrarianMessage } from './types.js';
+import {
+  answerVersionSchema,
+  incomingUserMessageSchema,
+  type LibrarianMessage,
+  librarianMessageSchema,
+  type regenerateRequestSchema,
+} from './types.js';
 
 export {
   incomingUserMessageSchema,
@@ -161,21 +167,74 @@ export async function saveChatMessages(
       .where(eq(chats.id, chatId));
   });
 }
+async function resolveTurn(
+  stored: NonNullable<Awaited<ReturnType<typeof getChat>>>,
+  incoming: LibrarianMessage | undefined,
+  regenerate: import('zod').z.infer<typeof regenerateRequestSchema> | undefined,
+) {
+  let message = incoming;
+  let replacing: LibrarianMessage | undefined;
+  let selected: Awaited<ReturnType<typeof resolveAiCredential>>;
+  if (regenerate) {
+    const last = stored.messages.at(-1);
+    if (!last || last.id !== regenerate.messageId || last.role !== 'assistant')
+      return { code: 'invalid_message' } as const;
+    if (last.parts.some((p) => (p as { state?: string }).state === 'approval-requested'))
+      return { code: 'approval_pending' } as const;
+    replacing = last;
+    message = stored.messages.at(-2);
+    if (message?.role !== 'user') return { code: 'invalid_message' } as const;
+    if (regenerate.model) {
+      selected = await resolveAiCredential(regenerate.model.provider, regenerate.model.id);
+      if (!selected) return { code: 'invalid_model' } as const;
+    }
+  }
+  return { message, replacing, selected };
+}
+async function replyContext(
+  saved: NonNullable<Awaited<ReturnType<typeof getChat>>>,
+  replacing: LibrarianMessage | undefined,
+  selected: Awaited<ReturnType<typeof resolveAiCredential>>,
+) {
+  const [link] = saved.chat.linkId
+    ? await db
+        .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
+        .from(links)
+        .where(and(eq(links.id, saved.chat.linkId), isNull(links.deletedAt)))
+    : [];
+  const { ownerAction } = await resolveMessageAction(saved.messages, saved.chat.linkId);
+  return {
+    ...(ownerAction ? { ownerAction } : {}),
+    ...(selected ? { model: { ...selected.model, provider: selected.kind } } : {}),
+    ...(replacing ? { replacing } : {}),
+    messages: replacing ? saved.messages.slice(0, -1) : saved.messages,
+    summary: replacing ? null : saved.chat.summary,
+    summarizedCount: replacing ? 0 : saved.summarizedCount,
+    messageSeqs: saved.messageSeqs,
+    link: link ?? null,
+  };
+}
 export async function streamLibrarianReply({
   chatId,
-  message,
-  abortSignal,
+  message: incoming,
+  regenerate,
 }: {
   chatId: string;
-  message: LibrarianMessage;
-  abortSignal?: AbortSignal;
+  message?: LibrarianMessage;
+  regenerate?: import('zod').z.infer<typeof regenerateRequestSchema>;
 }) {
   if (!(await isAiFeatureOn('librarian'))) return { ok: false, code: 'ai_not_ready' } as const;
   const endRun = beginLibrarianRun(chatId);
   if (!endRun) return { ok: false, code: 'busy' } as const;
-  function fail<Code extends 'not_found' | 'unavailable' | 'invalid_message' | 'unknown_action'>(
-    code: Code,
-  ) {
+  function fail<
+    Code extends
+      | 'not_found'
+      | 'unavailable'
+      | 'invalid_message'
+      | 'unknown_action'
+      | 'invalid_model'
+      | 'approval_pending',
+  >(code: Code) {
     endRun?.();
     return { ok: false, code } as const;
   }
@@ -184,6 +243,10 @@ export async function streamLibrarianReply({
     if (!stored) return fail('not_found');
     const runner = getLibrarianRunner();
     if (!runner) return fail('unavailable');
+    const turn = await resolveTurn(stored, incoming, regenerate);
+    if ('code' in turn) return fail(turn.code);
+    const { message, replacing, selected } = turn;
+    if (!message) return fail('invalid_message');
     const continuation = isApprovalContinuation(message, stored.messages.at(-1));
     if (!continuation && !incomingUserMessageSchema.safeParse(message).success)
       return fail('invalid_message');
@@ -194,27 +257,15 @@ export async function streamLibrarianReply({
       .from(messages)
       .where(eq(messages.id, message.id));
     if (existing && existing.chatId !== chatId) return fail('invalid_message');
-    await saveChatMessages(chatId, [message]);
+    if (!regenerate) await saveChatMessages(chatId, [message]);
     const saved = await getChat(chatId);
     if (!saved) return fail('not_found');
-    const [link] = stored.chat.linkId
-      ? await db
-          .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
-          .from(links)
-          .where(and(eq(links.id, stored.chat.linkId), isNull(links.deletedAt)))
-      : [];
-    const { ownerAction } = await resolveMessageAction(saved.messages, saved.chat.linkId);
+    const context = await replyContext(saved, replacing, selected);
     return {
       ok: true,
       response: await runner({
-        ...(ownerAction ? { ownerAction } : {}),
+        ...context,
         chatId,
-        messages: saved.messages,
-        summary: saved.chat.summary,
-        summarizedCount: saved.summarizedCount,
-        messageSeqs: saved.messageSeqs,
-        link: link ?? null,
-        abortSignal,
         endRun,
       }),
     } as const;
@@ -227,15 +278,12 @@ export async function streamLibrarianReply({
 export { importMessagesSchema, quickRequestSchema } from './types.js';
 
 let activeQuickRuns = 0;
-export async function quickLibrarianReply(
-  input: {
-    linkId: string;
-    action: string;
-    quote: string;
-    paragraph: number;
-  },
-  abortSignal?: AbortSignal,
-) {
+export async function quickLibrarianReply(input: {
+  linkId: string;
+  action: string;
+  quote: string;
+  paragraph: number;
+}) {
   if (!(await isAiFeatureOn('librarian'))) return { ok: false, code: 'ai_not_ready' } as const;
   const runner = getLibrarianRunner();
   if (!runner) return { ok: false, code: 'unavailable' } as const;
@@ -248,8 +296,6 @@ export async function quickLibrarianReply(
       activeQuickRuns--;
     }
   };
-  // A cancelled stream may never reach the runner's onEnd; free the slot on abort too.
-  abortSignal?.addEventListener('abort', endRun, { once: true });
   try {
     const [link] = await db
       .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
@@ -270,7 +316,6 @@ export async function quickLibrarianReply(
         ...(ownerAction ? { ownerAction } : {}),
         chatId: '',
         transient: true,
-        abortSignal,
         endRun,
         link,
         messages: [
@@ -312,6 +357,114 @@ export async function importLibrarianMessages(chatId: string, incoming: Libraria
       })),
     );
     return 'ok';
+  } finally {
+    release();
+  }
+}
+
+export { regenerateRequestSchema } from './types.js';
+export function answerVersion(message: LibrarianMessage) {
+  const parsed = librarianMessageSchema.parse(message);
+  const { versions: _versions, ...metadata } = parsed.metadata ?? {};
+  return { id: message.id, parts: message.parts, metadata };
+}
+function replacementAnswer(
+  last: LibrarianMessage,
+  answer: LibrarianMessage,
+  selectingVersionId?: string,
+) {
+  const current = librarianMessageSchema.safeParse({
+    ...last,
+    metadata: last.metadata ?? undefined,
+  });
+  if (!current.success) return undefined;
+  const snapshot = answerVersionSchema.safeParse(answerVersion(current.data));
+  const versions = current.data.metadata?.versions ?? [];
+  // Keep five newest valid snapshots; skip an old answer over 1 MB rather than truncate it.
+  const nextVersions = snapshot.success ? [...versions, snapshot.data].slice(-5) : versions;
+  let replacement = {
+    ...answer,
+    metadata: { ...librarianMessageSchema.parse(answer).metadata, versions: nextVersions },
+  };
+  if (selectingVersionId) {
+    const chosen = versions.find((v) => v.id === selectingVersionId);
+    if (!chosen || !snapshot.success) return undefined;
+    replacement = {
+      ...answer,
+      id: chosen.id,
+      parts: chosen.parts,
+      metadata: {
+        ...chosen.metadata,
+        versions: versions.map((v) => (v.id === selectingVersionId ? snapshot.data : v)),
+      },
+    };
+  }
+  const valid = librarianMessageSchema.safeParse(replacement);
+  if (!valid.success) return undefined;
+  return valid.data;
+}
+export async function replaceLastAnswer(
+  chatId: string,
+  expected: LibrarianMessage,
+  answer: LibrarianMessage,
+  selectingVersionId?: string,
+) {
+  return db.transaction(async (tx) => {
+    const [chat] = await tx.select().from(chats).where(eq(chats.id, chatId)).for('update');
+    if (!chat) return false;
+    const [last] = await tx
+      .select()
+      .from(messages)
+      .where(eq(messages.chatId, chatId))
+      .orderBy(desc(messages.seq))
+      .limit(1);
+    if (
+      !last ||
+      last.id !== expected.id ||
+      JSON.stringify(last.parts) !== JSON.stringify(expected.parts)
+    )
+      return false;
+    const valid = replacementAnswer(last, answer, selectingVersionId);
+    if (!valid) return false;
+    await tx
+      .update(messages)
+      .set({ id: valid.id, parts: valid.parts, metadata: valid.metadata ?? null })
+      .where(eq(messages.id, last.id));
+    await tx
+      .update(chats)
+      .set({ updatedAt: new Date(), summary: null, summaryThrough: 0 })
+      .where(eq(chats.id, chatId));
+    return true;
+  });
+}
+export async function selectLibrarianVersion(chatId: string, messageId: string, versionId: string) {
+  const release = beginLibrarianRun(chatId);
+  if (!release) return { ok: false, code: 'busy' } as const;
+  try {
+    const stored = await getChat(chatId);
+    const last = stored?.messages.at(-1);
+    if (!last || last.id !== messageId || last.role !== 'assistant')
+      return { ok: false, code: 'invalid_message' } as const;
+    if (last.parts.some((p) => (p as { state?: string }).state === 'approval-requested'))
+      return { ok: false, code: 'approval_pending' } as const;
+    const metadata = librarianMessageSchema.parse(last).metadata;
+    const versions = metadata?.versions ?? [];
+    const index = versions.findIndex((v) => v.id === versionId);
+    const chosen = versions[index];
+    if (!chosen) return { ok: false, code: 'invalid_message' } as const;
+    const next = [...versions];
+    const snapshot = answerVersionSchema.safeParse(answerVersion(last));
+    if (!snapshot.success) return { ok: false, code: 'invalid_message' } as const;
+    next[index] = snapshot.data;
+    const answer = {
+      ...last,
+      id: chosen.id,
+      parts: chosen.parts,
+      metadata: { ...chosen.metadata, versions: next },
+    };
+    if (!(await replaceLastAnswer(chatId, last, answer, versionId)))
+      return { ok: false, code: 'busy' } as const;
+    return { ok: true, messages: (await getChat(chatId))?.messages ?? [] } as const;
   } finally {
     release();
   }

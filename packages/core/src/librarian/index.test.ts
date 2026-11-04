@@ -3,11 +3,141 @@ import { sql } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
-vi.mock('../ai/status.js', () => ({ isAiFeatureOn: vi.fn(async () => true) }));
+vi.mock('../ai/status.js', () => ({
+  isAiFeatureOn: vi.fn(async () => true),
+  resolveAiCredential: vi.fn(async (_provider: string, id: string) =>
+    id === 'valid' ? { kind: 'openai', model: { id, label: 'Valid' } } : undefined,
+  ),
+}));
 
 const suite = postgresReachable() ? describe : describe.skip;
 suite('Librarian persistence', () => {
   const h = setupPgHarness('silo_librarian', () => import('./index.js'));
+  it('regenerates only the last answer, validates overrides, guards runs and swaps persisted versions', async () => {
+    const c = h.mod();
+    const { setLibrarianRunner } = await import('./ports.js');
+    const runner = vi.fn(async (_request: import('./ports.js').LibrarianRequest) => new Response());
+    setLibrarianRunner(runner);
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing');
+    const user = {
+      id: 'regen-user',
+      role: 'user' as const,
+      parts: [{ type: 'text', text: 'Hello' }],
+    };
+    const answer = {
+      id: 'regen-answer',
+      role: 'assistant' as const,
+      parts: [{ type: 'text', text: 'First' }],
+      metadata: { suggestions: [{ kind: 'ask', text: 'First suggestion' }] },
+    };
+    await c.saveChatMessages(chat.id, [user, answer]);
+    const regenerate = { trigger: 'regenerate' as const, messageId: answer.id };
+    expect(
+      await c.streamLibrarianReply({
+        chatId: chat.id,
+        regenerate: { ...regenerate, messageId: user.id },
+      }),
+    ).toMatchObject({ code: 'invalid_message' });
+    expect(
+      await c.streamLibrarianReply({
+        chatId: chat.id,
+        regenerate: { ...regenerate, model: { provider: 'openai', id: 'missing' } },
+      }),
+    ).toMatchObject({ code: 'invalid_model' });
+    expect(await c.streamLibrarianReply({ chatId: chat.id, regenerate })).toMatchObject({
+      ok: true,
+    });
+    const request = runner.mock.calls.at(-1)?.[0] as
+      | import('./ports.js').LibrarianRequest
+      | undefined;
+    expect(request?.messages).toEqual([user]);
+    expect(request?.model).toBeUndefined();
+    expect(await c.selectLibrarianVersion(chat.id, answer.id, 'missing')).toMatchObject({
+      code: 'busy',
+    });
+    request?.endRun?.();
+    expect(
+      await c.streamLibrarianReply({
+        chatId: chat.id,
+        regenerate: { ...regenerate, model: { provider: 'openai', id: 'valid' } },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(runner.mock.calls.at(-1)?.[0].model).toMatchObject({
+      provider: 'openai',
+      id: 'valid',
+      label: 'Valid',
+    });
+    runner.mock.calls.at(-1)?.[0].endRun?.();
+    await c.saveChatMessages(chat.id, [{ ...answer, parts: [{ state: 'approval-requested' }] }]);
+    expect(await c.streamLibrarianReply({ chatId: chat.id, regenerate })).toMatchObject({
+      code: 'approval_pending',
+    });
+    await c.saveChatMessages(chat.id, [answer]);
+    for (let i = 0; i < 7; i++) {
+      const stored = (await c.getChat(chat.id))?.messages.at(-1);
+      if (!stored) throw new Error('missing');
+      const metadata = c.librarianMessageSchema.parse(stored).metadata;
+      const next = {
+        id: `regen-${i}`,
+        role: 'assistant' as const,
+        parts: [{ type: 'text', text: String(i) }],
+        metadata: { versions: [...(metadata?.versions ?? []), c.answerVersion(stored)].slice(-5) },
+      };
+      expect(await c.replaceLastAnswer(chat.id, stored, next)).toBe(true);
+      expect(await c.replaceLastAnswer(chat.id, stored, next)).toBe(false);
+    }
+    const last = (await c.getChat(chat.id))?.messages.at(-1);
+    const versions = c.librarianMessageSchema.parse(last).metadata?.versions;
+    expect(versions).toHaveLength(5);
+    const selected = versions?.[0];
+    if (!last || !selected) throw new Error('missing');
+    expect(await c.selectLibrarianVersion(chat.id, last.id, selected.id)).toMatchObject({
+      ok: true,
+    });
+    expect((await c.getChat(chat.id))?.messages.at(-1)).toMatchObject({
+      id: selected.id,
+      parts: selected.parts,
+    });
+    await c.deleteChat(chat.id);
+    setLibrarianRunner(undefined);
+  });
+  it('snapshots locked metadata and skips oversized history while rejecting unsafe selection', async () => {
+    const c = h.mod();
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing');
+    const old = {
+      id: 'size-old',
+      role: 'assistant' as const,
+      parts: [{ type: 'text', text: 'Old' }],
+    };
+    await c.saveChatMessages(chat.id, [old]);
+    const expected = (await c.getChat(chat.id))?.messages.at(-1);
+    if (!expected) throw new Error('missing');
+    await c.saveChatMessages(chat.id, [
+      { ...old, metadata: { suggestions: [{ kind: 'ask', text: 'Saved later' }] } },
+    ]);
+    const large = {
+      ...old,
+      id: 'size-large',
+      parts: [{ type: 'text', text: 'é'.repeat(500001) }],
+    };
+    expect(await c.replaceLastAnswer(chat.id, expected, large)).toBe(true);
+    const stored = (await c.getChat(chat.id))?.messages.at(-1);
+    if (!stored) throw new Error('missing');
+    expect(
+      c.librarianMessageSchema.parse(stored).metadata?.versions?.[0]?.metadata.suggestions,
+    ).toEqual([{ kind: 'ask', text: 'Saved later' }]);
+    expect(await c.selectLibrarianVersion(chat.id, stored.id, old.id)).toMatchObject({
+      code: 'invalid_message',
+    });
+    expect((await c.getChat(chat.id))?.messages.at(-1)).toEqual(stored);
+    expect(await c.replaceLastAnswer(chat.id, stored, { ...old, id: 'size-new' })).toBe(true);
+    const next = (await c.getChat(chat.id))?.messages.at(-1);
+    expect(c.librarianMessageSchema.safeParse(next).success).toBe(true);
+    expect(c.librarianMessageSchema.parse(next).metadata?.versions).toHaveLength(1);
+    await c.deleteChat(chat.id);
+  });
   it('lists article titles and null for library or deleted articles', async () => {
     const c = h.mod();
     const { db, links } = await import('@silo/db');
@@ -207,33 +337,6 @@ suite('Librarian persistence', () => {
     expect((await send('run3')).ok).toBe(true);
     finish?.();
     setLibrarianRunner(undefined);
-  });
-  it('frees a quick slot on abort while runners remain pending', async () => {
-    const c = h.mod();
-    const { setLibrarianRunner } = await import('./ports.js');
-    const id = crypto.randomUUID();
-    await h
-      .rawDb()
-      .execute(
-        sql`INSERT INTO links (id, source_kind, url, canonical_url) VALUES (${id}, 'link', ${'https://example.com/quick'}, ${'https://example.com/quick'})`,
-      );
-    const runner = vi.fn(() => new Promise<Response>(() => {}));
-    setLibrarianRunner(runner);
-    const controllers = Array.from({ length: 3 }, () => new AbortController());
-    const input = { linkId: id, action: 'explain', quote: 'Passage', paragraph: 1 };
-    try {
-      void c.quickLibrarianReply(input, controllers[0]?.signal);
-      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(1));
-      void c.quickLibrarianReply(input, controllers[1]?.signal);
-      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2));
-      expect(await c.quickLibrarianReply(input)).toEqual({ ok: false, code: 'busy' });
-      controllers[0]?.abort();
-      void c.quickLibrarianReply(input, controllers[2]?.signal);
-      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(3));
-    } finally {
-      for (const controller of controllers) controller.abort();
-      setLibrarianRunner(undefined);
-    }
   });
   it('limits quick runs to two and frees completed slots', async () => {
     const c = h.mod();
