@@ -174,9 +174,7 @@ export const ChatMessage = memo(function ChatMessage({
       setResolved((seen) => (seen[raw] === real ? seen : { ...seen, [raw]: real })),
     [],
   );
-  const [wasLive, setWasLive] = useState(streaming);
   if (held && !wasHeld) setWasHeld(true);
-  if (streaming && !wasLive) setWasLive(true);
   if (message.role === 'user') return <UserMessage message={message} />;
   const { steps, answer } = splitSteps(message);
   const approving = isAwaitingApproval(message);
@@ -193,7 +191,6 @@ export const ChatMessage = memo(function ChatMessage({
             reasoning={reasoning}
             live={streaming && !approving}
             answerStarted={!held && answer.trim() !== ''}
-            reserved={wasLive}
           />
         ) : (
           reasoning && <Reasoning {...reasoning} />

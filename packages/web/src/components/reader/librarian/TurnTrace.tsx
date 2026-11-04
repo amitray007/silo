@@ -36,7 +36,8 @@ function liveLabel(running: ReturnType<typeof runningStep>, live: boolean, answe
  * The one fixed-height line above an answer. While the turn runs it holds a shimmering label that
  * changes words in place (Thinking, then the running tool, then Thinking again); once the answer
  * text flows, or the turn is done, it holds the "Thought" and "Used N tools" disclosures. The
- * line never changes height, so nothing below it moves. The live reasoning tail hangs over the
+ * line never changes height while it shows, so nothing below it moves; an answer that used no
+ * tools and showed no reasoning has no line at all. The live reasoning tail hangs over the
  * answer's empty space instead of pushing it, and goes away when the answer text starts.
  */
 export function TurnTrace({
@@ -44,7 +45,6 @@ export function TurnTrace({
   reasoning,
   live,
   answerStarted,
-  reserved,
 }: {
   message: UIMessage;
   reasoning: MessageReasoning | null;
@@ -52,8 +52,6 @@ export function TurnTrace({
   live: boolean;
   /** Answer text (after the last tool call) has begun to arrive. */
   answerStarted: boolean;
-  /** This message was live on screen, so the line keeps its height after the turn. */
-  reserved: boolean;
 }) {
   const [open, setOpen] = useState<Panel | null>(null);
   const running = runningStep(message);
@@ -61,7 +59,9 @@ export function TurnTrace({
   const used = toolsUsed(message);
   const label = liveLabel(running, live, answerStarted);
   const thought = reasoning !== null && !reasoning.live;
-  if (!reserved && label === null && !thought && used === 0) return null;
+  // With nothing to show, the line goes. In a live turn that happens in the same frame the first
+  // answer words arrive, so the text takes the line's place and nothing below it moves.
+  if (label === null && !thought && used === 0) return null;
   const toggle = (panel: Panel) => setOpen((now) => (now === panel ? null : panel));
   return (
     <div className="silo-reasoning silo-trace">
