@@ -885,6 +885,41 @@ const still = () => {
   return !!reduce?.matches;
 };
 
+function needsFrame(l: Live, now: number) {
+  if (!l.shown) return false;
+  if (!l.key) return true;
+  if (still()) return false;
+  if (l.o.enter !== undefined && now - l.seen < (l.o.enter + 1) * 1000) return true;
+  return (
+    l.o.loop !== false ||
+    l.start === undefined ||
+    clock.frame - l.start + (l.o.offset ?? 0) < (l.icon.still || l.icon.frames)
+  );
+}
+
+function wake() {
+  if (!raf && [...live].some((l) => needsFrame(l, performance.now()))) {
+    last = 0;
+    raf = requestAnimationFrame(tick);
+  }
+}
+
+function repaint() {
+  for (const l of live) l.key = '';
+  wake();
+}
+
+let resolution: MediaQueryList | undefined;
+function watchResolution() {
+  resolution?.removeEventListener('change', onResolution);
+  resolution = window.matchMedia?.(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  resolution?.addEventListener('change', onResolution);
+}
+function onResolution() {
+  watchResolution();
+  repaint();
+}
+
 // a loop rides the page clock so every sticker stays in step; a replay or a play once counts from its own start
 function frameOf({ icon, o, start }: Live) {
   if (still()) return icon.still ?? 0;
@@ -914,7 +949,7 @@ function tick(now: number) {
       l.stop();
     }
   }
-  raf = live.size ? requestAnimationFrame(tick) : 0;
+  raf = [...live].some((l) => needsFrame(l, now)) ? requestAnimationFrame(tick) : 0;
 }
 
 /** Plays an icon in a canvas sized by css, sharing the page clock, until stop(); off screen stickers skip their paints. */
@@ -922,15 +957,29 @@ export function play(canvas: HTMLCanvasElement, icon: Icon, opts: PlayOptions = 
   const io =
     typeof IntersectionObserver === 'undefined'
       ? null
-      : new IntersectionObserver(([en]) => (l.shown = en.isIntersecting));
+      : new IntersectionObserver(([en]) => {
+          l.shown = en.isIntersecting;
+          wake();
+        });
   const ro =
     typeof ResizeObserver === 'undefined'
       ? null
-      : new ResizeObserver(([en]) => (l.css = en.contentRect.width));
+      : new ResizeObserver(([en]) => {
+          l.css = en.contentRect.width;
+          l.key = '';
+          wake();
+        });
   const stop = () => {
     io?.disconnect();
     ro?.disconnect();
     live.delete(l);
+    if (!live.size) {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      reduce?.removeEventListener('change', repaint);
+      resolution?.removeEventListener('change', onResolution);
+      window.removeEventListener('resize', repaint);
+    }
   };
   const l: Live = {
     canvas,
@@ -945,22 +994,27 @@ export function play(canvas: HTMLCanvasElement, icon: Icon, opts: PlayOptions = 
   };
   io?.observe(canvas);
   ro?.observe(canvas);
-  live.add(l);
-  if (!raf) {
-    last = 0;
-    raf = requestAnimationFrame(tick);
+  if (!live.size) {
+    still();
+    reduce?.addEventListener('change', repaint);
+    window.addEventListener('resize', repaint);
+    watchResolution();
   }
+  live.add(l);
+  wake();
   return {
     stop,
     replay: () => {
       l.start = clock.frame;
       l.key = '';
+      wake();
     },
     set: ({ icon: next, ...o }) => {
       if (next) l.icon = next;
       Object.assign(l.o, o);
       l.pal = resolve(l.o.palette);
       l.key = '';
+      wake();
     },
   };
 }
