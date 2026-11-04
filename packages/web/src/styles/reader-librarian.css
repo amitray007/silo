@@ -229,6 +229,56 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: none;
 }
 /* A whole answer that was held back arrives with the same drift as the trace. */
+/* Streamdown's headings, quotes, rules and task lists also ship only Tailwind classes. Reader
+   headings use 600, scaled down for a chat column. */
+.silo-chat-answer :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-tight);
+}
+.silo-chat-answer h1 {
+  font-size: var(--text-lg);
+}
+.silo-chat-answer h2 {
+  font-size: var(--text-md);
+}
+.silo-chat-answer :is(h3, h4, h5, h6) {
+  font-size: var(--text-base);
+}
+.silo-chat-answer > div > * + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 14px;
+}
+.silo-chat-answer > div > :is(h1, h2, h3, h4, h5, h6) + * {
+  margin-top: 4px;
+}
+.silo-chat-answer blockquote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-2);
+  color: var(--mut);
+}
+.silo-chat-answer blockquote > * + * {
+  margin-top: 6px;
+}
+.silo-chat-answer hr {
+  height: 0;
+  margin-block: 12px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.silo-chat-answer .task-list-item {
+  list-style: none;
+}
+.silo-chat-answer .task-list-item input[type="checkbox"] {
+  margin: 0 6px 0 -18px;
+  vertical-align: -1px;
+  accent-color: var(--ink);
+}
+/* A long code line scrolls inside its panel; the fade says there is more to the right. */
+.silo-chat-answer [data-streamdown="code-block-body"] {
+  scrollbar-width: thin;
+}
 /* Streamdown tables and code: plain Oat styling, since its own classes are Tailwind. */
 .silo-chat-answer [data-streamdown="table-wrapper"] {
   overflow-x: auto;
@@ -501,11 +551,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 .silo-chat-assistant li::marker {
   color: var(--fnt);
-}
-.silo-chat-assistant :is(h1, h2, h3, h4) {
-  margin: 12px 0 4px;
-  font-size: 14px;
-  font-weight: 600;
 }
 .silo-chat-assistant strong {
   font-weight: 500;
