@@ -15,10 +15,10 @@ these choices:
   citations.
 - **No model selector in the composer.** The chat model stays in Settings -> AI.
   No "This article" chip under the field.
-- The composer is **one plain rounded field** with the send arrow inside, the
-  chips **above** it, and a **soft fade** where the thread meets the composer
+- The composer is one plain rounded field with the send arrow inside, the
+  chips above it, and a soft fade where the thread meets the composer
   (reference: Shiori's chat bar).
-- **Regenerate** can use **another model**, picked from every model the owner's
+- Regenerate can use another model, picked from every model the owner's
   keys reach, in a searchable picker grouped by provider.
 
 The agent chose these where the owner did not answer (reversible; change on
@@ -65,7 +65,7 @@ needs Tailwind and shadcn; assistant-ui is headless but would replace our
 
 ### 2. Steps and sources (`feat/chat-steps`)
 
-- Replace the trace line with a **steps disclosure**. While a tool runs, the
+- Replace the trace line with a steps disclosure. While a tool runs, the
   line shows its label shimmering ("Searching your library"). When all are done:
   "Used 3 tools · 4s" with a chevron. Open, it is a vertical timeline: one row
   per tool with an icon, the past-tense label, the result count, and for
@@ -84,7 +84,7 @@ needs Tailwind and shadcn; assistant-ui is headless but would replace our
 
 - One rounded field (about 52 px tall, radius = half its height) with the send
   arrow inside; Stop replaces it while streaming. Placeholder stays per surface.
-- Chips **above** the field, in one horizontally scrolling row with a fade at
+- Chips above the field, in one horizontally scrolling row with a fade at
   the right edge: the quick actions first (today they sit as text under the
   field), then the follow-ups from slice 4.
 - A gradient from transparent to the page background, about 48 px, above the
