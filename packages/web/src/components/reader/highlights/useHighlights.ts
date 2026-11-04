@@ -209,6 +209,7 @@ export function useHighlights({
     blocked,
     resolved,
     orphans,
+    writable,
     canWrite,
     color,
     setColor,

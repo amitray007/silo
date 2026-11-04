@@ -126,7 +126,7 @@ const tools: readonly DockTool[] = [
     title: 'Highlight',
     heading: 'Highlight',
     glyph: <ReaderIcon name="highlighter" size={19} />,
-    hidden: (api) => !api.highlights.canWrite,
+    hidden: (api) => !api.highlights.writable,
     sheet: ({ api }) => (
       <HighlightSheet color={api.highlights.color} setColor={api.highlights.setColor} />
     ),
@@ -155,7 +155,7 @@ const tools: readonly DockTool[] = [
     heading: 'Notes',
     glyph: <ReaderIcon name="note" size={19} />,
     press: { on: (api) => api.lane.open, toggle: (api) => api.lane.toggle() },
-    hidden: (api) => !api.highlights.canWrite && api.highlights.items.length === 0,
+    hidden: (api) => !api.highlights.writable && api.highlights.items.length === 0,
     unavailable: { when: (api) => api.highlights.items.length === 0, title: 'No highlights yet' },
     badge: (api) => api.highlights.items.length,
   },
