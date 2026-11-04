@@ -8,6 +8,7 @@ const fake = vi.hoisted(() => ({
   loads: [] as string[],
   started: [] as string[],
   halted: 0,
+  holdLoad: undefined as Promise<void> | undefined,
 }));
 
 vi.mock('./voiceModels', () => ({ useVoiceModel: vi.fn() }));
@@ -17,6 +18,7 @@ vi.mock('./engines', () => ({
     voices: () => [{ id: 'v1', label: 'One', language: 'en-us' }],
     load: async () => {
       fake.loads.push(id);
+      await fake.holdLoad;
     },
     dispose: () => {},
   }),
@@ -118,4 +120,43 @@ it('is unavailable until the voice model is downloaded', () => {
 it('speaks nothing for an answer with no sentences', async () => {
   await speakAnswer('a', '```js\nonly()\n```', prefs);
   expect(fake.started).toEqual([]);
+});
+
+it('creates one engine for overlapping starts while its model loads', async () => {
+  let finish: () => void = () => {};
+  fake.holdLoad = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  // A different engine from earlier tests, so nothing is cached yet.
+  const first = speakAnswer('a', 'First answer here.', { ...prefs, engine: 'kokoro' });
+  const second = speakAnswer('b', 'Second answer here.', { ...prefs, engine: 'kokoro' });
+  finish();
+  await Promise.all([first, second]);
+  fake.holdLoad = undefined;
+  expect(fake.loads).toEqual(['kokoro']);
+});
+
+it('stops an answer that is still loading, so it never starts playing', async () => {
+  let finish: () => void = () => {};
+  fake.holdLoad = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const view = renderHook(() => useAnswerSpeech('a', 'First answer here.'));
+  act(() => view.result.current.toggle());
+  expect(view.result.current.phase).toBe('loading');
+  act(() => stopAnswerSpeech('a'));
+  finish();
+  await act(async () => {
+    await fake.holdLoad;
+  });
+  fake.holdLoad = undefined;
+  expect(view.result.current.phase).toBe('idle');
+  expect(fake.started).toEqual([]);
+});
+
+it('stops an answer that is playing', async () => {
+  const view = renderHook(() => useAnswerSpeech('a', 'First answer here.'));
+  await act(async () => view.result.current.toggle());
+  act(() => stopAnswerSpeech('a'));
+  expect(view.result.current.phase).toBe('idle');
 });

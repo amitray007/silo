@@ -3,8 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render as renderPlain, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { expect, it, vi } from 'vitest';
+import { stopAnswerSpeech } from '../listen/answerSpeech';
 import { ChatThread, type Composer } from './ChatThread';
 import { type ThreadChat, useLibrarianPageChat } from './useLibrarianChat';
+
+vi.mock('../listen/answerSpeech', async (original) => ({
+  ...(await original<typeof import('../listen/answerSpeech')>()),
+  stopAnswerSpeech: vi.fn(),
+}));
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const render = (ui: ReactElement) =>
@@ -426,4 +432,22 @@ it('streams the running answer by default', async () => {
   expect(screen.getByText(/Half an ans/)).toBeTruthy();
   client.clear();
   vi.unstubAllGlobals();
+});
+
+it('stops its answers speaking when the dock chat folds', () => {
+  const chat = fakeChat();
+  const thread = (active: boolean) => (
+    <ChatThread
+      active={active}
+      chat={chat}
+      composer={composer()}
+      actions={[]}
+      emptyText="Empty"
+      header={null}
+    />
+  );
+  const view = render(thread(true));
+  vi.mocked(stopAnswerSpeech).mockClear();
+  view.rerender(thread(false));
+  expect(stopAnswerSpeech).toHaveBeenCalledWith('a');
 });

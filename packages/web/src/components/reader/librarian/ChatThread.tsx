@@ -7,6 +7,7 @@ import {
 import { isWord, passageChips } from '../../../lib/librarianActions';
 import { reducedMotion } from '../../../lib/motion';
 import { Spinner } from '../../Spinner';
+import { stopAnswerSpeech } from '../listen/answerSpeech';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
 import { ComposerBar, type QuickAction } from './Composer';
@@ -109,7 +110,13 @@ export function ChatThread({
 }) {
   const { input, setInput, passage, setPassage, field } = composer;
   const log = useStickyLog(chat.messages, active);
+  const messagesRef = useRef(chat.messages);
+  messagesRef.current = chat.messages;
   const owner = useLibrarianActions();
+  // A folded dock stays mounted, so its answers must stop here rather than on unmount.
+  useEffect(() => {
+    if (!active) for (const message of messagesRef.current) stopAnswerSpeech(message.id);
+  }, [active]);
   const wholeAnswers = useChatAnswers() === 'complete';
   useRefreshOnRemovedAction(chat.error?.message);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;

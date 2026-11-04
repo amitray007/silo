@@ -105,14 +105,32 @@ function releaseVoice(): void {
   context = undefined;
 }
 
-async function engineFor(id: EngineId): Promise<TtsEngine> {
-  clearTimeout(idleTimer);
-  if (loaded?.id === id) return loaded;
-  releaseVoice();
+/** One load per engine: answers started while it runs share it instead of creating a second model. */
+const loading = new Map<EngineId, Promise<TtsEngine>>();
+
+async function loadEngine(id: EngineId): Promise<TtsEngine> {
   const engine = createEngine(id);
-  await engine.load(() => {});
+  try {
+    await engine.load(() => {});
+  } catch (reason) {
+    engine.dispose();
+    throw reason;
+  }
+  // Another engine's overlapping load finished first: the newest load replaces it.
+  loaded?.dispose();
   loaded = engine;
   return engine;
+}
+
+function engineFor(id: EngineId): Promise<TtsEngine> {
+  clearTimeout(idleTimer);
+  if (loaded?.id === id) return Promise.resolve(loaded);
+  const pending = loading.get(id);
+  if (pending) return pending;
+  releaseVoice();
+  const started = loadEngine(id).finally(() => loading.delete(id));
+  loading.set(id, started);
+  return started;
 }
 
 /** Stop the answer with this key if it is the one speaking. */
