@@ -41,7 +41,7 @@ export function useHighlights({
   prose,
   scroll,
   writable,
-  askable = false,
+  selectable = false,
   autoColor,
 }: {
   link: LinkJson;
@@ -49,8 +49,8 @@ export function useHighlights({
   scroll: HTMLElement | null;
   /** False for trash and feed posts, which refuse writes. */
   writable: boolean;
-  /** Select text to ask about it, though the link refuses writes. */
-  askable?: boolean;
+  /** Select text to listen, copy or ask, though the link refuses writes. */
+  selectable?: boolean;
   /** While set, a new selection is highlighted at once in this colour (the Highlight sheet is open). */
   autoColor: HighlightColor | null;
 }) {
@@ -78,7 +78,7 @@ export function useHighlights({
     prose,
     scroll,
     map,
-    enabled: canWrite || askable,
+    enabled: canWrite || selectable,
   });
   const [openNote, setOpenNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

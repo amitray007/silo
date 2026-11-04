@@ -837,12 +837,6 @@ it('continues the temporary answer in a new dock chat after importing it', async
   expect(screen.queryByRole('region', { name: 'Passage answer' })).toBeNull();
 });
 
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-}
-
 it('offers only Ask on a feed post when the Librarian is ready', async () => {
   serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
   mount(true);
@@ -873,13 +867,15 @@ it('answers a feed post passage without offering to save it as a note', async ()
   expect(posts).toHaveLength(0);
 });
 
-it('offers no toolbar on a feed post when the Librarian is not ready', async () => {
+it('keeps the reading tools on a feed post when the Librarian is not ready', async () => {
   serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
   mount(false);
-  await screen.findByText('Alpha beta gamma delta.');
+  await screen.findByRole('toolbar', { name: 'Reader tools' }, { timeout: 5000 });
   select('quick brown fox');
-  await settle();
-  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  expect(within(toolbar).queryByRole('button', { name: 'Ask' })).toBeNull();
+  expect(within(toolbar).queryByRole('button', { name: /Highlight/ })).toBeNull();
+  expect(within(toolbar).getByRole('button', { name: 'More' })).toBeDefined();
 });
 
 it('keeps the full toolbar on a library link when the Librarian is ready', async () => {

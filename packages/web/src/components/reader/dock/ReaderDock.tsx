@@ -350,7 +350,7 @@ export function ReaderDock({
     prose,
     scroll,
     writable: canSavePosition(link, trashed),
-    askable: askReady && isFeedPost(link) && !trashed,
+    selectable: isFeedPost(link) && !trashed,
     // While the Highlight sheet is open, a selection is highlighted at once.
     autoColor: highlighting ? highlightColor : null,
   });
