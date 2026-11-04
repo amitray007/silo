@@ -6,6 +6,7 @@ import {
   useLibrarianChatDetail,
   useLibraryChips,
 } from '../../../api/librarian';
+import { StickerSlot } from '../../stickers/StickerSlot';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatThread, useChatComposer } from './ChatThread';
 import { useLibrarianPageChat } from './useLibrarianChat';
@@ -16,7 +17,8 @@ function useChatArticle(chatId: string | null) {
   const detail = useLibrarianChatDetail(chatId ?? undefined);
   const listed = all.data?.pages.flatMap((page) => page.chats).find((chat) => chat.id === chatId);
   const linkId = listed?.linkId ?? detail.data?.chat.linkId ?? null;
-  return { linkId, linkTitle: listed?.linkTitle ?? null };
+  const hasChats = (all.data?.pages[0]?.chats.length ?? 0) > 0;
+  return { linkId, linkTitle: listed?.linkTitle ?? null, hasChats };
 }
 
 /**
@@ -85,6 +87,7 @@ export function ChatPane({
         emptyText={
           article.linkId ? 'Ask about this article or your library.' : 'Ask about your library.'
         }
+        emptyArt={article.hasChats ? <StickerSlot name="chat" size={96} /> : null}
         header={null}
       />
     </section>

@@ -77,6 +77,7 @@ export function ChatThread({
   linkId,
   actions,
   emptyText,
+  emptyArt,
   header,
   notice,
   menu,
@@ -93,6 +94,8 @@ export function ChatThread({
   linkId?: string | undefined;
   actions: readonly QuickAction[];
   emptyText: string;
+  /** Art above the empty text (the page's sticker). */
+  emptyArt?: ReactNode;
   header: ReactNode;
   /** Extra lines after the messages (an import error). */
   notice?: ReactNode;
@@ -164,7 +167,10 @@ export function ChatThread({
                 <Spinner label="Loading conversation" minHeight={96} />
               </div>
             ) : (
-              <p className="silo-chat-empty">{emptyText}</p>
+              <div className="silo-chat-empty">
+                {emptyArt && <div className="silo-chat-empty-art">{emptyArt}</div>}
+                <p>{emptyText}</p>
+              </div>
             ))}
           {notice}
           {chat.failed && (

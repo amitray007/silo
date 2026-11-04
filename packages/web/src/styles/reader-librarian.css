@@ -313,6 +313,14 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   margin: 0;
   color: var(--mut);
 }
+.silo-chat-empty > p {
+  margin: 0;
+}
+.silo-chat-empty-art {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 4px;
+}
 .silo-chat-error,
 .silo-chat-pending {
   margin: 0;
