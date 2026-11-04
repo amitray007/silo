@@ -13,6 +13,8 @@ import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { useListWidth } from '../../lib/useListWidth';
 import { DeleteForeverDialog } from '../DeleteForeverDialog';
 import { ListPaneDivider } from './ListPaneDivider';
+import { LibraryChatPane } from './librarian/LibraryChatPane';
+import { useListChat } from './librarian/useListChat';
 import { ReaderPane } from './ReaderPane';
 import { ReaderSelectionContext } from './ReaderSelection';
 import { useReaderActions, useReaderKeyboard } from './useReaderActions';
@@ -57,6 +59,7 @@ export function ReaderLayout({
     hasNextPage,
     fetchNextPage,
   });
+  const chat = useListChat({ linkOpen: Boolean(selectedId), trashed });
   const listed = links[index];
   const detail = useLink(selectedId ?? undefined, {
     enabled: !trashed && !loading,
@@ -109,7 +112,7 @@ export function ReaderLayout({
     <ReaderSelectionContext.Provider value={selection}>
       <div
         className="silo-three-pane"
-        data-reader={Boolean(selectedId)}
+        data-reader={chat.reader}
         ref={rootRef}
         style={{ '--list-w': `${listWidth}px` } as CSSProperties}
       >
@@ -117,26 +120,35 @@ export function ReaderLayout({
           tabIndex={-1}
           className="silo-listpane"
           aria-label={listLabel(title)}
-          inert={fullWindow && Boolean(selectedId)}
+          inert={chat.covering}
         >
           {children}
         </section>
         <ListPaneDivider width={listWidth} fullWindow={fullWindow} />
-        <ReaderPane
-          link={resolved ?? previous.current}
-          selectedId={selectedId}
-          tab={tab}
-          setTab={setTab}
-          close={close}
-          step={step}
-          index={index}
-          canGoNext={index >= 0 && (index < links.length - 1 || hasNextPage) && !advancing}
-          actions={actions}
-          trashed={trashed}
-          purgeWindowDays={purgeWindowDays}
-          loading={Boolean(selectedId) && (loading || awaitingDetail(detail))}
-          emptyMessage={emptyMessage}
-        />
+        {chat.shown ? (
+          <LibraryChatPane
+            chatId={chat.chatId}
+            autoFocus={chat.open}
+            onBack={chat.close}
+            onCreated={chat.created}
+          />
+        ) : (
+          <ReaderPane
+            link={resolved ?? previous.current}
+            selectedId={selectedId}
+            tab={tab}
+            setTab={setTab}
+            close={close}
+            step={step}
+            index={index}
+            canGoNext={index >= 0 && (index < links.length - 1 || hasNextPage) && !advancing}
+            actions={actions}
+            trashed={trashed}
+            purgeWindowDays={purgeWindowDays}
+            loading={Boolean(selectedId) && (loading || awaitingDetail(detail))}
+            emptyMessage={emptyMessage}
+          />
+        )}
         <ReaderDeleteDialog actions={actions} link={resolved ?? previous.current} />
       </div>
     </ReaderSelectionContext.Provider>

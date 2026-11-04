@@ -7,7 +7,6 @@ import { layoutMedia, useMediaQuery } from '../lib/breakpoints';
 import { useTheme } from '../theme/ThemeProvider';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
-import { LibrarianIcon } from './NavIcons';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useSettings } from './SettingsContext';
 
@@ -40,6 +39,20 @@ export function MobileBar({ onSearch }: { onSearch: () => void }) {
       >
         <ReaderIcon name="library" size={28} />
       </button>
+      {librarianReady && (
+        <button
+          type="button"
+          className="silo-mobile-bar-button"
+          aria-label="Chat"
+          aria-current={location.pathname === '/librarian' ? 'page' : undefined}
+          onClick={() => {
+            setOpen(false);
+            navigate('/librarian');
+          }}
+        >
+          <ReaderIcon name="librarian" size={28} />
+        </button>
+      )}
       <button
         type="button"
         className="silo-mobile-bar-button"
@@ -78,17 +91,6 @@ export function MobileBar({ onSearch }: { onSearch: () => void }) {
             >
               Feeds
             </MenuAction>
-            {librarianReady && (
-              <MenuAction
-                icon={<LibrarianIcon />}
-                onClick={() => {
-                  setOpen(false);
-                  navigate('/librarian');
-                }}
-              >
-                Librarian
-              </MenuAction>
-            )}
             <MenuAction
               icon={<ReaderIcon name="trash" />}
               onClick={() => {

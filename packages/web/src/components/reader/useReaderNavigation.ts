@@ -63,6 +63,7 @@ export function useReaderNavigation({
       setParams((current) => {
         const next = new URLSearchParams(current);
         next.set('link', id);
+        next.delete('chat');
         return next;
       });
     },

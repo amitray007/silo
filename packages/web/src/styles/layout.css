@@ -2038,7 +2038,8 @@ div.silo-reader-notecard {
     color: var(--mut);
   }
 }
-#silo-tag-list {
+#silo-tag-list,
+#silo-chat-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -2142,10 +2143,12 @@ div.silo-reader-notecard {
 .silo-tag-scroll[data-more-below="true"] {
   --fade-bottom: 20px;
 }
-#silo-tag-list > .silo-nav-item {
+#silo-tag-list > .silo-nav-item,
+#silo-chat-list > .silo-nav-item {
   --nav-color: var(--fnt);
 }
-#silo-tag-list > .silo-nav-item .silo-nav-icon {
+#silo-tag-list > .silo-nav-item .silo-nav-icon,
+#silo-chat-list > .silo-nav-item .silo-nav-icon {
   color: var(--fnt);
 }
 #silo-tag-list > .silo-nav-item > span:nth-child(2) {
