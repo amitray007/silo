@@ -24,7 +24,7 @@
     "approx-string-match": "2.0.1",
     "cmdk": "catalog:",
     "dompurify": "catalog:",
-    "katex": "0.16.47",
+    "katex": "0.18.2",
     "kokoro-js": "1.2.1",
     "loading-dev": "0.3.6",
     "mermaid": "catalog:",
