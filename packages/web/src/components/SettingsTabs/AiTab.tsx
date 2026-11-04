@@ -608,6 +608,17 @@ function FeatureRow({
   );
 }
 
+const THINKING_LEVELS = [
+  {
+    options: [
+      { value: 'off', label: 'Off' },
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+    ],
+  },
+] satisfies { options: { value: 'off' | 'low' | 'medium' | 'high'; label: string }[] }[];
+
 const ANSWER_MODES = [
   {
     options: [
@@ -715,20 +726,20 @@ function AiSections({
             />
           </div>
           <div style={settingsRowDivided}>
-            <label style={rowLabel} htmlFor="librarian-thinking">
-              Thinking
-            </label>
-            <select
-              id="librarian-thinking"
+            <div style={{ flex: 1 }}>
+              <div style={rowLabel}>Thinking</div>
+              <div style={rowDesc}>
+                How hard the Librarian thinks before answering. High shows its reasoning most often
+                and answers more slowly.
+              </div>
+            </div>
+            <SettingsSelect
+              ariaLabel="Thinking"
               value={thinking}
+              groups={THINKING_LEVELS}
               disabled={off || busy}
-              onChange={(event) => saveThinking(event.target.value as typeof thinking)}
-            >
-              <option value="off">Off</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
+              onChange={saveThinking}
+            />
           </div>
           <ChatAnswersRow value={chatAnswers} onChange={saveChatAnswers} />
           <QuickActionsEditor actions={resolveActions(librarianActions)} save={saveActions} />

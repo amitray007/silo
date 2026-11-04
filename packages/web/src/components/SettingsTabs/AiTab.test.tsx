@@ -1079,9 +1079,10 @@ describe('AiTab quick actions', () => {
 
   it('defaults Thinking to low and saves the selected effort', async () => {
     const { calls } = setup({ settings: withLibrarian(true) });
-    const select = await screen.findByRole('combobox', { name: 'Thinking' });
-    expect((select as HTMLSelectElement).value).toBe('low');
-    fireEvent.change(select, { target: { value: 'high' } });
+    const trigger = await screen.findByRole('button', { name: 'Thinking' });
+    expect(trigger.textContent).toContain('Low');
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('option', { name: 'High' }));
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]?.body).toEqual({ librarianThinking: 'high' });
   });
