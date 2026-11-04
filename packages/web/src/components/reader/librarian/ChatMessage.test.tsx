@@ -334,8 +334,13 @@ it('heals a fake id from summary-prefixed tool JSON and uses the saved favicon',
   const { fetcher } = await renderHealing(
     `1 link: [ai]\n\nData (JSON):\n${JSON.stringify({ links: [{ id: SAVED, title: ' title ' }] })}`,
   );
-  const link = await screen.findByRole('link', { name: 'Title: subtitle' });
-  expect(link.getAttribute('href')).toBe(`/?link=${SAVED}`);
+  await waitFor(() =>
+    expect(screen.getByRole('link', { name: 'Title: subtitle' }).getAttribute('href')).toBe(
+      `/?link=${SAVED}`,
+    ),
+  );
+  const link = screen.getByRole('link', { name: 'Title: subtitle' });
+  await waitFor(() => expect(link.querySelector('img')).toBeTruthy());
   expect(link.querySelector('img')?.getAttribute('src')).toBe('/api/favicon?domain=saved.example');
   expect(fetcher.mock.calls.some(([url]) => String(url).includes('/search?'))).toBe(false);
 });
@@ -344,16 +349,41 @@ it('heals a fake id from summary lines when the tool JSON was cut off', async ()
   const { fetcher } = await renderHealing(
     `1 result for "t":\n- (rank 0.500) Title (id: ${SAVED}) — https://saved.example/post [ai]\n\nData (JSON):\n{"results":[{"id":`,
   );
-  expect((await screen.findByRole('link', { name: 'Title: subtitle' })).getAttribute('href')).toBe(
-    `/?link=${SAVED}`,
+  await waitFor(() =>
+    expect(screen.getByRole('link', { name: 'Title: subtitle' }).getAttribute('href')).toBe(
+      `/?link=${SAVED}`,
+    ),
   );
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes('/search?'))).toBe(false);
+});
+
+it('keeps a cited link when its lookup fails for another reason', async () => {
+  const fetcher = vi.fn(async (input: string | URL | Request) =>
+    String(input).includes('/search?')
+      ? new Response(JSON.stringify({ results: [] }))
+      : new Response('{}', { status: 500 }),
+  );
+  vi.stubGlobal('fetch', fetcher);
+  const { MemoryRouter } = await import('react-router');
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <ChatMessage message={reply(`[Saved](/?link=${SAVED})`)} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(fetcher).toHaveBeenCalled());
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(screen.getByRole('link', { name: 'Saved' }).getAttribute('href')).toBe(`/?link=${SAVED}`);
   expect(fetcher.mock.calls.some(([url]) => String(url).includes('/search?'))).toBe(false);
 });
 
 it('heals a fake id through library search', async () => {
   await renderHealing(undefined, [{ id: SAVED, title: 'Title' }]);
-  expect((await screen.findByRole('link', { name: 'Title: subtitle' })).getAttribute('href')).toBe(
-    `/?link=${SAVED}`,
+  await waitFor(() =>
+    expect(screen.getByRole('link', { name: 'Title: subtitle' }).getAttribute('href')).toBe(
+      `/?link=${SAVED}`,
+    ),
   );
 });
 
@@ -370,8 +400,10 @@ it('retries library search with the title before a colon', async () => {
       );
     return new Response(JSON.stringify({ link: { url: 'https://saved.example/post' } }));
   });
-  expect((await screen.findByRole('link', { name: 'Title: subtitle' })).getAttribute('href')).toBe(
-    `/?link=${SAVED}`,
+  await waitFor(() =>
+    expect(screen.getByRole('link', { name: 'Title: subtitle' }).getAttribute('href')).toBe(
+      `/?link=${SAVED}`,
+    ),
   );
 });
 

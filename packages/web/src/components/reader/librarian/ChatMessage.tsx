@@ -2,6 +2,7 @@ import type { UIMessage } from '@ai-sdk/react';
 import { createContext, isValidElement, memo, useContext, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 import { Block, type BlockProps, defaultRehypePlugins, Streamdown } from 'streamdown';
+import { ApiError } from '../../../api/client';
 import { useCitationMatch, useLinkUrl } from '../../../api/hooks';
 import { deriveDomain } from '../../../lib/url';
 import { Chip } from '../../Chip';
@@ -26,19 +27,21 @@ function citationText(node: React.ReactNode): string {
 
 function SavedCitation({ id, children }: { id: string; children?: React.ReactNode }) {
   const items = useContext(CitationItems);
-  const { data: url, isError } = useLinkUrl(id);
-  const { data: matched } = useCitationMatch(citationText(children), items, isError);
-  const resolved = url ? id : isError ? matched : undefined;
-  return resolved ? <ResolvedCitation id={resolved}>{children}</ResolvedCitation> : children;
+  const { error } = useLinkUrl(id);
+  // Only a confirmed 404 means a made-up id; any other failure keeps the cited link.
+  const missing = error instanceof ApiError && error.status === 404;
+  const { data: matched } = useCitationMatch(citationText(children), items, missing);
+  if (!missing) return <CitationLink id={id}>{children}</CitationLink>;
+  return matched ? <CitationLink id={matched}>{children}</CitationLink> : children;
 }
 
-function ResolvedCitation({ id, children }: { id: string; children?: React.ReactNode }) {
+/** A saved-item link with its site icon: the globe until its URL arrives. */
+function CitationLink({ id, children }: { id: string; children?: React.ReactNode }) {
   const { data: url } = useLinkUrl(id);
-  const router = useInRouterContext();
-  if (!url || !router) return children;
+  if (!useInRouterContext()) return children;
   return (
     <Link to={`/?link=${id}`}>
-      <Chip domain={deriveDomain(url)} size={FAVICON_PX} />
+      <Chip domain={url ? deriveDomain(url) : null} size={FAVICON_PX} />
       {children}
     </Link>
   );
