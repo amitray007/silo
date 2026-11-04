@@ -162,7 +162,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 .silo-chat-user {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
 }
 .silo-chat-user:not(:first-child) {
   margin-top: 20px;
@@ -229,7 +230,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     opacity: 0;
     transition: opacity 150ms var(--ease-out);
   }
-  .silo-chat-assistant:is(:hover, :focus-within) .silo-chat-actions,
+  .silo-chat-message:is(:hover, :focus-within) .silo-chat-actions,
   .silo-chat-actions:has([aria-pressed="true"]) {
     opacity: 1;
   }

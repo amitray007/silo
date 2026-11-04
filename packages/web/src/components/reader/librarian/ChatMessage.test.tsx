@@ -186,7 +186,7 @@ it('puts the site favicon before each link: its own host, or the cited link doma
   await renderCitations();
   const web = await screen.findByRole('link', { name: 'Web' });
   expect(web.querySelector('img')?.getAttribute('src')).toBe('/api/favicon?domain=example.com');
-  const saved = screen.getByRole('link', { name: 'Saved' });
+  const saved = await screen.findByRole('link', { name: 'Saved' });
   await waitFor(() =>
     expect(saved.querySelector('img')?.getAttribute('src')).toBe(
       '/api/favicon?domain=news.example.org',
@@ -298,4 +298,87 @@ describe('chat look', () => {
     expect(screen.getByText('A whole answer.')).toBeTruthy();
     expect(document.querySelector('.silo-chat-answer')?.getAttribute('data-reveal')).toBe('true');
   });
+});
+
+const FAKE = 'b0a0c0de-0000-0000-0000-000000000000';
+async function renderHealing(output?: unknown, results: { id: string; title: string }[] = []) {
+  const fetcher = vi.fn(async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.includes(FAKE)) return new Response('{}', { status: 404 });
+    if (url.includes('/search?')) return new Response(JSON.stringify({ results }));
+    return new Response(JSON.stringify({ link: { url: 'https://saved.example/post' } }));
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const { MemoryRouter } = await import('react-router');
+  const message = reply(`[Title: subtitle](/?link=${FAKE})`);
+  if (output !== undefined)
+    message.parts.unshift({
+      type: 'dynamic-tool',
+      toolName: 'search_links',
+      toolCallId: 's',
+      state: 'output-available',
+      input: {},
+      output,
+    });
+  const view = render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <ChatMessage message={message} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return { ...view, fetcher };
+}
+
+it('heals a fake id from summary-prefixed tool JSON and uses the saved favicon', async () => {
+  const { fetcher } = await renderHealing(
+    `1 result\n${JSON.stringify({ links: [{ id: SAVED, title: ' title ' }] })}`,
+  );
+  const link = await screen.findByRole('link', { name: 'Title: subtitle' });
+  expect(link.getAttribute('href')).toBe(`/?link=${SAVED}`);
+  expect(link.querySelector('img')?.getAttribute('src')).toBe('/api/favicon?domain=saved.example');
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes('/search?'))).toBe(false);
+});
+
+it('heals a fake id through library search', async () => {
+  await renderHealing(undefined, [{ id: SAVED, title: 'Title' }]);
+  expect((await screen.findByRole('link', { name: 'Title: subtitle' })).getAttribute('href')).toBe(
+    `/?link=${SAVED}`,
+  );
+});
+
+it.each([
+  { results: [] },
+  {
+    results: [
+      { id: SAVED, title: 'Title' },
+      { id: 'other', title: 'Title' },
+    ],
+  },
+])('leaves unresolved or ambiguous citations as plain text', async ({ results }) => {
+  const { container, fetcher } = await renderHealing(undefined, results);
+  await waitFor(() =>
+    expect(fetcher.mock.calls.some(([url]) => String(url).includes('/search?'))).toBe(true),
+  );
+  expect(screen.getByText('Title: subtitle')).toBeTruthy();
+  expect(screen.queryByRole('link')).toBeNull();
+  expect(container.querySelector('.silo-letter-chip')).toBeNull();
+});
+
+it('copies only the user text and flashes a check', async () => {
+  const writeText = vi.fn(async () => {});
+  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+  render(
+    <ChatMessage
+      message={{
+        id: 'user-copy',
+        role: 'user',
+        parts: [{ type: 'text', text: 'Explain this' }],
+        metadata: { quote: 'Quoted passage' },
+      }}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Copy message' }));
+  expect(writeText).toHaveBeenCalledWith('Explain this');
+  expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
 });

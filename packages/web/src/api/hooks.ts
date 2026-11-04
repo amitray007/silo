@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CitationItem, matchCitation } from '../components/reader/librarian/citationItems';
 import { kokoroDtype } from '../components/reader/listen/engines/files';
 import { fetchTtsManifest } from '../components/reader/listen/engines/manifest';
 import type { HighlightColor } from '../lib/highlights';
@@ -212,6 +213,9 @@ export function useLinkUrl(id: string) {
       ).then((data) => data.link.url),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
+    retryOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -1670,4 +1674,25 @@ export function useRenameTag() {
       void client.invalidateQueries({ queryKey: ['links-tag-only'] });
     },
   });
+}
+
+export function useCitationMatch(title: string, items: CitationItem[], enabled: boolean) {
+  const local = matchCitation(title, items);
+  const search = useQuery({
+    queryKey: ['citation-title', title.trim().toLowerCase()],
+    queryFn: async ({ signal }) => {
+      const data = await apiGet<SearchResponse>(
+        `/api/links/search?${new URLSearchParams({ q: title.trim() })}`,
+        signal,
+      );
+      return matchCitation(title, data.results) ?? null;
+    },
+    enabled: enabled && !local && title.trim().length > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+    retryOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  return { data: local ?? search.data };
 }
