@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
 import { makeLink as link } from '../test/fixtures';
+import { expectStickerAbove } from '../test/sticker';
 import { TagView } from './TagView';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -98,6 +99,7 @@ describe('TagView', () => {
     renderTagView('empty-tag', fetchImpl);
 
     await waitFor(() => expect(screen.getByText('No links tagged #empty-tag')).toBeDefined());
+    await expectStickerAbove('tag', 'No links tagged #empty-tag');
   });
 
   it('renders no search/paste input in the tag page header (bugfix: redundant search box removed)', async () => {

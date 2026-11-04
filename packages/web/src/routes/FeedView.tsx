@@ -94,6 +94,7 @@ export function FeedView() {
             ListBody(
               view,
               <EmptyState
+                sticker="mailbox"
                 title={tab === 'archive' ? 'No archived posts' : 'No posts yet'}
                 body={
                   tab === 'archive'

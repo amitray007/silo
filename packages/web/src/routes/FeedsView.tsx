@@ -37,6 +37,7 @@ export function FeedsView() {
         )}
         {feeds.data?.feeds.length === 0 && (
           <EmptyState
+            sticker="mailbox"
             title="No feeds yet"
             body="Add a website or feed to see its latest posts here."
           />

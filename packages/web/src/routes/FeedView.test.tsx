@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '../App';
 import type { FeedJson, LinkJson } from '../api/types';
 import { makeLink } from '../test/fixtures';
+import { expectStickerAbove } from '../test/sticker';
 import { ThemeProvider } from '../theme/ThemeProvider';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -422,6 +423,7 @@ it('shows the all-feeds empty state and keeps Add feed available', async () => {
     String(input) === '/api/feeds' ? Promise.resolve(json({ feeds: [] })) : fetchMock(input, init),
   );
   expect(await screen.findByText('No feeds yet')).toBeDefined();
+  await expectStickerAbove('mailbox', 'No feeds yet');
   expect(
     within(screen.getByRole('region', { name: 'Feeds' })).getByRole('button', { name: 'Add feed' }),
   ).toBeDefined();

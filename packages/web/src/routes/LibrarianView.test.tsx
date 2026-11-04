@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { expectStickerAbove } from '../test/sticker';
 import { LibrarianView } from './LibrarianView';
 
 type Stored = {
@@ -311,6 +312,7 @@ it('falls back to the empty pane when the last chat is deleted', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Delete chat: Chat 1' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
   await screen.findByText('No chats yet');
+  await expectStickerAbove('chat', 'No chats yet');
   await waitFor(() => expect(where()).toBe(''));
   expect(screen.getByText('Select a chat')).toBeTruthy();
 });

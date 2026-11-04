@@ -29,6 +29,7 @@ import { Chip } from './Chip';
 import { useHoverPreview } from './HoverPreviewContext';
 import { trapDialogTab } from './ModalShell';
 import { SearchSpinner } from './SearchSpinner';
+import { StickerSlot } from './stickers/StickerSlot';
 
 /** Either a live link result or a trashed one — `PaletteLinkRow` only ever reads `.id`/`.url`/`.title`, and `TrashLinkJson`/its search variant are both structurally `LinkJson` plus extra fields, so one row renderer covers both scopes. */
 type PaletteLinkResult = LinkJson | SearchResultJson | TrashLinkJson;
@@ -954,6 +955,11 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
                   color: 'var(--fnt)',
                 }}
               >
+                {!isFullyEmpty && !showTagSuggestions && (
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <StickerSlot name="search" size={72} />
+                  </div>
+                )}
                 {paletteEmptyText(scope, isFullyEmpty, showTagSuggestions)}
               </div>
             </Command.Empty>

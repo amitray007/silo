@@ -49,6 +49,16 @@
   },
   "overrides": [
     {
+      "includes": ["packages/web/src/components/stickers/**"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveCognitiveComplexity": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/web/src/styles/base.css"],
       "linter": {
         "rules": {

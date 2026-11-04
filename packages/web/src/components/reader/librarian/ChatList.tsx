@@ -188,7 +188,8 @@ export function ChatList({
         </button>
       </p>
     );
-  if (chats.length === 0) return <EmptyState title="No chats yet" body="Use + to start one." />;
+  if (chats.length === 0)
+    return <EmptyState sticker="chat" title="No chats yet" body="Use + to start one." />;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the list only routes keys from its buttons.
     <div

@@ -3,6 +3,8 @@ import type { ApiError } from '../../api/client';
 import { BrandMark } from '../../components/BrandMark';
 import { CenteredPanel } from '../../components/CenteredPanel';
 import { Skeleton } from '../../components/Skeleton';
+import type { StickerName } from '../../components/stickers/EmptySticker';
+import { StickerSlot } from '../../components/stickers/StickerSlot';
 
 /**
  * Render-state components shared by every list view that pairs an omnibar
@@ -96,16 +98,23 @@ export function LoadingState() {
   );
 }
 
-/** The design's richer empty state (`Silo-v2.html:96-103`) — the orange tile mark + a caller-supplied headline/body, so `LibraryView`'s "Nothing kept yet." and `TagView`'s "No links tagged #x yet." share one shell. */
-export function EmptyState({ title, body }: { title: string; body: ReactNode }) {
+/**
+ * The design's richer empty state (`Silo-v2.html:96-103`): an animated sticker
+ * (`components/stickers`) above a caller-supplied headline/body, so every empty
+ * list shares one shell. The sticker is decorative and loads lazily.
+ */
+export function EmptyState({
+  title,
+  body,
+  sticker,
+}: {
+  title: string;
+  body: ReactNode;
+  sticker?: StickerName;
+}) {
   return (
     <CenteredPanel empty>
-      {/* The PLATED brand mark (not the bare bars): the tile gives the mark a
-          container so it reads as an intentional logo anchoring the empty
-          pane, rather than a stray glyph floating in a large dark card (direct
-          user feedback that the small bare mark "looked bad"). Sized up to 40
-          so it holds the composition. */}
-      <BrandMark size={40} />
+      {sticker ? <StickerSlot name={sticker} /> : <BrandMark size={40} />}
       <p
         style={{
           margin: '18px 0 0',

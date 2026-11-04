@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
 import { makeTrashLink as trashLink } from '../test/fixtures';
+import { expectStickerAbove } from '../test/sticker';
 import { TrashView } from './TrashView';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -55,6 +56,7 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('Trash is empty')).toBeDefined());
+    await expectStickerAbove('trash', 'Trash is empty');
     expect(screen.queryByText('Select all')).toBeNull();
   });
 
