@@ -212,6 +212,10 @@ export const ChatMessage = memo(function ChatMessage({
               <CitationResolved value={resolve}>
                 <Streamdown
                   skipHtml
+                  // Its table and code toolbars need Tailwind; the answer has its own Copy.
+                  controls={false}
+                  tableMaxHeight={0}
+                  codeBlockMaxHeight={0}
                   animated={wordFade}
                   isAnimating={streaming}
                   rehypePlugins={citationPlugins}

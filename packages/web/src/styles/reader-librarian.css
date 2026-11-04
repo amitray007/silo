@@ -229,6 +229,82 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: none;
 }
 /* A whole answer that was held back arrives with the same drift as the trace. */
+/* Streamdown tables and code: plain Oat styling, since its own classes are Tailwind. */
+.silo-chat-answer [data-streamdown="table-wrapper"] {
+  overflow-x: auto;
+  margin-block: 4px;
+}
+.silo-chat-answer [data-streamdown="table"] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  line-height: var(--lh-snug);
+}
+.silo-chat-answer :is([data-streamdown="table-header-cell"], [data-streamdown="table-cell"]) {
+  padding: 7px 12px 7px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  /* The answer allows breaks anywhere for long URLs; a table cell should break between words. */
+  overflow-wrap: normal;
+  min-width: 6em;
+}
+.silo-chat-answer [data-streamdown="table-header-cell"] {
+  color: var(--mut);
+  font-weight: 500;
+  border-bottom-color: var(--line-2);
+}
+.silo-chat-answer [data-streamdown="table-row"]:last-child [data-streamdown="table-cell"] {
+  border-bottom: 0;
+}
+.silo-chat-answer [data-streamdown="code-block"] {
+  margin-block: 4px;
+  border-radius: 8px;
+  background: var(--hov);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  overflow: hidden;
+}
+.silo-chat-answer [data-streamdown="code-block-header"] {
+  display: none;
+}
+.silo-chat-answer [data-streamdown="code-block-body"] {
+  overflow-x: auto;
+  padding: 10px 12px;
+  font: 12.5px / 1.55 var(--font-mono);
+}
+.silo-chat-answer [data-streamdown="code-block-body"] pre {
+  margin: 0;
+  background: none;
+}
+/* The global inline-code look (fill, padding) must not reach the block's own code element. */
+.silo-chat-answer [data-streamdown="code-block-body"] code {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+}
+/* base.css sets Inter on every element, so each token span needs the mono face itself. */
+.silo-chat-answer [data-streamdown="code-block-body"] :is(pre, code, span) {
+  font-family: var(--font-mono);
+}
+/* One span per line, and Shiki's token colours, which Streamdown sets as variables. */
+.silo-chat-answer [data-streamdown="code-block-body"] code > span {
+  display: block;
+  min-height: 1lh;
+}
+.silo-chat-answer [data-streamdown="code-block-body"] code span span {
+  color: var(--sdm-c, inherit);
+}
+:root[data-theme="dark"] .silo-chat-answer [data-streamdown="code-block-body"] code span span {
+  color: var(--shiki-dark, var(--sdm-c, inherit));
+}
+.silo-chat-answer [data-streamdown="inline-code"] {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--hov);
+  font: 0.9em var(--font-mono);
+}
 .silo-chat-answer[data-reveal="true"] {
   animation: siloStatusIn 160ms var(--ease-out) both;
 }
