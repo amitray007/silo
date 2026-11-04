@@ -124,7 +124,7 @@ function optionInMessage(message: string, kind: AiCredential['kind']): Option | 
 
 const OMIT_FIELDS: Record<Option, string[]> = {
   format: ['structuredOutputMode'],
-  reasoning: ['thinking', 'effort', 'reasoningEffort', 'reasoningBudget'],
+  reasoning: ['thinking', 'effort', 'reasoningEffort', 'reasoningBudget', 'reasoningSummary'],
   effort: ['effort', 'reasoningEffort'],
   thinking: ['thinking'],
   temperature: ['temperature'],
@@ -249,11 +249,25 @@ function rememberSettings(
   });
 }
 
+/** Ask the provider to return readable reasoning, for the chat only. Models without reasoning settings are left alone. */
+function withReadableReasoning(credential: AiCredential, base: Settings): void {
+  const { providerOptions } = base;
+  if (credential.kind === 'anthropic') {
+    const anthropic = providerOptions?.anthropic;
+    const thinking = anthropic?.thinking as { type?: string } | undefined;
+    if (anthropic && thinking?.type === 'adaptive')
+      anthropic.thinking = { ...thinking, display: 'summarized' };
+  }
+  if (credential.kind === 'openai' && providerOptions?.openai?.reasoningEffort)
+    providerOptions.openai.reasoningSummary = 'auto';
+}
+
 export function chatModelSettings(
   credential: AiCredential,
   options: { promptCache?: boolean } = {},
 ) {
   const base = settingsFor(credential);
+  withReadableReasoning(credential, base);
   if (options.promptCache && (credential.kind === 'anthropic' || credential.kind === 'gateway')) {
     const provider = credential.kind;
     base.providerOptions = {

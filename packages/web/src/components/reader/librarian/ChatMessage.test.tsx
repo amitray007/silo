@@ -201,16 +201,19 @@ it('keeps completed paragraphs and list numbering through streaming and completi
     parts: [{ type: 'text', text: 'First paragraph.\n\n1. One' }],
   };
   const view = render(<ChatMessage message={message} streaming />);
-  const paragraph = screen.getByText('First paragraph.');
+  // Streaming wraps each word in its own span, so find the paragraph by element.
+  const firstParagraph = () => view.container.querySelector('.silo-chat-answer p');
+  const paragraph = firstParagraph();
+  expect(paragraph?.textContent).toBe('First paragraph.');
   const longer: UIMessage = {
     ...message,
     parts: [{ type: 'text', text: 'First paragraph.\n\n1. One\n2. Two' }],
   };
   view.rerender(<ChatMessage message={longer} streaming />);
-  expect(screen.getByText('First paragraph.')).toBe(paragraph);
+  expect(firstParagraph()).toBe(paragraph);
   expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual(['One', 'Two']);
   view.rerender(<ChatMessage message={longer} />);
-  expect(screen.getByText('First paragraph.')).toBe(paragraph);
+  expect(firstParagraph()).toBe(paragraph);
   expect(screen.getAllByRole('list')).toHaveLength(1);
 });
 
@@ -465,4 +468,54 @@ it('copies only the user text and flashes a check', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Copy message' }));
   expect(writeText).toHaveBeenCalledWith('Explain this');
   expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
+});
+
+describe('ChatMessage reasoning', () => {
+  const thinking = (state: 'streaming' | 'done', metadata?: UIMessage['metadata']): UIMessage => ({
+    id: 'r1',
+    role: 'assistant',
+    metadata,
+    parts: [
+      { type: 'reasoning', text: 'Weighing the two sources.', state },
+      { type: 'text', text: 'Here is the answer.' },
+    ],
+  });
+
+  it('shows a Thinking label and the live text while reasoning streams', () => {
+    render(<ChatMessage message={thinking('streaming')} streaming />);
+    expect(screen.getByText('Thinking').className).toContain('silo-shimmer');
+    expect(screen.getByText('Weighing the two sources.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Thought/ })).toBeNull();
+  });
+
+  it('shows the time as a disclosure that opens the full reasoning', () => {
+    render(<ChatMessage message={thinking('done', { reasoningMs: 4200 })} />);
+    const toggle = screen.getByRole('button', { name: 'Thought for 4s' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Weighing the two sources.')).toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Weighing the two sources.')).toBeTruthy();
+  });
+
+  it('says only "Thought" when no time was recorded', () => {
+    render(<ChatMessage message={thinking('done')} />);
+    expect(screen.getByRole('button', { name: 'Thought' })).toBeTruthy();
+  });
+
+  it('shows no reasoning block when the message has no reasoning text', () => {
+    const empty: UIMessage = {
+      ...reply('Plain answer.'),
+      parts: [{ type: 'reasoning', text: ' ', state: 'done' }, ...reply('Plain answer.').parts],
+    };
+    render(<ChatMessage message={empty} />);
+    expect(screen.queryByText(/Thought|Thinking/)).toBeNull();
+    expect(screen.getByText('Plain answer.')).toBeTruthy();
+  });
+
+  it('keeps reasoning hidden while the answer is held', () => {
+    render(<ChatMessage message={thinking('streaming')} streaming held />);
+    expect(screen.queryByText('Thinking')).toBeNull();
+    expect(screen.queryByText('Weighing the two sources.')).toBeNull();
+  });
 });

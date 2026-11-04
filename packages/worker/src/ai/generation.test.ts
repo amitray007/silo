@@ -404,6 +404,33 @@ describe('chat prompt caching', () => {
       anthropic: { cacheControl: { type: 'ephemeral' } },
     });
   });
+  it('asks for summarized reasoning on adaptive Anthropic thinking, in the chat only', () => {
+    const adaptive = {
+      ...credential,
+      model: {
+        ...credential.model,
+        reasoning: { type: 'anthropic' as const, thinking: 'adaptive' as const },
+      },
+    };
+    expect(chatModelSettings(adaptive).providerOptions?.anthropic?.thinking).toEqual({
+      type: 'adaptive',
+      display: 'summarized',
+    });
+    expect(chatModelSettings(credential).providerOptions?.anthropic?.thinking).toEqual({
+      type: 'disabled',
+    });
+  });
+  it('asks OpenAI for reasoning summaries only when the model reasons', () => {
+    const openai = (reasoning: AiLiveModel['reasoning']) => ({
+      ...credential,
+      kind: 'openai' as const,
+      model: { ...credential.model, reasoning },
+    });
+    expect(
+      chatModelSettings(openai({ type: 'openai', effort: 'low' })).providerOptions?.openai,
+    ).toEqual({ reasoningEffort: 'low', reasoningSummary: 'auto' });
+    expect(chatModelSettings(openai({ type: 'openai' })).providerOptions).toBeUndefined();
+  });
   it('opts in for Gateway while preserving the reasoning budget', () => {
     const gateway = {
       ...credential,

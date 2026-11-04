@@ -429,7 +429,7 @@ it('streams the running answer by default', async () => {
       messages: [text('u', 'user', 'Why?'), text('a', 'assistant', 'Half an ans')],
     }),
   );
-  expect(screen.getByText(/Half an ans/)).toBeTruthy();
+  expect(document.querySelector('.silo-chat-answer')?.textContent).toBe('Half an ans');
   client.clear();
   vi.unstubAllGlobals();
 });

@@ -148,16 +148,30 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-message p {
   margin: 0;
 }
-.silo-stream-chunk + .silo-stream-chunk {
+/* Blocks of an answer sit 8px apart; a heading hugs what follows it. */
+.silo-chat-answer > div > * + * {
   margin-top: 8px;
 }
-.silo-stream-chunk:has(> :is(h1, h2, h3, h4)) + .silo-stream-chunk {
+.silo-chat-answer > div > :is(h1, h2, h3, h4) + * {
   margin-top: 0;
 }
-.silo-chat-assistant[data-streaming="true"] .silo-stream-chunk {
-  transition: opacity 150ms var(--ease-out);
-  @starting-style {
+/* Streamdown wraps each arriving word in [data-sd-animate] and names its keyframes "sd-<animation>". */
+[data-sd-animate] {
+  animation: var(--sd-animation, sd-fadeIn) var(--sd-duration, 250ms) var(--sd-easing, ease)
+    var(--sd-delay, 0ms) both;
+}
+[data-sd-animate-marker]::marker {
+  animation: siloMarkerIn var(--sd-marker-duration, 250ms) var(--sd-marker-easing, ease)
+    var(--sd-marker-delay, 0ms) both;
+}
+@keyframes sd-fadeIn {
+  from {
     opacity: 0;
+  }
+}
+@keyframes siloMarkerIn {
+  from {
+    color: transparent;
   }
 }
 .silo-chat-user {
@@ -1095,41 +1109,85 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   pointer-events: none;
   animation: siloStatusOut 100ms var(--ease-out) both;
 }
+/* Shared shimmer: a gradient clipped to the text, one pass every 1.6s. */
 .silo-shimmer {
-  position: relative;
-  display: inline-block;
-  overflow: hidden;
-  color: var(--fnt);
+  background:
+    linear-gradient(
+      90deg,
+      var(--fnt) 0%,
+      var(--fnt) 40%,
+      var(--ink) 50%,
+      var(--fnt) 60%,
+      var(--fnt) 100%
+    )
+    0 0 / 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: siloShimmerPass 1.6s linear infinite;
 }
-.silo-shimmer-glint {
-  position: absolute;
-  inset: 0;
-  color: var(--ink);
-  mask-image: linear-gradient(90deg, transparent 35%, currentcolor 50%, transparent 65%);
-  animation: siloStatusGlint 1.8s linear infinite;
-}
-.silo-shimmer-glint::before {
-  content: attr(data-label);
-  display: block;
-  animation: siloShimmerText 1.8s linear infinite;
-}
-@keyframes siloStatusGlint {
+@keyframes siloShimmerPass {
   from {
-    transform: translateX(-100%);
+    background-position: 100% 0;
   }
   to {
-    transform: translateX(100%);
-  }
-}
-@keyframes siloShimmerText {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(-100%);
+    background-position: -150% 0;
   }
 }
 
+/* Reasoning: live it shows the tail of the text; done it is a quiet disclosure. */
+.silo-reasoning {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.silo-reasoning-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  justify-self: start;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+button.silo-reasoning-head {
+  color: var(--fnt);
+  cursor: pointer;
+}
+button.silo-reasoning-head:hover {
+  color: var(--ink);
+}
+button.silo-reasoning-head svg {
+  transition: transform 200ms var(--ease-out);
+}
+button.silo-reasoning-head[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+.silo-reasoning-live,
+.silo-reasoning-full {
+  margin: 0;
+  padding-left: 14px;
+  border-left: 1px solid var(--line-2);
+  color: var(--fnt);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+.silo-reasoning-live {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: 3.1em;
+  overflow: hidden;
+  line-height: 1.55;
+  mask-image: linear-gradient(to bottom, transparent, #000 45%);
+}
+.silo-reasoning-full {
+  line-height: 1.6;
+}
 @keyframes siloStatusIn {
   from {
     opacity: 0;
@@ -1143,8 +1201,17 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .silo-shimmer-glint {
-    display: none;
+  .silo-shimmer {
+    animation: none;
+    background: none;
+    color: var(--fnt);
+  }
+  [data-sd-animate],
+  [data-sd-animate-marker]::marker {
+    animation: none;
+  }
+  button.silo-reasoning-head svg {
+    transition: none;
   }
   .silo-status-in,
   .silo-status-out {

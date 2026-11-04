@@ -1,7 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { createContext, isValidElement, memo, useContext, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router';
-import { Block, type BlockProps, defaultRehypePlugins, Streamdown } from 'streamdown';
+import { type AnimateOptions, defaultRehypePlugins, Streamdown } from 'streamdown';
 import { ApiError } from '../../../api/client';
 import { useCitationMatch, useLinkUrl } from '../../../api/hooks';
 import { deriveDomain } from '../../../lib/url';
@@ -11,6 +11,7 @@ import { ReaderIcon } from '../ReaderIcon';
 import { AnswerActions } from './AnswerActions';
 import { ApprovalRow } from './ApprovalRow';
 import { citationItems } from './citationItems';
+import { messageReasoning, Reasoning } from './Reasoning';
 
 const itemCitation = /^\/\?link=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 const FAVICON_PX = 14;
@@ -130,14 +131,8 @@ export const WRITE_TRACES: Record<string, string> = {
   retry_capture: 'Retried',
 };
 const SEARCH_TOOLS = new Set(['search_links', 'find_related', 'list_links']);
-// Per-word animation wraps and reparses long list blocks on every update.
-const StreamChunk = memo(function StreamChunk(props: BlockProps) {
-  return (
-    <div className="silo-stream-chunk">
-      <Block {...props} />
-    </div>
-  );
-});
+/** Words fade in as they arrive; sd-fadeIn and the reduced-motion rule live in reader-librarian.css. */
+const wordFade: AnimateOptions = { animation: 'fadeIn', duration: 250, sep: 'word' };
 
 export function toolName(part: UIMessage['parts'][number]): string | null {
   if (part.type === 'dynamic-tool') return part.toolName;
@@ -239,7 +234,7 @@ export const ChatMessage = memo(function ChatMessage({
 }: {
   message: UIMessage;
   expired?: boolean;
-  /** This message is still arriving: newly mounted blocks fade in. */
+  /** This message is still arriving: new words fade in. */
   streaming?: boolean;
   /** Keep the arriving answer unrendered until the message is whole (Settings -> AI, Show answers). */
   held?: boolean;
@@ -252,12 +247,14 @@ export const ChatMessage = memo(function ChatMessage({
   const { steps, answer } = splitSteps(message);
   const trace = traceLine(message);
   const approving = isAwaitingApproval(message);
+  const reasoning = held ? null : messageReasoning(message);
   return (
     <div className="silo-chat-message silo-chat-assistant" data-streaming={streaming}>
       <span className="silo-chat-avatar" aria-hidden="true">
         <ReaderIcon name="librarian" size={16} />
       </span>
       <div className="silo-chat-assistant-body">
+        {reasoning && <Reasoning {...reasoning} />}
         {!held &&
           steps.map((step) => (
             <p key={step} className="silo-chat-step">
@@ -293,8 +290,7 @@ export const ChatMessage = memo(function ChatMessage({
             <CitationItems value={citationItems(message)}>
               <Streamdown
                 skipHtml
-                animated={false}
-                BlockComponent={StreamChunk}
+                animated={wordFade}
                 isAnimating={streaming}
                 rehypePlugins={citationPlugins}
                 components={markdownComponents}

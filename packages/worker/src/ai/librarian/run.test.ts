@@ -78,6 +78,60 @@ describe('Librarian streaming', () => {
       );
     },
   );
+  it('streams reasoning with its total time and splits text into words', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    vi.mocked(languageModelFor).mockReturnValue(
+      new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(c) {
+              c.enqueue({ type: 'reasoning-start', id: 'r' });
+              c.enqueue({ type: 'reasoning-delta', id: 'r', delta: 'Weighing it.' });
+              c.enqueue({ type: 'reasoning-end', id: 'r' });
+              c.enqueue({ type: 'text-start', id: 't' });
+              c.enqueue({ type: 'text-delta', id: 't', delta: 'alpha beta gamma ' });
+              c.enqueue({ type: 'text-end', id: 't' });
+              c.enqueue({
+                type: 'finish',
+                finishReason: { unified: 'stop', raw: undefined },
+                usage: {
+                  inputTokens: {
+                    total: 1,
+                    noCache: 1,
+                    cacheRead: undefined,
+                    cacheWrite: undefined,
+                  },
+                  outputTokens: { total: 1, text: 1, reasoning: 1 },
+                },
+              });
+              c.close();
+            },
+          }),
+        }),
+      }),
+    );
+    const response = await runLibrarian({
+      chatId: 'chat',
+      transient: false,
+      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+      link: null,
+    });
+    const body = await response.text();
+    expect(body).toContain('"type":"reasoning-delta"');
+    const thoughts = [...body.matchAll(/"type":"reasoning-delta","id":"[^"]+","delta":"([^"]*)"/g)];
+    expect(thoughts.map((match) => match[1]).join('')).toBe('Weighing it.');
+    expect(body).toMatch(/"messageMetadata":\{"reasoningMs":\d+\}/);
+    const deltas = [...body.matchAll(/"type":"text-delta","id":"[^"]+","delta":"([^"]*)"/g)].map(
+      (match) => match[1],
+    );
+    expect(deltas).toEqual(['alpha ', 'beta ', 'gamma ']);
+    const saved = vi.mocked(saveChatMessages).mock.calls[0]?.[1] as
+      | { role: string; metadata?: { reasoningMs?: number } }[]
+      | undefined;
+    expect(saved?.find((message) => message.role === 'assistant')?.metadata?.reasoningMs).toEqual(
+      expect.any(Number),
+    );
+  });
   it('frames imported quick answers as user input', async () => {
     vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
     vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);

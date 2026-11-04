@@ -11,6 +11,7 @@ import {
   createUIMessageStreamResponse,
   isStepCount,
   type ModelMessage,
+  smoothStream,
   streamText,
   toUIMessageStream,
   validateUIMessages,
@@ -20,6 +21,7 @@ import { chatModelSettings } from '../generation.js';
 import { languageModelFor } from '../model.js';
 import { compactConversation } from './compaction.js';
 import { persona, promptVersion, requestContext } from './persona.js';
+import { reasoningTimer } from './reasoning-time.js';
 import { librarianTools, toolApproval } from './tools.js';
 
 /**
@@ -83,7 +85,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       onError: () => {},
       ...input,
       messages: withRequestContext(input.messages, requestContext(request)),
-      experimental_transform: withoutProviderChunks,
+      experimental_transform: [withoutProviderChunks, smoothStream({ chunking: 'word' })],
       tools,
       toolApproval,
       ...(approvalSecret ? { experimental_toolApprovalSecret: approvalSecret } : {}),
@@ -97,6 +99,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       stream: result.stream,
       originalMessages,
       generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
+      messageMetadata: reasoningTimer(),
       onError: failure,
       onEnd: async ({ messages }) => {
         try {
