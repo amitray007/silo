@@ -1,8 +1,14 @@
-import { librarianMessageSchema, saveChatMessages } from '@silo/core';
+import {
+  answerVersion,
+  librarianMessageSchema,
+  replaceLastAnswer,
+  saveChatMessages,
+} from '@silo/core';
 import {
   getLibrarianToolSource,
   type LibrarianRequest,
   librarianApprovalSecret,
+  resolveAiCredential,
   resolveAiFeatureCredential,
 } from '@silo/core/ai-credential';
 import {
@@ -67,7 +73,9 @@ function failure(error: unknown): string {
 }
 export async function runLibrarian(request: LibrarianRequest): Promise<Response> {
   try {
-    const credential = await resolveAiFeatureCredential('librarian');
+    const credential = request.model
+      ? await resolveAiCredential(request.model.provider, request.model.id)
+      : await resolveAiFeatureCredential('librarian');
     if (!credential) throw new Error('Unavailable');
     const approvalSecret = librarianApprovalSecret();
     const tools = await librarianTools(getLibrarianToolSource(), approvalSecret, request.transient);
@@ -104,14 +112,31 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       ...(request.abortSignal ? { abortSignal: request.abortSignal } : {}),
       ...chatModelSettings(credential, { promptCache: true, readableReasoning: true }),
     });
+    const metadata = {
+      model: { provider: credential.kind, id: credential.model.id, label: credential.model.label },
+      ...(request.replacing
+        ? {
+            versions: [
+              ...(librarianMessageSchema.parse(request.replacing).metadata?.versions ?? []),
+              answerVersion(request.replacing),
+            ].slice(-5),
+          }
+        : {}),
+    };
     const replyStream = toUIMessageStream({
       stream: result.stream,
       originalMessages,
       generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
       messageMetadata: ({ part }) =>
         part.type === 'finish'
-          ? { ...timing.messageMetadata({ part }), finalAnswer: part.finishReason === 'stop' }
-          : timing.messageMetadata({ part }),
+          ? {
+              ...metadata,
+              ...timing.messageMetadata({ part }),
+              finalAnswer: part.finishReason === 'stop',
+            }
+          : part.type === 'start'
+            ? metadata
+            : timing.messageMetadata({ part }),
       onError: failure,
     });
     const stream = createUIMessageStream({
@@ -122,7 +147,15 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       onError: failure,
       onEnd: async ({ messages }) => {
         try {
-          if (!request.transient)
+          if (request.replacing) {
+            const answer = messages.at(-1);
+            if (answer?.role === 'assistant')
+              await replaceLastAnswer(
+                request.chatId,
+                request.replacing,
+                librarianMessageSchema.parse(answer),
+              );
+          } else if (!request.transient)
             await saveChatMessages(
               request.chatId,
               messages.map((message) => librarianMessageSchema.parse(message)),

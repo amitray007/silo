@@ -12,6 +12,7 @@ vi.mock('@silo/core', () => ({
 }));
 vi.mock('@silo/core/ai-credential', () => ({
   resolveAiFeatureCredential: vi.fn(),
+  resolveAiCredential: vi.fn(),
   getLibrarianToolSource: vi.fn(),
   librarianApprovalSecret: vi.fn(() => new Uint8Array(32)),
 }));
@@ -22,7 +23,11 @@ vi.mock('./suggestions.js', () => ({
 }));
 
 import { getSetting, saveChatMessages } from '@silo/core';
-import { getLibrarianToolSource, resolveAiFeatureCredential } from '@silo/core/ai-credential';
+import {
+  getLibrarianToolSource,
+  resolveAiCredential,
+  resolveAiFeatureCredential,
+} from '@silo/core/ai-credential';
 import { languageModelFor } from '../model.js';
 import { runLibrarian } from './run.js';
 import { suggestFollowups } from './suggestions.js';
@@ -30,17 +35,18 @@ import { suggestFollowups } from './suggestions.js';
 afterEach(() => vi.clearAllMocks());
 describe('Librarian streaming', () => {
   it.each([
-    [false, false, false],
-    [false, true, false],
-    [false, true, true],
-    [true, true, false],
+    [false, false, false, true],
+    [false, true, false, false],
+    [false, true, true, false],
+    [true, true, false, false],
   ])(
     'streams text and persists suggestions only when enabled (transient=%s enabled=%s)',
-    async (transient, enabled, empty) => {
+    async (transient, enabled, empty, override) => {
       const items = empty ? [] : [{ kind: 'ask' as const, text: 'What next?' }];
       vi.mocked(suggestFollowups).mockResolvedValue(items);
       vi.mocked(getSetting).mockResolvedValue(enabled);
       vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+      vi.mocked(resolveAiCredential).mockResolvedValue(credential);
       vi.mocked(languageModelFor).mockReturnValue(
         new MockLanguageModelV4({
           doStream: async () => ({
@@ -71,6 +77,7 @@ describe('Librarian streaming', () => {
       const endRun = vi.fn();
       const response = await runLibrarian({
         endRun,
+        ...(override ? { model: { ...credential.model, provider: credential.kind } } : {}),
         transient,
         chatId: 'chat',
         messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
@@ -78,6 +85,15 @@ describe('Librarian streaming', () => {
       });
       const body = await response.text();
       expect(body).toContain('Hello');
+      expect(body).toContain(
+        JSON.stringify({
+          provider: credential.kind,
+          id: credential.model.id,
+          label: credential.model.label,
+        }),
+      );
+      if (override)
+        expect(resolveAiCredential).toHaveBeenCalledWith(credential.kind, credential.model.id);
       expect(body).not.toContain('data-suggestions');
       expect(suggestFollowups).not.toHaveBeenCalled();
       expect(endRun).toHaveBeenCalled();

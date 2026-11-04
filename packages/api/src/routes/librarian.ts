@@ -9,8 +9,10 @@ import {
   listChats,
   quickLibrarianReply,
   quickRequestSchema,
+  regenerateRequestSchema,
   requestLibrarianSuggestions,
   SUGGESTIONS_NOT_READY,
+  selectLibrarianVersion,
   streamLibrarianReply,
 } from '@silo/core';
 import type { Hono } from 'hono';
@@ -95,22 +97,42 @@ export function registerLibrarianRoutes(app: Hono): void {
     if (suggestions === SUGGESTIONS_NOT_READY) return c.json({ error: 'not_ready' }, 409);
     return suggestions === null ? c.body(null, 204) : c.json({ suggestions });
   });
+  app.post('/librarian/chats/:id/messages/:messageId/versions/:versionId/select', async (c) => {
+    const result = await selectLibrarianVersion(
+      chatId.parse(c.req.param('id')),
+      z.string().min(1).max(200).parse(c.req.param('messageId')),
+      z.string().min(1).max(200).parse(c.req.param('versionId')),
+    );
+    return result.ok
+      ? c.json({ messages: result.messages })
+      : c.json({ error: result.code, message: 'Could not select answer.' }, 409);
+  });
   app.post('/librarian/chats/:id/messages', async (c) => {
     const id = chatId.parse(c.req.param('id'));
     const parsed = z
-      .object({
-        message: z.union([
-          incomingUserMessageSchema,
-          librarianMessageSchema.extend({ role: z.literal('assistant') }).strict(),
-        ]),
-      })
-      .strict()
+      .union([
+        regenerateRequestSchema,
+        z
+          .object({
+            message: z.union([
+              incomingUserMessageSchema,
+              librarianMessageSchema.extend({ role: z.literal('assistant') }).strict(),
+            ]),
+          })
+          .strict(),
+      ])
       .safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: 'invalid_message' }, 400);
-    const { message } = parsed.data;
-    const result = await streamLibrarianReply({ chatId: id, message });
+    const result = await streamLibrarianReply({
+      chatId: id,
+      ...('trigger' in parsed.data
+        ? { regenerate: parsed.data }
+        : { message: parsed.data.message }),
+    });
     if (result.ok) return result.response;
     const status = {
+      invalid_model: 400,
+      approval_pending: 409,
       ai_not_ready: 409,
       busy: 409,
       unavailable: 503,

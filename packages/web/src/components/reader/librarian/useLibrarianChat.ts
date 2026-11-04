@@ -4,16 +4,20 @@ import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalRespons
 import { useEffect, useReducer, useState, useSyncExternalStore } from 'react';
 import { queryKeys } from '../../../api/hooks';
 import {
+  type LibrarianAnswerMetadata,
   librarianApi,
   useCreateLibrarianChat,
   useDeleteLibrarianChat,
   useLibrarianChatDetail,
   useLibrarianChats,
 } from '../../../api/librarian';
+import type { AiProviderKind } from '../../../api/types';
 import { STREAM_UPDATE_MS } from '../../../lib/motion';
 import { toolName, WRITE_TRACES } from './tools';
 
 const ERROR_WORDS: Record<string, string> = {
+  invalid_model: 'This model is unavailable. Choose another model.',
+  invalid_message: 'This answer changed. Reload the conversation and try again.',
   approval_pending: 'Allow or deny the waiting request first.',
   ai_not_ready: 'Turn on the Librarian in Settings first.',
   invalid_key: 'Your AI key was rejected. Check Settings → AI.',
@@ -135,11 +139,14 @@ function newEntry(client: QueryClient, id: string | null): Entry {
     transport: new DefaultChatTransport({
       credentials: 'include',
       headers: { 'X-Silo-CSRF': '1' },
-      prepareSendMessagesRequest: ({ messages }) => {
+      prepareSendMessagesRequest: ({ messages, trigger, messageId, body }) => {
         if (!chatId.current) throw new Error('Chat is not ready');
         return {
           api: librarianApi.messagesUrl(chatId.current),
-          body: { message: messages.at(-1) },
+          body:
+            trigger === 'regenerate-message'
+              ? { trigger: 'regenerate', messageId, ...(body?.model ? { model: body.model } : {}) }
+              : { message: messages.at(-1) },
         };
       },
     }),
@@ -320,8 +327,36 @@ function useEntryChat({
       setCreatingEntry((current) => (current === entry ? null : current));
     }
   }
+  const canRegenerate =
+    !busy && !loading && !pendingApproval && state.messages.at(-1)?.role === 'assistant';
+  async function regenerate(model?: { provider: AiProviderKind; id: string }) {
+    if (!canRegenerate) return;
+    const previous = [...chat.messages];
+    await chat.regenerate({ messageId: previous.at(-1)?.id ?? '', body: model ? { model } : {} });
+    if (chat.error) chat.messages = previous;
+    else if (chatId.current) chat.messages = (await librarianApi.get(chatId.current)).messages;
+  }
+  async function selectVersion(versionId: string) {
+    const last = chat.messages.at(-1);
+    if (!canRegenerate || !chatId.current || !last) return;
+    setCreatingEntry(entry);
+    try {
+      chat.messages = (
+        await librarianApi.selectVersion(chatId.current, last.id, versionId)
+      ).messages;
+    } catch {
+      setFailedEntry(entry);
+    } finally {
+      setCreatingEntry(null);
+    }
+  }
   return {
     ...state,
+    regenerate,
+    selectVersion,
+    canRegenerate,
+    answerModel: (lastAssistant?.metadata as LibrarianAnswerMetadata | undefined)?.model,
+    versions: (lastAssistant?.metadata as LibrarianAnswerMetadata | undefined)?.versions ?? [],
     chatId: resolved ?? null,
     refresh: rerender,
     title,

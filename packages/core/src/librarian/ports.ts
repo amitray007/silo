@@ -9,6 +9,10 @@ export type LibrarianToolSource = {
   ): Promise<{ text: string; structured?: unknown; isError: boolean }>;
 };
 export type LibrarianRequest = {
+  model?: import('../ai/model-types.js').AiLiveModel & {
+    provider: import('../ai/model-types.js').AiProviderKind;
+  };
+  replacing?: LibrarianMessage;
   chatId: string;
   summary?: string | null;
   summarizedCount?: number;

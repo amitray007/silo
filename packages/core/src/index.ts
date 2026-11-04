@@ -126,6 +126,7 @@ export {
   PASSAGE_WORD_ACTION_IDS,
 } from './librarian/actions.js';
 export {
+  answerVersion,
   createChat,
   deleteChat,
   getChat,
@@ -137,7 +138,10 @@ export {
   listChats,
   quickLibrarianReply,
   quickRequestSchema,
+  regenerateRequestSchema,
+  replaceLastAnswer,
   saveChatMessages,
+  selectLibrarianVersion,
   streamLibrarianReply,
 } from './librarian/index.js';
 export { librarianMcpPersona, librarianPersona, promptVersion } from './librarian/persona.js';

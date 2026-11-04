@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { useLibrarianChat } from './useLibrarianChat';
+import { chatErrorText, useLibrarianChat } from './useLibrarianChat';
 
 const json = (value: unknown) =>
   new Response(JSON.stringify(value), {
@@ -106,4 +106,39 @@ it('keeps an in-flight chat beyond the recent cache limit', async () => {
     );
     await sending;
   });
+});
+
+it('sends the regenerate contract, preserves rejected content and selects a stored version', async () => {
+  expect(chatErrorText('invalid_model')).toBe('This model is unavailable. Choose another model.');
+  const answer = { id: 'answer', role: 'assistant', parts: [{ type: 'text', text: 'Answer' }] };
+  const selected = { ...answer, id: 'old', parts: [{ type: 'text', text: 'Old' }] };
+  const requests: unknown[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/select')) return json({ messages: [selected] });
+      if (init?.method === 'POST') {
+        requests.push(JSON.parse(String(init.body)));
+        return new Response(JSON.stringify({ error: 'invalid_model' }), { status: 400 });
+      }
+      if (url.includes('?'))
+        return json({ chats: [{ id: 'regen-chat', title: 'Test' }], nextCursor: null });
+      return json({ chat: { id: 'regen-chat', title: 'Test' }, messages: [answer] });
+    }),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const { result } = renderHook(() => useLibrarianChat('regen-hook-test'), {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+  await waitFor(() => expect(result.current.canRegenerate).toBe(true));
+  await act(async () => result.current.regenerate({ provider: 'openai', id: 'mini' }));
+  expect(requests).toEqual([
+    { trigger: 'regenerate', messageId: 'answer', model: { provider: 'openai', id: 'mini' } },
+  ]);
+  await waitFor(() => expect(result.current.messages).toEqual([answer]));
+  await act(async () => result.current.selectVersion('old'));
+  await waitFor(() => expect(result.current.messages).toEqual([selected]));
 });

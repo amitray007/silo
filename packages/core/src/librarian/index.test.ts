@@ -3,11 +3,105 @@ import { sql } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
-vi.mock('../ai/status.js', () => ({ isAiFeatureOn: vi.fn(async () => true) }));
+vi.mock('../ai/status.js', () => ({
+  isAiFeatureOn: vi.fn(async () => true),
+  resolveAiCredential: vi.fn(async (_provider: string, id: string) =>
+    id === 'valid' ? { kind: 'openai', model: { id, label: 'Valid' } } : undefined,
+  ),
+}));
 
 const suite = postgresReachable() ? describe : describe.skip;
 suite('Librarian persistence', () => {
   const h = setupPgHarness('silo_librarian', () => import('./index.js'));
+  it('regenerates only the last answer, validates overrides, guards runs and swaps persisted versions', async () => {
+    const c = h.mod();
+    const { setLibrarianRunner } = await import('./ports.js');
+    const runner = vi.fn(async (_request: import('./ports.js').LibrarianRequest) => new Response());
+    setLibrarianRunner(runner);
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing');
+    const user = {
+      id: 'regen-user',
+      role: 'user' as const,
+      parts: [{ type: 'text', text: 'Hello' }],
+    };
+    const answer = {
+      id: 'regen-answer',
+      role: 'assistant' as const,
+      parts: [{ type: 'text', text: 'First' }],
+      metadata: { suggestions: [{ kind: 'ask', text: 'First suggestion' }] },
+    };
+    await c.saveChatMessages(chat.id, [user, answer]);
+    const regenerate = { trigger: 'regenerate' as const, messageId: answer.id };
+    expect(
+      await c.streamLibrarianReply({
+        chatId: chat.id,
+        regenerate: { ...regenerate, messageId: user.id },
+      }),
+    ).toMatchObject({ code: 'invalid_message' });
+    expect(
+      await c.streamLibrarianReply({
+        chatId: chat.id,
+        regenerate: { ...regenerate, model: { provider: 'openai', id: 'missing' } },
+      }),
+    ).toMatchObject({ code: 'invalid_model' });
+    expect(await c.streamLibrarianReply({ chatId: chat.id, regenerate })).toMatchObject({
+      ok: true,
+    });
+    const request = runner.mock.calls.at(-1)?.[0] as
+      | import('./ports.js').LibrarianRequest
+      | undefined;
+    expect(request?.messages).toEqual([user]);
+    expect(request?.model).toBeUndefined();
+    expect(await c.selectLibrarianVersion(chat.id, answer.id, 'missing')).toMatchObject({
+      code: 'busy',
+    });
+    request?.endRun?.();
+    expect(
+      await c.streamLibrarianReply({
+        chatId: chat.id,
+        regenerate: { ...regenerate, model: { provider: 'openai', id: 'valid' } },
+      }),
+    ).toMatchObject({ ok: true });
+    expect(runner.mock.calls.at(-1)?.[0].model).toMatchObject({
+      provider: 'openai',
+      id: 'valid',
+      label: 'Valid',
+    });
+    runner.mock.calls.at(-1)?.[0].endRun?.();
+    await c.saveChatMessages(chat.id, [{ ...answer, parts: [{ state: 'approval-requested' }] }]);
+    expect(await c.streamLibrarianReply({ chatId: chat.id, regenerate })).toMatchObject({
+      code: 'approval_pending',
+    });
+    await c.saveChatMessages(chat.id, [answer]);
+    for (let i = 0; i < 7; i++) {
+      const stored = (await c.getChat(chat.id))?.messages.at(-1);
+      if (!stored) throw new Error('missing');
+      const metadata = c.librarianMessageSchema.parse(stored).metadata;
+      const next = {
+        id: `regen-${i}`,
+        role: 'assistant' as const,
+        parts: [{ type: 'text', text: String(i) }],
+        metadata: { versions: [...(metadata?.versions ?? []), c.answerVersion(stored)].slice(-5) },
+      };
+      expect(await c.replaceLastAnswer(chat.id, stored, next)).toBe(true);
+      expect(await c.replaceLastAnswer(chat.id, stored, next)).toBe(false);
+    }
+    const last = (await c.getChat(chat.id))?.messages.at(-1);
+    const versions = c.librarianMessageSchema.parse(last).metadata?.versions;
+    expect(versions).toHaveLength(5);
+    const selected = versions?.[0];
+    if (!last || !selected) throw new Error('missing');
+    expect(await c.selectLibrarianVersion(chat.id, last.id, selected.id)).toMatchObject({
+      ok: true,
+    });
+    expect((await c.getChat(chat.id))?.messages.at(-1)).toMatchObject({
+      id: selected.id,
+      parts: selected.parts,
+    });
+    await c.deleteChat(chat.id);
+    setLibrarianRunner(undefined);
+  });
   it('lists article titles and null for library or deleted articles', async () => {
     const c = h.mod();
     const { db, links } = await import('@silo/db');

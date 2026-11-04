@@ -76,7 +76,12 @@ async function generate(chatId: string, messageId: string): Promise<Outcome> {
       .where(eq(messages.chatId, chatId))
       .orderBy(asc(messages.seq));
     const current = rows.at(-1);
-    if (!eligible(current, messageId) || !current) return null;
+    if (
+      !eligible(current, messageId) ||
+      !current ||
+      JSON.stringify(current.parts) !== JSON.stringify(last.parts)
+    )
+      return null;
     const meta = librarianMessageSchema.parse(current).metadata;
     if (meta?.suggestions) return meta.suggestions;
     await tx
