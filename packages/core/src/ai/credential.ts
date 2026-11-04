@@ -10,6 +10,7 @@ export {
   type LibrarianRequest,
   type LibrarianToolSource,
   setLibrarianRunner,
+  setLibrarianSuggestionsRunner,
   setLibrarianToolSource,
 } from '../librarian/ports.js';
 export type { AiModelsFetcher, AiProviderModelsFetcher } from './models.js';

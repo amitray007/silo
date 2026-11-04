@@ -322,6 +322,7 @@ function useEntryChat({
   }
   return {
     ...state,
+    chatId: resolved ?? null,
     refresh: rerender,
     title,
     pendingApproval,

@@ -32,6 +32,8 @@ export function Composer({
   lead,
   passage,
   quick = [],
+  suggestions,
+  onSuggestion,
   onQuick,
   quickDisabled = false,
   className,
@@ -52,6 +54,8 @@ export function Composer({
   lead?: ReactNode | undefined;
   /** A passage attached to the question: its words and the way to drop it. */
   passage?: { quote: string; onRemove: () => void } | undefined;
+  suggestions?: { status: string; items?: { kind: string; text: string }[] } | undefined;
+  onSuggestion?: (text: string) => void;
   quick?: readonly QuickAction[];
   onQuick?: (id: string, label: string) => void;
   quickDisabled?: boolean;
@@ -80,7 +84,7 @@ export function Composer({
         if (value.trim() && !sendDisabled) onSend();
       }}
     >
-      {quick.length > 0 && (
+      {(quick.length > 0 || suggestions) && (
         <div className="silo-composer-chips">
           {quick.map(([id, text]) => (
             <button
@@ -92,6 +96,22 @@ export function Composer({
               {text}
             </button>
           ))}
+          {suggestions?.status === 'pending'
+            ? [0, 1, 2].map((id) => (
+                <button
+                  key={`pending-${id}`}
+                  type="button"
+                  disabled
+                  aria-label="Loading follow-up"
+                  style={{ width: 100, height: 28, background: 'var(--bg2)' }}
+                />
+              ))
+            : suggestions?.items?.map(({ kind, text }) => (
+                <button key={text} type="button" onClick={() => onSuggestion?.(text)}>
+                  {kind === 'do' && <ReaderIcon name="hash" size={12} />}
+                  {text}
+                </button>
+              ))}
         </div>
       )}
       {passage && (

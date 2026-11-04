@@ -652,12 +652,16 @@ function AiSections({
   patch,
   saveActions,
   saveChatAnswers,
+  suggestions,
+  saveSuggestions,
 }: {
   ai: AiSettingsResponse;
   settingsAi: AiSetting;
   plugins: SettingsMap['plugins'] | undefined;
   librarianActions: SettingsMap['librarianActions'];
   chatAnswers: ChatAnswers;
+  suggestions: boolean;
+  saveSuggestions: () => void;
   off: boolean;
   busy: boolean;
   patch: (change: AiSettingsChange) => void;
@@ -697,6 +701,15 @@ function AiSections({
       ))}
       {settingsAi.features.librarian?.enabled === true && (
         <>
+          <div style={settingsRowDivided}>
+            <div style={rowLabel}>Suggest follow-ups</div>
+            <ToggleSwitch
+              label="Suggest follow-ups"
+              on={suggestions}
+              onToggle={saveSuggestions}
+              disabled={off || busy}
+            />
+          </div>
           <ChatAnswersRow value={chatAnswers} onChange={saveChatAnswers} />
           <QuickActionsEditor actions={resolveActions(librarianActions)} save={saveActions} />
         </>
@@ -752,6 +765,10 @@ export function AiTab() {
           plugins={settings?.plugins}
           librarianActions={settings?.librarianActions}
           chatAnswers={settings?.chatAnswers ?? 'streamed'}
+          suggestions={settings?.librarianSuggestions ?? true}
+          saveSuggestions={() =>
+            update.mutate({ librarianSuggestions: !(settings?.librarianSuggestions ?? true) })
+          }
           off={!enabled}
           busy={update.isPending}
           patch={patch}

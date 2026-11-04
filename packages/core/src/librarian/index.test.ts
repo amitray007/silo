@@ -321,4 +321,120 @@ suite('Librarian persistence', () => {
       paragraph: 1,
     });
   });
+
+  it('guards the last message, coalesces calls, and preserves 200 parts', async () => {
+    const c = h.mod();
+    const { requestLibrarianSuggestions } = await import('./suggestions.js');
+    const { setLibrarianSuggestionsRunner } = await import('./ports.js');
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing chat');
+    const { setSetting } = await import('../settings/settings.js');
+    await setSetting('librarianSuggestions', false);
+    expect(await requestLibrarianSuggestions(chat.id, 's-a')).toBeNull();
+    await setSetting('librarianSuggestions', true);
+    const items = [{ kind: 'ask' as const, text: 'What next?' }];
+    let release!: () => void;
+    const wait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const runner = vi.fn(async () => {
+      await wait;
+      return items;
+    });
+    setLibrarianSuggestionsRunner(runner);
+    await c.saveChatMessages(chat.id, [
+      { id: 's-u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] },
+    ]);
+    expect(await requestLibrarianSuggestions(chat.id, 's-u')).toBeNull();
+    // The stream finished but its answer is not saved yet: the client is told to ask again.
+    expect(await requestLibrarianSuggestions(chat.id, 's-a')).toBe('not_ready');
+    const parts = Array.from({ length: 200 }, () => ({ type: 'text', text: 'Answer' }));
+    await c.saveChatMessages(chat.id, [
+      { id: 's-a', role: 'assistant', parts, metadata: { finalAnswer: true } },
+    ]);
+    const first = requestLibrarianSuggestions(chat.id, 's-a');
+    const second = requestLibrarianSuggestions(chat.id, 's-a');
+    await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(1));
+    release();
+    expect(await first).toEqual(items);
+    expect(await second).toEqual(items);
+    expect(await requestLibrarianSuggestions(chat.id, 's-a')).toEqual(items);
+    expect(runner).toHaveBeenCalledTimes(1);
+    const saved = (await c.getChat(chat.id))?.messages.at(-1);
+    expect(saved?.parts).toHaveLength(200);
+    expect(saved?.metadata).toMatchObject({ suggestions: items });
+    await c.saveChatMessages(chat.id, [
+      { id: 's-new', role: 'user', parts: [{ type: 'text', text: 'Next' }] },
+    ]);
+    expect(await requestLibrarianSuggestions(chat.id, 's-a')).toBeNull();
+    let finish!: () => void;
+    const waiting = new Promise<void>((r) => {
+      finish = r;
+    });
+    setLibrarianSuggestionsRunner(async () => {
+      await waiting;
+      return [];
+    });
+    await c.saveChatMessages(chat.id, [
+      {
+        id: 'race-a',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Answer' }],
+        metadata: { finalAnswer: true },
+      },
+    ]);
+    const race = requestLibrarianSuggestions(chat.id, 'race-a');
+    await new Promise((r) => setTimeout(r, 30));
+    await c.saveChatMessages(chat.id, [
+      { id: 'race-u', role: 'user', parts: [{ type: 'text', text: 'Next' }] },
+    ]);
+    finish();
+    expect(await race).toBeNull();
+    expect(
+      (await c.getChat(chat.id))?.messages.find((m) => m.id === 'race-a')?.metadata,
+    ).not.toHaveProperty('suggestions');
+    // A failed model call shows nothing now and is not stored, so a later visit can retry.
+    const failing = vi.fn(async () => null);
+    setLibrarianSuggestionsRunner(failing);
+    await c.saveChatMessages(chat.id, [
+      {
+        id: 'fail-a',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Answer' }],
+        metadata: { finalAnswer: true },
+      },
+    ]);
+    expect(await requestLibrarianSuggestions(chat.id, 'fail-a')).toEqual([]);
+    expect(
+      (await c.getChat(chat.id))?.messages.find((m) => m.id === 'fail-a')?.metadata,
+    ).not.toHaveProperty('suggestions');
+    expect(await requestLibrarianSuggestions(chat.id, 'fail-a')).toEqual([]);
+    expect(failing).toHaveBeenCalledTimes(2);
+    const emptyRunner = vi.fn(async () => []);
+    setLibrarianSuggestionsRunner(emptyRunner);
+    await c.saveChatMessages(chat.id, [
+      {
+        id: 'empty-a',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Answer' }],
+        metadata: { finalAnswer: true },
+      },
+    ]);
+    expect(await requestLibrarianSuggestions(chat.id, 'empty-a')).toEqual([]);
+    expect(await requestLibrarianSuggestions(chat.id, 'empty-a')).toEqual([]);
+    expect(emptyRunner).toHaveBeenCalledTimes(1);
+    await c.saveChatMessages(chat.id, [
+      {
+        id: 'approval-a',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'Allow?' },
+          { type: 'tool-tag', state: 'approval-requested' },
+        ],
+        metadata: { finalAnswer: true },
+      },
+    ]);
+    expect(await requestLibrarianSuggestions(chat.id, 'approval-a')).toBeNull();
+    setLibrarianSuggestionsRunner(undefined);
+  });
 });

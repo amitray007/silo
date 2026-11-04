@@ -79,3 +79,23 @@ it('still renders the passage and the lead slot', () => {
   const field = container.querySelector('.silo-composer-field');
   expect(field?.contains(screen.getByText('Lead'))).toBe(true);
 });
+
+it('appends follow-ups after quick actions and sends their text', () => {
+  const onSuggestion = vi.fn();
+  const { container } = render(
+    composer({
+      suggestions: { status: 'ready', items: [{ kind: 'do', text: 'Tag these' }] },
+      onSuggestion,
+    }),
+  );
+  expect(
+    Array.from(container.querySelectorAll('.silo-composer-chips button'), (b) => b.textContent),
+  ).toEqual(['Explain', 'Simplify', 'Tag these']);
+  fireEvent.click(screen.getByRole('button', { name: 'Tag these' }));
+  expect(onSuggestion).toHaveBeenCalledWith('Tag these');
+});
+
+it('shows three static pending follow-up chips', () => {
+  render(composer({ suggestions: { status: 'pending' } }));
+  expect(screen.getAllByRole('button', { name: 'Loading follow-up' })).toHaveLength(3);
+});

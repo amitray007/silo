@@ -104,11 +104,21 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       ...(request.abortSignal ? { abortSignal: request.abortSignal } : {}),
       ...chatModelSettings(credential, { promptCache: true, readableReasoning: true }),
     });
-    const stream = toUIMessageStream({
+    const replyStream = toUIMessageStream({
       stream: result.stream,
       originalMessages,
       generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
-      messageMetadata: timing.messageMetadata,
+      messageMetadata: ({ part }) =>
+        part.type === 'finish'
+          ? { ...timing.messageMetadata({ part }), finalAnswer: part.finishReason === 'stop' }
+          : timing.messageMetadata({ part }),
+      onError: failure,
+    });
+    const stream = createUIMessageStream({
+      originalMessages,
+      execute: ({ writer }) => {
+        writer.merge(replyStream);
+      },
       onError: failure,
       onEnd: async ({ messages }) => {
         try {

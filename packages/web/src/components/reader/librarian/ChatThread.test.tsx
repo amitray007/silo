@@ -389,6 +389,31 @@ it('ends the conversation spinner and shows the error after a detail fetch fails
   }
 });
 
+it('hides stored follow-ups and asks for none when Suggest follow-ups is off', async () => {
+  client.clear();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ librarianSuggestions: false }))),
+  );
+  mount(
+    fakeChat({
+      chatId: 'off',
+      messages: [
+        {
+          ...text('off-a', 'assistant', 'Answer'),
+          metadata: { finalAnswer: true, suggestions: [{ kind: 'ask', text: 'Hidden chip' }] },
+        },
+      ],
+    }),
+  );
+  await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+  await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Hidden chip' })).toBeNull());
+  expect(
+    vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/suggestions')),
+  ).toHaveLength(0);
+  vi.unstubAllGlobals();
+});
+
 function answerSettings(chatAnswers: 'streamed' | 'complete') {
   client.clear();
   vi.stubGlobal(
@@ -454,4 +479,87 @@ it('stops its answers speaking when the dock chat folds', () => {
   vi.mocked(stopAnswerSpeech).mockClear();
   view.rerender(thread(false));
   expect(stopAnswerSpeech).toHaveBeenCalledWith('a');
+});
+
+it.each([
+  { busy: false, pendingApproval: false, shown: true },
+  { busy: true, pendingApproval: false, shown: false },
+  { busy: false, pendingApproval: true, shown: false },
+])('shows only the last assistant follow-ups ($shown)', ({ busy, pendingApproval, shown }) => {
+  const suggestion = (id: string, label: string): UIMessage => ({
+    id,
+    role: 'assistant',
+    parts: [{ type: 'text', text: 'Answer' }],
+    metadata: { finalAnswer: true, suggestions: [{ kind: 'ask', text: label }] },
+  });
+  const chat = fakeChat({
+    busy,
+    pendingApproval,
+    messages: [suggestion('old', 'Old follow-up'), suggestion('last', 'Latest follow-up')],
+  });
+  mount(chat);
+  expect(screen.queryByRole('button', { name: 'Old follow-up' })).toBeNull();
+  expect(!!screen.queryByRole('button', { name: 'Latest follow-up' })).toBe(shown);
+  if (shown) {
+    fireEvent.click(screen.getByRole('button', { name: 'Latest follow-up' }));
+    expect(chat.send).toHaveBeenCalledWith('Latest follow-up', undefined, undefined);
+  }
+});
+
+it('loads follow-ups separately, then sends a chip as a message', async () => {
+  client.clear();
+  let resolve!: (value: Response) => void;
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  const chat = fakeChat({
+    chatId: 'separate',
+    messages: [{ ...text('final', 'assistant', 'Answer'), metadata: { finalAnswer: true } }],
+  });
+  mount(chat);
+  expect(screen.getAllByRole('button', { name: 'Loading follow-up' })).toHaveLength(3);
+  await act(async () => {
+    resolve(Response.json({ suggestions: [{ kind: 'ask', text: 'Next question' }] }));
+  });
+  expect(await screen.findByRole('button', { name: 'Next question' })).toBeTruthy();
+  fetcher.mockRestore();
+});
+it('hides follow-ups after a request error', async () => {
+  client.clear();
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+  mount(
+    fakeChat({
+      chatId: 'failed',
+      messages: [{ ...text('final', 'assistant', 'Answer'), metadata: { finalAnswer: true } }],
+    }),
+  );
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 30));
+  });
+  expect(screen.queryByRole('button', { name: 'Loading follow-up' })).toBeNull();
+  fetcher.mockRestore();
+});
+
+it('renders stored suggestions without a request', () => {
+  client.clear();
+  const fetcher = vi.spyOn(globalThis, 'fetch');
+  mount(
+    fakeChat({
+      chatId: 'stored',
+      messages: [
+        {
+          ...text('stored-a', 'assistant', 'Answer'),
+          metadata: { finalAnswer: true, suggestions: [{ kind: 'ask', text: 'Stored chip' }] },
+        },
+      ],
+    }),
+  );
+  expect(screen.getByRole('button', { name: 'Stored chip' })).toBeTruthy();
+  expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/suggestions'))).toHaveLength(
+    0,
+  );
+  fetcher.mockRestore();
 });

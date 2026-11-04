@@ -5,12 +5,16 @@ import {
   LIBRARY_ACTION_IDS,
   PASSAGE_ACTION_IDS,
 } from './actions.js';
+export const suggestionsSchema = z
+  .array(z.object({ kind: z.enum(['ask', 'do']), text: z.string().min(1).max(96) }))
+  .max(3);
 export const librarianMessageSchema = z.object({
   id: z.string().min(1).max(200),
   role: z.enum(['user', 'assistant']),
   parts: z.array(z.unknown()).max(200),
   metadata: z
     .object({
+      suggestions: suggestionsSchema.optional(),
       quote: z.string().max(2000).optional(),
       paragraph: z.number().int().nonnegative().optional(),
       action: z.string().max(100).optional(),
