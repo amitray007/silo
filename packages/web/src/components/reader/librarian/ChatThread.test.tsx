@@ -464,12 +464,8 @@ it.each([
   const suggestion = (id: string, label: string): UIMessage => ({
     id,
     role: 'assistant',
-    parts: [
-      {
-        type: 'data-suggestions',
-        data: { status: 'ready', items: [{ kind: 'ask', text: label }] },
-      },
-    ],
+    parts: [{ type: 'text', text: 'Answer' }],
+    metadata: { finalAnswer: true, suggestions: [{ kind: 'ask', text: label }] },
   });
   const chat = fakeChat({
     busy,
@@ -485,18 +481,60 @@ it.each([
   }
 });
 
-it('shows pending skeletons once the answer text has ended', () => {
+it('loads follow-ups separately, then sends a chip as a message', async () => {
+  client.clear();
+  let resolve!: (value: Response) => void;
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  const chat = fakeChat({
+    chatId: 'separate',
+    messages: [{ ...text('final', 'assistant', 'Answer'), metadata: { finalAnswer: true } }],
+  });
+  mount(chat);
+  expect(screen.getAllByRole('button', { name: 'Loading follow-up' })).toHaveLength(3);
+  await act(async () => {
+    resolve(Response.json({ suggestions: [{ kind: 'ask', text: 'Next question' }] }));
+  });
+  expect(await screen.findByRole('button', { name: 'Next question' })).toBeTruthy();
+  fetcher.mockRestore();
+});
+it('hides follow-ups after a request error', async () => {
+  client.clear();
+  const fetcher = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
   mount(
     fakeChat({
-      busy: true,
+      chatId: 'failed',
+      messages: [{ ...text('final', 'assistant', 'Answer'), metadata: { finalAnswer: true } }],
+    }),
+  );
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 30));
+  });
+  expect(screen.queryByRole('button', { name: 'Loading follow-up' })).toBeNull();
+  fetcher.mockRestore();
+});
+
+it('renders stored suggestions without a request', () => {
+  client.clear();
+  const fetcher = vi.spyOn(globalThis, 'fetch');
+  mount(
+    fakeChat({
+      chatId: 'stored',
       messages: [
         {
-          id: 'a',
-          role: 'assistant',
-          parts: [{ type: 'data-suggestions', data: { status: 'pending' } }],
+          ...text('stored-a', 'assistant', 'Answer'),
+          metadata: { finalAnswer: true, suggestions: [{ kind: 'ask', text: 'Stored chip' }] },
         },
       ],
     }),
   );
-  expect(screen.getAllByRole('button', { name: 'Loading follow-up' })).toHaveLength(3);
+  expect(screen.getByRole('button', { name: 'Stored chip' })).toBeTruthy();
+  expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/suggestions'))).toHaveLength(
+    0,
+  );
+  fetcher.mockRestore();
 });

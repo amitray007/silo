@@ -141,6 +141,7 @@ export {
   streamLibrarianReply,
 } from './librarian/index.js';
 export { librarianMcpPersona, librarianPersona, promptVersion } from './librarian/persona.js';
+export { requestLibrarianSuggestions } from './librarian/suggestions.js';
 // Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants
 // of the single-id write ops above, modeled on `import.ts`'s sequential-
 // bulk-with-per-item-results pattern (see bulk.ts's module doc comment).

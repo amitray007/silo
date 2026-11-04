@@ -151,3 +151,28 @@ export function useRefreshOnRemovedAction(message: string | undefined) {
       void client.invalidateQueries({ queryKey: queryKeys.settings() });
   }, [message, client]);
 }
+
+export function useLibrarianSuggestions(
+  chatId: string | null,
+  message: UIMessage | undefined,
+  enabled: boolean,
+) {
+  const stored = (
+    message?.metadata as { suggestions?: { kind: string; text: string }[] } | undefined
+  )?.suggestions;
+  const query = useQuery({
+    queryKey: ['librarian', 'suggestions', chatId, message?.id],
+    queryFn: () =>
+      apiPost<{ suggestions: { kind: string; text: string }[] } | null>(
+        `/api/librarian/chats/${chatId}/messages/${encodeURIComponent(message?.id ?? '')}/suggestions`,
+        {},
+      ),
+    enabled: enabled && !!chatId && stored === undefined,
+    retry: false,
+    staleTime: Infinity,
+  });
+  if (!enabled) return undefined;
+  if (stored !== undefined) return { status: 'ready', items: stored };
+  if (query.isFetching) return { status: 'pending' };
+  return query.isSuccess ? { status: 'ready', items: query.data?.suggestions ?? [] } : undefined;
+}

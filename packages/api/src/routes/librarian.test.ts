@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@silo/core', async (load) => ({
   ...(await load<typeof import('@silo/core')>()),
   importLibrarianMessages: vi.fn(),
+  requestLibrarianSuggestions: vi.fn(),
   listChats: vi.fn(),
   quickLibrarianReply: vi.fn(async () => ({ ok: false, code: 'ai_not_ready' })),
   streamLibrarianReply: vi.fn(async () => ({ ok: false, code: 'ai_not_ready' })),
@@ -28,6 +29,7 @@ describe('Librarian route access', () => {
   it('rejects named tokens on every route', async () => {
     const api = app('db_token');
     for (const [method, path] of [
+      ['POST', '/librarian/chats/id/messages/message/suggestions'],
       ['POST', '/librarian/quick'],
       ['POST', '/librarian/chats/id/import'],
       ['GET', '/librarian/chats'],
@@ -202,4 +204,14 @@ it('includes linkTitle for article and library chats', async () => {
     expect.objectContaining({ linkTitle: 'Article' }),
     expect.objectContaining({ linkTitle: null }),
   ]);
+});
+
+it('returns suggestions or an empty response through the operator route', async () => {
+  const { requestLibrarianSuggestions } = await import('@silo/core');
+  const path = '/librarian/chats/00000000-0000-4000-8000-000000000001/messages/answer/suggestions';
+  vi.mocked(requestLibrarianSuggestions).mockResolvedValueOnce([{ kind: 'ask', text: 'Next?' }]);
+  const response = await app('env_token').request(path, { method: 'POST' });
+  expect(await response.json()).toEqual({ suggestions: [{ kind: 'ask', text: 'Next?' }] });
+  vi.mocked(requestLibrarianSuggestions).mockResolvedValueOnce(null);
+  expect((await app('env_token').request(path, { method: 'POST' })).status).toBe(204);
 });

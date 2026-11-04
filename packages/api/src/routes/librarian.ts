@@ -9,6 +9,7 @@ import {
   listChats,
   quickLibrarianReply,
   quickRequestSchema,
+  requestLibrarianSuggestions,
   streamLibrarianReply,
 } from '@silo/core';
 import type { Hono } from 'hono';
@@ -85,6 +86,12 @@ export function registerLibrarianRoutes(app: Hono): void {
   app.delete('/librarian/chats/:id', async (c) => {
     await deleteChat(chatId.parse(c.req.param('id')));
     return c.body(null, 204);
+  });
+  app.post('/librarian/chats/:id/messages/:messageId/suggestions', async (c) => {
+    const id = chatId.parse(c.req.param('id'));
+    const messageId = z.string().min(1).max(200).parse(c.req.param('messageId'));
+    const suggestions = await requestLibrarianSuggestions(id, messageId);
+    return suggestions === null ? c.body(null, 204) : c.json({ suggestions });
   });
   app.post('/librarian/chats/:id/messages', async (c) => {
     const id = chatId.parse(c.req.param('id'));

@@ -141,7 +141,11 @@ export async function saveChatMessages(
         })
         .onConflictDoUpdate({
           target: messages.id,
-          set: { parts: message.parts, metadata: message.metadata ?? null, role: message.role },
+          set: {
+            parts: message.parts,
+            metadata: sql`coalesce(${messages.metadata}, '{}'::jsonb) || ${JSON.stringify(message.metadata ?? {})}::jsonb`,
+            role: message.role,
+          },
           setWhere: eq(messages.chatId, chatId),
         });
     }

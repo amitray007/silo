@@ -1,4 +1,4 @@
-import { getSetting, librarianMessageSchema, saveChatMessages } from '@silo/core';
+import { librarianMessageSchema, saveChatMessages } from '@silo/core';
 import {
   getLibrarianToolSource,
   type LibrarianRequest,
@@ -14,8 +14,6 @@ import {
   smoothStream,
   streamText,
   toUIMessageStream,
-  type UIMessageChunk,
-  type UIMessageStreamWriter,
   validateUIMessages,
 } from 'ai';
 import { aiErrorCode, logAiFailure } from '../errors.js';
@@ -24,7 +22,6 @@ import { languageModelFor } from '../model.js';
 import { compactConversation } from './compaction.js';
 import { persona, promptVersion, requestContext } from './persona.js';
 import { reasoningTiming } from './reasoning-time.js';
-import { suggestFollowups } from './suggestions.js';
 import { librarianTools, toolApproval } from './tools.js';
 
 /**
@@ -111,33 +108,16 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       stream: result.stream,
       originalMessages,
       generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
-      messageMetadata: timing.messageMetadata,
+      messageMetadata: ({ part }) =>
+        part.type === 'finish'
+          ? { ...timing.messageMetadata({ part }), finalAnswer: part.finishReason === 'stop' }
+          : timing.messageMetadata({ part }),
       onError: failure,
     });
-    const enabled = !request.transient && (await getSetting('librarianSuggestions'));
     const stream = createUIMessageStream({
       originalMessages,
-      execute: async ({ writer }) => {
-        const { finish, failed, approval, answer } = await forwardReply(replyStream, writer);
-        if (
-          canSuggest(enabled, finish?.finishReason, failed, approval, answer, request.abortSignal)
-        ) {
-          writer.write({ type: 'data-suggestions', id: 'followups', data: { status: 'pending' } });
-          const question = lastQuestion(originalMessages);
-          const items = await suggestFollowups(
-            credential,
-            model,
-            question,
-            answer,
-            request.abortSignal,
-          );
-          writer.write({
-            type: 'data-suggestions',
-            id: 'followups',
-            data: { status: 'ready', items },
-          });
-        }
-        if (finish) writer.write(finish);
+      execute: ({ writer }) => {
+        writer.merge(replyStream);
       },
       onError: failure,
       onEnd: async ({ messages }) => {
@@ -173,56 +153,4 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       }),
     });
   }
-}
-
-function lastQuestion(messages: import('ai').UIMessage[]): string {
-  return (
-    messages
-      .findLast((message) => message.role === 'user')
-      ?.parts.filter((part) => part.type === 'text')
-      .map((part) => part.text)
-      .join('\n') ?? ''
-  );
-}
-
-function canSuggest(
-  enabled: boolean,
-  reason: string | undefined,
-  failed: boolean,
-  approval: boolean,
-  answer: string,
-  signal: AbortSignal | undefined,
-) {
-  return (
-    enabled &&
-    reason === 'stop' &&
-    !failed &&
-    !approval &&
-    answer.trim().length > 0 &&
-    !signal?.aborted
-  );
-}
-
-async function forwardReply(stream: ReadableStream<UIMessageChunk>, writer: UIMessageStreamWriter) {
-  const reader = stream.getReader();
-  let finish: Extract<UIMessageChunk, { type: 'finish' }> | undefined;
-  let failed = false;
-  let approval = false;
-  let answer = '';
-  while (true) {
-    const next = await reader.read();
-    if (next.done) break;
-    const chunk = next.value;
-    if (chunk.type === 'finish') {
-      finish = chunk;
-      continue;
-    }
-    if (['error', 'abort'].includes(chunk.type)) failed = true;
-    if (chunk.type === 'tool-approval-request') approval = true;
-    if (chunk.type === 'start-step') answer = '';
-    if (chunk.type === 'text-delta') answer += chunk.delta;
-    writer.write(chunk);
-  }
-
-  return { finish, failed, approval, answer };
 }

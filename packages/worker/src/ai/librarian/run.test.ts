@@ -78,27 +78,8 @@ describe('Librarian streaming', () => {
       });
       const body = await response.text();
       expect(body).toContain('Hello');
-      if (enabled && !transient) {
-        expect(body).toContain('data-suggestions');
-        expect(body).toContain('pending');
-        expect(body).not.toContain('errorText');
-        if (empty) expect(body).toContain('"items":[]');
-        else expect(body).toContain('What next?');
-        expect(saveChatMessages).toHaveBeenCalledWith(
-          'chat',
-          expect.arrayContaining([
-            expect.objectContaining({
-              role: 'assistant',
-              parts: expect.arrayContaining([
-                expect.objectContaining({
-                  type: 'data-suggestions',
-                  data: { status: 'ready', items },
-                }),
-              ]),
-            }),
-          ]),
-        );
-      } else expect(suggestFollowups).not.toHaveBeenCalled();
+      expect(body).not.toContain('data-suggestions');
+      expect(suggestFollowups).not.toHaveBeenCalled();
       expect(endRun).toHaveBeenCalled();
       if (transient) {
         expect(saveChatMessages).not.toHaveBeenCalled();

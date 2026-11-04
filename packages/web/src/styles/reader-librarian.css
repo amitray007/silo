@@ -894,12 +894,19 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-composer-chips:dir(rtl) {
   mask-image: linear-gradient(to left, #000 calc(100% - var(--qfade)), transparent);
 }
+.silo-composer-chips button svg {
+  flex: none;
+  color: var(--fnt);
+}
 .silo-composer-chips::-webkit-scrollbar {
   display: none;
 }
 /* Elevated pills, as in the reference: the surface colour with the small shadow. */
 .silo-composer-chips button {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   height: 32px;
   padding: 0 13px;
   border: 0;

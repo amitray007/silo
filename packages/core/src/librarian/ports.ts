@@ -49,3 +49,12 @@ export function beginLibrarianRun(chatId: string): (() => void) | undefined {
   }
   return release;
 }
+
+export type Suggestions = { kind: 'ask' | 'do'; text: string }[];
+let suggestionsRunner: ((question: string, answer: string) => Promise<Suggestions>) | undefined;
+export function setLibrarianSuggestionsRunner(value: typeof suggestionsRunner) {
+  suggestionsRunner = value;
+}
+export function getLibrarianSuggestionsRunner() {
+  return suggestionsRunner;
+}

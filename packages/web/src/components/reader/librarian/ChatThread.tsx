@@ -3,6 +3,7 @@ import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState }
 import {
   useChatAnswers,
   useLibrarianActions,
+  useLibrarianSuggestions,
   useRefreshOnRemovedAction,
 } from '../../../api/librarian';
 import { isWord, passageChips } from '../../../lib/librarianActions';
@@ -131,7 +132,11 @@ export function ChatThread({
   useRefreshOnRemovedAction(chat.error?.message);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
-  const suggestions = followups(chat, lastAssistant);
+  const suggestions = useLibrarianSuggestions(
+    chat.chatId,
+    lastAssistant,
+    canShowSuggestions(chat, active),
+  );
   const reasoningShown = showsLiveReasoning(lastAssistant, wholeAnswers);
   const status = statusLabel(chat.messages);
   const send = (text: string, action?: string) => {
@@ -263,13 +268,16 @@ export function ChatThread({
   );
 }
 
-function followups(chat: ThreadChat, message: UIMessage | undefined) {
-  const part = message?.parts.find((part) => part.type === 'data-suggestions');
-  const data =
-    part && 'data' in part
-      ? (part.data as { status: string; items?: { kind: string; text: string }[] })
-      : undefined;
-  return !chat.pendingApproval && !chat.loading && (!chat.busy || data?.status === 'pending')
-    ? data
-    : undefined;
+function canShowSuggestions(chat: ThreadChat, active: boolean) {
+  const last = chat.messages.at(-1);
+  return (
+    active &&
+    !chat.busy &&
+    !chat.loading &&
+    !chat.failed &&
+    !chat.error &&
+    !chat.pendingApproval &&
+    last?.role === 'assistant' &&
+    (last.metadata as { finalAnswer?: boolean } | undefined)?.finalAnswer === true
+  );
 }
