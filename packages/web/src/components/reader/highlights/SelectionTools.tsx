@@ -165,6 +165,7 @@ function MoreMenu({
 /** The bar itself: the primary actions, Ask when the Librarian is ready, and the More menu. */
 export function SelectionBarTools({
   askReady,
+  canWrite,
   color,
   blocked,
   picker,
@@ -177,6 +178,7 @@ export function SelectionBarTools({
   onAsk,
 }: {
   askReady: boolean;
+  canWrite: boolean;
   color: HighlightColor;
   blocked: ReadonlySet<HighlightColor>;
   picker: boolean;
@@ -191,7 +193,7 @@ export function SelectionBarTools({
   return (
     <div className="silo-sb-tools">
       {selectionActions
-        .filter((action) => action.group === 'primary')
+        .filter((action) => action.group === 'primary' && (canWrite || !action.writes))
         .map((action) => (
           <PrimaryAction
             key={action.id}

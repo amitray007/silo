@@ -57,6 +57,7 @@ export function SelectionBar({
   pending: selection,
   linkId,
   askReady = false,
+  canWrite = true,
   chatOpen = false,
   onSaveAnswer,
   prose,
@@ -75,6 +76,8 @@ export function SelectionBar({
   pending: PendingSelection | null;
   linkId?: string;
   askReady?: boolean;
+  /** False when the link refuses writes: no highlight, note, or save-as-note. */
+  canWrite?: boolean;
   chatOpen?: boolean;
   onSaveAnswer?: (answer: string) => Promise<void>;
   prose: HTMLElement | null;
@@ -245,6 +248,7 @@ export function SelectionBar({
                   busy={answerState.busy}
                   error={answerState.error}
                   saveDisabled={!answerState.answer || answerState.saving}
+                  canSave={canWrite}
                   onClose={closeAnswer}
                   onStop={() => void quick.stop()}
                   onSave={saveAnswer}
@@ -254,6 +258,7 @@ export function SelectionBar({
               {phase === 'bar' && (
                 <SelectionBarTools
                   askReady={askReady && !!linkId}
+                  canWrite={canWrite}
                   color={color}
                   blocked={blocked}
                   picker={picker}

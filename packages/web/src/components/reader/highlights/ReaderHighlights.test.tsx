@@ -837,6 +837,57 @@ it('continues the temporary answer in a new dock chat after importing it', async
   expect(screen.queryByRole('region', { name: 'Passage answer' })).toBeNull();
 });
 
+it('offers only Ask on a feed post when the Librarian is ready', async () => {
+  serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  expect(within(toolbar).getByRole('button', { name: 'Ask' })).toBeDefined();
+  expect(within(toolbar).queryByRole('button', { name: /Highlight/ })).toBeNull();
+  expect(within(toolbar).queryByRole('button', { name: /Note/ })).toBeNull();
+});
+
+it('answers a feed post passage without offering to save it as a note', async () => {
+  serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  fireEvent.click(await toolbarButton('Ask'));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('An answer saved on the passage.');
+  expect(screen.queryByRole('button', { name: 'Save as note' })).toBeNull();
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue in Librarian' }).hasAttribute('disabled'),
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Continue in Librarian' }));
+  await screen.findByRole('region', { name: 'Librarian conversation' });
+  expect(posts).toHaveLength(0);
+});
+
+it('keeps the reading tools on a feed post when the Librarian is not ready', async () => {
+  serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
+  mount(false);
+  await screen.findByRole('toolbar', { name: 'Reader tools' }, { timeout: 5000 });
+  select('quick brown fox');
+  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  expect(within(toolbar).queryByRole('button', { name: 'Ask' })).toBeNull();
+  expect(within(toolbar).queryByRole('button', { name: /Highlight/ })).toBeNull();
+  expect(within(toolbar).getByRole('button', { name: 'More' })).toBeDefined();
+});
+
+it('keeps the full toolbar on a library link when the Librarian is ready', async () => {
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  expect(within(toolbar).getByRole('button', { name: /Highlight/ })).toBeDefined();
+  expect(within(toolbar).getByRole('button', { name: /Note/ })).toBeDefined();
+  expect(within(toolbar).getByRole('button', { name: 'Ask' })).toBeDefined();
+});
+
 function selectSurface(element: Element) {
   const range = document.createRange();
   range.selectNodeContents(element);

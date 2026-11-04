@@ -172,6 +172,7 @@ function mount({ groups = [], lane: laneOverrides, sidebar }: Setup = {}) {
   const onOverlay = vi.fn();
   const api = {
     orphans: [],
+    writable: true,
     canWrite: true,
     resolved: groups.flatMap((g) => g.items),
     setNote: vi.fn(),

@@ -244,6 +244,23 @@ it('hides Ask when Librarian is not ready', async () => {
   await screen.findByText('Body text');
   expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
 });
+it('leaves the Highlight and Notes tools out for a feed post', async () => {
+  renderContent(makeLink({ id: 'dock', feedId: 'feed-1' }), prose);
+  await screen.findByText('Body text');
+  await screen.findByRole('toolbar', { name: 'Reader tools' });
+  expect(document.querySelector('[data-tool="highlight"]')).toBeNull();
+  expect(document.querySelector('[data-tool="notes"]')).toBeNull();
+  expect(document.querySelector('[data-tool="type"]')).not.toBeNull();
+});
+
+it('keeps the Highlight and Notes tools for a library link with highlight data', async () => {
+  renderContent(makeLink({ id: 'dock', highlights: [] }), prose);
+  await screen.findByText('Body text');
+  await screen.findByRole('toolbar', { name: 'Reader tools' });
+  expect(document.querySelector('[data-tool="highlight"]')).not.toBeNull();
+  expect(document.querySelector('[data-tool="notes"]')).not.toBeNull();
+});
+
 it('opens Ask, focuses its input and restores tools and focus on fold', async () => {
   renderContent(undefined, prose, true);
   // Ask waits for the AI status query, and the chat chunk loads lazily on first open.

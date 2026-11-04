@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { useAi, useSaveReadingPosition } from '../../../api/hooks';
 import { useHasLibrarianChat } from '../../../api/librarian';
 import type { LinkJson } from '../../../api/types';
+import { isFeedPost } from '../../../lib/isFeedPost';
 import { deriveTitleFromUrl } from '../../../lib/url';
 import { useReaderPrefs } from '../../../lib/useReaderPrefs';
 import { MenuPresence } from '../../MenuPresence';
@@ -74,6 +75,8 @@ type DockTool = {
   sheet?: ComponentType<{ api: DockApi }>;
   /** A tool that toggles something beside the article instead of opening a sheet. */
   press?: { on: (api: DockApi) => boolean; toggle: (api: DockApi) => void };
+  /** A tool with no use on this link: it leaves the dock. */
+  hidden?: (api: DockApi) => boolean;
   /** A tool with nothing to show yet: the button stays, greyed, with this title. */
   unavailable?: { when: (api: DockApi) => boolean; title: string };
   /** A count beside the label. */
@@ -123,6 +126,7 @@ const tools: readonly DockTool[] = [
     title: 'Highlight',
     heading: 'Highlight',
     glyph: <ReaderIcon name="highlighter" size={19} />,
+    hidden: (api) => !api.highlights.writable,
     sheet: ({ api }) => (
       <HighlightSheet color={api.highlights.color} setColor={api.highlights.setColor} />
     ),
@@ -151,6 +155,7 @@ const tools: readonly DockTool[] = [
     heading: 'Notes',
     glyph: <ReaderIcon name="note" size={19} />,
     press: { on: (api) => api.lane.open, toggle: (api) => api.lane.toggle() },
+    hidden: (api) => !api.highlights.writable && api.highlights.items.length === 0,
     unavailable: { when: (api) => api.highlights.items.length === 0, title: 'No highlights yet' },
     badge: (api) => api.highlights.items.length,
   },
@@ -345,6 +350,7 @@ export function ReaderDock({
     prose,
     scroll,
     writable: canSavePosition(link, trashed),
+    selectable: isFeedPost(link) && !trashed,
     // While the Highlight sheet is open, a selection is highlighted at once.
     autoColor: highlighting ? highlightColor : null,
   });
@@ -541,7 +547,7 @@ function DockSurface({
             />
           ) : (
             tools
-              .filter((tool) => tool.id !== 'ask' || askReady)
+              .filter((tool) => (tool.id !== 'ask' || askReady) && !tool.hidden?.(api))
               .map((tool) => {
                 const toggle = () => {
                   if (tool.press) {
