@@ -25,7 +25,7 @@ function TrashEmptyNowButton() {
         title="Permanently empty the trash"
         aria-label="Empty trash"
       >
-        <TrashIcon size={16} stroke="currentColor" />
+        <TrashIcon size={15} stroke="currentColor" />
         Empty trash
       </button>
       {confirming && (

@@ -1375,16 +1375,22 @@
   }
 }
 
+/* A quiet danger action, sized like the header's icon buttons. */
 .silo-empty-trash {
-  height: 26px;
-  padding: 0 9px;
-  font-size: 12.5px;
-  background: var(--panel);
+  height: 32px;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 13px;
+  border-color: transparent;
+  background: none;
   color: var(--warn);
 }
+.silo-empty-trash:not(:disabled):active {
+  transform: scale(0.96);
+}
 @media (hover: hover) and (pointer: fine) {
-  .silo-empty-trash:hover {
-    background: var(--hov);
+  .silo-empty-trash:not(:disabled):hover {
+    background: var(--danger-soft);
   }
 }
 div.silo-reader-notecard {
