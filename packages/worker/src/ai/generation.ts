@@ -131,14 +131,7 @@ function optionInMessage(message: string, kind: AiCredential['kind']): Option | 
 
 const OMIT_FIELDS: Record<Option, string[]> = {
   format: ['structuredOutputMode'],
-  reasoning: [
-    'thinking',
-    'effort',
-    'reasoningEffort',
-    'reasoningBudget',
-    'reasoningEnabled',
-    'reasoningSummary',
-  ],
+  reasoning: ['thinking', 'effort', 'reasoningEffort', 'reasoningBudget', 'reasoningSummary'],
   effort: ['effort', 'reasoningEffort'],
   thinking: ['thinking'],
   temperature: ['temperature'],
