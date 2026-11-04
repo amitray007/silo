@@ -1,5 +1,5 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { memo, useCallback, useState } from 'react';
+import { memo, type SyntheticEvent, useCallback, useState } from 'react';
 import { type AnimateOptions, defaultRehypePlugins, Streamdown } from 'streamdown';
 import { copyLabel, useCopyFlash } from '../../SettingsTabs/copyFlash';
 import { ReaderIcon } from '../ReaderIcon';
@@ -12,6 +12,7 @@ import { SourcesRow } from './SourcesRow';
 import { Steps } from './Steps';
 import { TurnTrace } from './TurnTrace';
 import { splitSteps, toolName } from './tools';
+import { codeThemes, useRichBlocks } from './useRichBlocks';
 
 const citationPlugins: NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']> =
   Object.entries(defaultRehypePlugins).map<
@@ -37,6 +38,13 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof Streamdown>['c
 
 /** Words fade in as they arrive; sd-fadeIn and the reduced-motion rule live in reader-librarian.css. */
 const wordFade: AnimateOptions = { animation: 'fadeIn', duration: 250, sep: 'word' };
+
+// Streamdown 2.7.1 hides pan controls but keeps its wheel and pointer listeners active.
+function nativeDiagramScroll(event: SyntheticEvent) {
+  if (event.target instanceof Element && event.target.closest('[data-streamdown="mermaid"]')) {
+    event.stopPropagation();
+  }
+}
 
 function UserMessage({ message }: { message: UIMessage }) {
   const { copied, copyText } = useCopyFlash();
@@ -174,9 +182,10 @@ export const ChatMessage = memo(function ChatMessage({
       setResolved((seen) => (seen[raw] === real ? seen : { ...seen, [raw]: real })),
     [],
   );
+  const { steps, answer } = splitSteps(message);
+  const plugins = useRichBlocks(message.role === 'user' ? '' : answer);
   if (held && !wasHeld) setWasHeld(true);
   if (message.role === 'user') return <UserMessage message={message} />;
-  const { steps, answer } = splitSteps(message);
   const approving = isAwaitingApproval(message);
   const reasoning = held ? null : messageReasoning(message);
   return (
@@ -204,7 +213,12 @@ export const ChatMessage = memo(function ChatMessage({
         {!fixedTrace && <Steps message={message} />}
         <ApprovalRows message={message} expired={expired} linkId={linkId} onApproval={onApproval} />
         {!held && (
-          <div className="silo-chat-answer" data-reveal={wasHeld}>
+          <div
+            className="silo-chat-answer"
+            data-reveal={wasHeld}
+            onWheelCapture={nativeDiagramScroll}
+            onPointerDownCapture={nativeDiagramScroll}
+          >
             <CitationItems value={citationItems(message)}>
               <CitationResolved value={resolve}>
                 <Streamdown
@@ -216,6 +230,8 @@ export const ChatMessage = memo(function ChatMessage({
                   animated={wordFade}
                   isAnimating={streaming}
                   rehypePlugins={citationPlugins}
+                  plugins={plugins}
+                  shikiTheme={codeThemes}
                   components={markdownComponents}
                 >
                   {answer}

@@ -379,12 +379,8 @@ export function ChatThread({
         panel
       )}
       {menu}
-      {chat.pendingApproval && (
-        <p role="status" className="silo-chat-hint">
-          Allow or deny first.
-        </p>
-      )}
       <ComposerBar
+        hint={chat.pendingApproval ? 'Allow or deny first.' : undefined}
         value={input}
         onChange={setInput}
         fieldRef={field}

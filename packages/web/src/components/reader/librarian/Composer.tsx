@@ -173,9 +173,20 @@ export function Composer({
 /**
  * The dock and page composer grow in normal flow, without restarting a size animation on input.
  */
-export function ComposerBar(props: Parameters<typeof Composer>[0]) {
+export function ComposerBar({
+  hint,
+  ...props
+}: Parameters<typeof Composer>[0] & {
+  /** A short note over the bar; it floats, so showing it moves nothing. */
+  hint?: string | undefined;
+}) {
   return (
     <div className="silo-chat-bar">
+      {hint && (
+        <p role="status" className="silo-chat-hint">
+          {hint}
+        </p>
+      )}
       <div className="silo-chat-shell">
         <Composer {...props} />
       </div>

@@ -1,29 +1,9 @@
 import createDOMPurify from 'dompurify';
 import mermaid from 'mermaid';
+import { mermaidConfig } from './diagramPalette';
 
 let sequence = 0;
 let tail: Promise<void> = Promise.resolve();
-
-/** Resolve CSS colors to rgb: Mermaid's color parser cannot read oklch or CSS variables. */
-function palette(root: HTMLElement): Record<string, string> {
-  const probe = document.createElement('span');
-  root.append(probe);
-  const colors: Record<string, string> = {};
-  const canvas = document.createElement('canvas').getContext('2d');
-  for (const token of ['ink', 'bg', 'bg2', 'mut', 'line-2']) {
-    probe.style.color = `var(--${token})`;
-    if (canvas) {
-      canvas.fillStyle = getComputedStyle(probe).color;
-      const data = canvas.getImageData(0, 0, 1, 1);
-      canvas.fillRect(0, 0, 1, 1);
-      const pixel = canvas.getImageData(0, 0, 1, 1).data;
-      colors[token] = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`;
-      canvas.putImageData(data, 0, 0);
-    } else colors[token] = getComputedStyle(probe).color;
-  }
-  probe.remove();
-  return colors;
-}
 
 function sanitizeDiagram(svg: string): DocumentFragment {
   const purifier = createDOMPurify(window);
@@ -67,40 +47,7 @@ async function draw(code: HTMLElement, active: () => boolean): Promise<void> {
   const pre = code.parentElement;
   if (!pre || !active()) return;
   const source = code.textContent ?? '';
-  const colors = palette(pre);
-  mermaid.initialize({
-    securityLevel: 'strict',
-    startOnLoad: false,
-    secure: [
-      'securityLevel',
-      'startOnLoad',
-      'htmlLabels',
-      'flowchart',
-      'theme',
-      'themeVariables',
-      'themeCSS',
-      'fontFamily',
-      'maxTextSize',
-      'suppressErrorRendering',
-    ],
-    htmlLabels: false,
-    theme: 'base',
-    fontFamily: getComputedStyle(pre).fontFamily,
-    suppressErrorRendering: true,
-    flowchart: { htmlLabels: false },
-    themeVariables: {
-      background: colors.bg,
-      primaryColor: colors.bg2,
-      primaryTextColor: colors.ink,
-      primaryBorderColor: colors['line-2'],
-      lineColor: colors.mut,
-      secondaryColor: colors.bg2,
-      tertiaryColor: colors.bg,
-      textColor: colors.ink,
-      nodeTextColor: colors.ink,
-      fontFamily: getComputedStyle(pre).fontFamily,
-    },
-  });
+  mermaid.initialize(mermaidConfig(pre));
   try {
     const { svg } = await mermaid.render(`silo-diagram-${++sequence}`, source);
     if (!active()) return;
