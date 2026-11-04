@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { useLibrarianReady } from '../../../api/librarian';
 import { layoutMedia, useMediaQuery } from '../../../lib/breakpoints';
-import { useChatParam } from '../../../lib/useChatParam';
+import { NEW_CHAT, useChatParam } from '../../../lib/useChatParam';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 
 /**
@@ -9,6 +11,31 @@ import { useEscapeLayer } from '../../../lib/useEscapeLayer';
  * open (a link, or an explicit chat) and `covering` that it fills the window over the list.
  */
 export function useListChat({ linkOpen, trashed }: { linkOpen: boolean; trashed: boolean }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const currentLocation = useRef(location);
+  currentLocation.current = location;
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const created = (id: string) => {
+    const current = currentLocation.current;
+    const params = new URLSearchParams(current.search);
+    const param = params.get('chat');
+    if (
+      !mounted.current ||
+      current.pathname !== location.pathname ||
+      params.has('link') ||
+      (param !== null && param !== NEW_CHAT)
+    )
+      return;
+    params.set('chat', id);
+    void navigate({ ...current, search: `?${params}` }, { replace: true });
+  };
   const ready = useLibrarianReady();
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const chat = useChatParam();
@@ -16,5 +43,5 @@ export function useListChat({ linkOpen, trashed }: { linkOpen: boolean; trashed:
   // Escape leaves a chat that covers the whole window, the way it leaves the reader.
   useEscapeLayer(fullWindow && shown, chat.close);
   const reader = linkOpen || (shown && chat.open);
-  return { ...chat, shown, reader, covering: fullWindow && reader };
+  return { ...chat, created, shown, reader, covering: fullWindow && reader };
 }

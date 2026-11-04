@@ -92,7 +92,7 @@ function ReadyLibrarianView() {
       </section>
       <ListPaneDivider width={listWidth} fullWindow={fullWindow} />
       {open ? (
-        <ChatPane chatId={chatId} onBack={close} onCreated={(id) => show(id, true)} />
+        <ChatPane autoFocus chatId={chatId} onBack={close} onCreated={(id) => show(id, true)} />
       ) : (
         <NoChatOpen />
       )}

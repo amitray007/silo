@@ -1,17 +1,13 @@
 import { useCallback } from 'react';
-import { type Location, useSearchParams } from 'react-router';
+import { type Location, matchPath, useSearchParams } from 'react-router';
 
 /** `?chat=` holds a chat's id, or this for a new library chat that has no row yet. */
 export const NEW_CHAT = 'new';
 
 /** Routes that can show a chat: the Librarian page and the lists that share the reader's pane. */
 function hostsChat(pathname: string): boolean {
-  return (
-    pathname === '/' ||
-    pathname === '/librarian' ||
-    pathname === '/feeds' ||
-    pathname.startsWith('/feeds/') ||
-    pathname.startsWith('/tags/')
+  return ['/', '/librarian', '/tags/:name', '/feeds', '/feeds/:id'].some((path) =>
+    matchPath(path, pathname),
   );
 }
 

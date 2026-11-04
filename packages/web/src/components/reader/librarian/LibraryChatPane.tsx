@@ -7,6 +7,7 @@ const ChatPane = lazy(() => import('./ChatPane').then((module) => ({ default: mo
 /** The Librarian's chat in the reader's place beside a list. Its code loads when a chat first shows. */
 export function LibraryChatPane(props: {
   chatId: string | null;
+  autoFocus: boolean;
   onBack: () => void;
   onCreated: (id: string) => void;
 }) {

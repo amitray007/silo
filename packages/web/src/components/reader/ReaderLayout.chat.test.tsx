@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { Link, MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { layoutMedia } from '../../lib/breakpoints';
 import { makeLink } from '../../test/fixtures';
@@ -10,27 +10,39 @@ import { ReaderLayout } from './ReaderLayout';
 import { useReaderSelection } from './ReaderSelection';
 
 let ready = true;
+let completeCreation: (id: string) => void;
 vi.mock('../../api/librarian', () => ({ useLibrarianReady: () => ready }));
 vi.mock('./librarian/LibraryChatPane', () => ({
   LibraryChatPane: ({
     chatId,
     onBack,
     onCreated,
+    autoFocus,
   }: {
+    autoFocus?: boolean;
     chatId: string | null;
     onBack: () => void;
     onCreated: (id: string) => void;
-  }) => (
-    <section aria-label="Librarian chat">
-      <output data-testid="chat-id">{chatId ?? 'none'}</output>
-      <button type="button" onClick={onBack}>
-        Back
-      </button>
-      <button type="button" onClick={() => onCreated('made')}>
-        Created
-      </button>
-    </section>
-  ),
+  }) => {
+    completeCreation = onCreated;
+    return (
+      <section aria-label="Librarian chat">
+        <input
+          aria-label="Composer"
+          ref={(node) => {
+            if (autoFocus ?? true) node?.focus();
+          }}
+        />
+        <output data-testid="chat-id">{chatId ?? 'none'}</output>
+        <button type="button" onClick={onBack}>
+          Back
+        </button>
+        <button type="button" onClick={() => onCreated('made')}>
+          Created
+        </button>
+      </section>
+    );
+  },
 }));
 
 const first = makeLink({ id: 'a', title: 'First link', url: 'https://example.com/a' });
@@ -77,6 +89,7 @@ function setup({
             <ReaderLayout links={[first]} title="Library" trashed={trashed}>
               <OpenFirst />
             </ReaderLayout>
+            <Link to="/tags/other">Other route</Link>
             <Where />
           </HoverPreviewProvider>
         </RowMenuProvider>
@@ -157,9 +170,28 @@ it('opens an explicit ?chat= over the list on a narrow window, and Back or Escap
 });
 
 it('Back clears ?chat, and a created chat replaces ?chat', () => {
-  setup({ path: '/?chat=c9&q=x' });
+  setup({ path: '/?chat=new&q=x' });
   fireEvent.click(screen.getByRole('button', { name: 'Created' }));
   expect(screen.getByTestId('where').textContent).toBe('?chat=made&q=x');
   fireEvent.click(screen.getByRole('button', { name: 'Back' }));
   expect(screen.getByTestId('where').textContent).toBe('?q=x');
+});
+
+it('leaves list focus alone until a new chat is explicitly opened', () => {
+  setup();
+  expect(document.activeElement).not.toBe(screen.getByRole('textbox', { name: 'Composer' }));
+});
+
+it.each(['Open first', 'Other route'])('ignores creation after navigation: %s', (target) => {
+  setup({ path: '/?chat=new' });
+  const finish = completeCreation;
+  fireEvent.click(screen.getByRole(target === 'Open first' ? 'button' : 'link', { name: target }));
+  const before = screen.getByTestId('where').textContent;
+  act(() => finish('late'));
+  expect(screen.getByTestId('where').textContent).toBe(before);
+});
+
+it('focuses an explicitly opened new chat', () => {
+  setup({ path: '/?chat=new' });
+  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Composer' }));
 });

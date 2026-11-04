@@ -128,8 +128,9 @@ export function ReaderLayout({
         {chat.shown ? (
           <LibraryChatPane
             chatId={chat.chatId}
+            autoFocus={chat.open}
             onBack={chat.close}
-            onCreated={(id) => chat.show(id, true)}
+            onCreated={chat.created}
           />
         ) : (
           <ReaderPane

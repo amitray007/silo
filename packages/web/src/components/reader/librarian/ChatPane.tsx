@@ -29,12 +29,14 @@ export function ChatPane({
   onBack,
   onCreated,
   backLabel = 'Back to chats',
+  autoFocus = false,
 }: {
   chatId: string | null;
   onBack: () => void;
   onCreated: (id: string) => void;
   /** What Back returns to; the Library's pane goes back to its links. */
   backLabel?: string;
+  autoFocus?: boolean;
 }) {
   const chat = useLibrarianPageChat(chatId, onCreated);
   const article = useChatArticle(chatId);
@@ -46,8 +48,8 @@ export function ChatPane({
   useEffect(() => {
     setInput('');
     setPassage(undefined);
-    if (chatId === null) field.current?.focus();
-  }, [chatId, setInput, setPassage, field]);
+    if (autoFocus && chatId === null) field.current?.focus();
+  }, [chatId, autoFocus, setInput, setPassage, field]);
   return (
     <section className="silo-readerpane silo-chatpage" aria-label="Librarian chat">
       <header className="silo-panehead silo-chatpage-head">
