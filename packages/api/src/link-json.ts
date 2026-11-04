@@ -168,7 +168,7 @@ export type SearchResultJson = SummaryLinkJson & { rank: number };
  * payload can never reach the response unvalidated. Dates are serialized to
  * ISO strings (`Date#toISOString`) since HTTP/JSON has no native date type.
  */
-export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
+export function toLinkJson(link: Omit<LinkSummaryWithTags, 'searchVector'>): LinkJson {
   /* jscpd:ignore-start — this field-by-field whitelist necessarily resembles the
      MCP adapter's `link-shape.ts`. The duplication is DELIBERATE and required by
      the architecture boundary: `@silo/api` may not import `@silo/mcp-server` (a
@@ -254,7 +254,9 @@ export type SummaryLinkJson = Omit<LinkJson, 'sourceData'> & { sourceData: Summa
 export type SnippetLinkJson = Omit<SummaryLinkJson, 'extractedText'> & { snippet: string | null };
 
 /** Raw publisher notes belong only in single-link detail responses. */
-export function toSummaryLinkJson(link: LinkSummaryWithTags): SummaryLinkJson {
+export function toSummaryLinkJson(
+  link: Omit<LinkSummaryWithTags, 'searchVector'>,
+): SummaryLinkJson {
   const base = toLinkJson(link);
   if (base.sourceData.kind === 'feed_media') {
     const { content: _content, ...sourceData } = base.sourceData;
