@@ -40,15 +40,15 @@ export function languageModelFor(
     case 'gateway':
       if (
         credential.model.reasoning.type === 'gateway' &&
-        credential.model.reasoning.budgetTokens !== undefined
+        (credential.model.reasoning.budgetTokens !== undefined || credential.model.reasoning.toggle)
       )
-        return gatewayBudgetModel(apiKey, id, fetch);
+        return gatewayControlModel(apiKey, id, fetch);
       return createGateway({ apiKey, ...(fetch ? { fetch } : {}) })(id);
   }
 }
 
-/** SDK 7's portable reasoning accepts effort only. Budget-only Gateway models use its documented Chat Completions extension. */
-function gatewayBudgetModel(
+/** SDK 7's portable reasoning accepts effort only; budgets and toggles use Gateway's Chat Completions extensions. */
+function gatewayControlModel(
   apiKey: string,
   id: string,
   fetch: typeof globalThis.fetch = globalThis.fetch,
@@ -62,6 +62,8 @@ function gatewayBudgetModel(
         const body = JSON.parse(String(init?.body));
         const budget = gatewayOptions?.reasoningBudget;
         if (typeof budget === 'number') body.reasoning = { max_tokens: budget };
+        const enabled = gatewayOptions?.reasoningEnabled;
+        if (typeof enabled === 'boolean') body.reasoning = { enabled };
         // The Chat Completions endpoint reads Gateway extensions from a providerOptions body field.
         if (gatewayOptions?.caching === 'auto')
           body.providerOptions = { gateway: { caching: 'auto' } };

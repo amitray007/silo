@@ -516,6 +516,52 @@ describe('chat thinking', () => {
     expect(chatModelSettings(model, { thinking: 'high' }).reasoning).toBe('medium');
     expect(chatModelSettings(model, { thinking: 'off' }).reasoning).toBe('none');
   });
+  it.each(['off', 'low', 'medium', 'high'] as const)(
+    'maps Gateway toggle and budget: %s',
+    (thinking) => {
+      const toggle = selected('gateway', { type: 'gateway', toggle: true, effort: 'none' });
+      expect(
+        chatModelSettings(toggle, { thinking }).providerOptions?.gateway?.reasoningEnabled,
+      ).toBe(thinking !== 'off');
+      const budget = selected('gateway', {
+        type: 'gateway',
+        budgetTokens: 64,
+        budgetMin: 64,
+        budgetMax: 8192,
+      });
+      expect(
+        chatModelSettings(budget, { thinking }).providerOptions?.gateway?.reasoningBudget,
+      ).toBe({ off: 64, low: 2096, medium: 4128, high: 8192 }[thinking]);
+    },
+  );
+  it.each(['low', 'medium', 'high'] as const)('clamps Anthropic effort: %s', (thinking) => {
+    const model = selected('anthropic', {
+      type: 'anthropic',
+      thinking: 'adaptive',
+      thinkingModes: ['adaptive'],
+      efforts: ['medium', 'high'],
+    });
+    expect(chatModelSettings(model, { thinking }).providerOptions?.anthropic).toMatchObject({
+      thinking: { type: 'adaptive' },
+      effort: thinking === 'low' ? 'medium' : thinking,
+    });
+  });
+  it.each([false, true])('sends Gateway toggle on the wire: %s', async (enabled) => {
+    const sent: Record<string, unknown>[] = [];
+    const fetch: typeof globalThis.fetch = async (_url, init) => {
+      sent.push(JSON.parse(String(init?.body)));
+      return Response.json({ error: { message: 'test failure' } }, { status: 500 });
+    };
+    const model = selected('gateway', { type: 'gateway', toggle: true, effort: 'none' });
+    await generateText({
+      model: languageModelFor(model, fetch),
+      prompt: 'Hello',
+      maxRetries: 0,
+      ...chatModelSettings(model, { thinking: enabled ? 'low' : 'off' }),
+    }).catch(() => {});
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.reasoning).toEqual({ enabled });
+  });
   it('enables adaptive thinking and permits off only when advertised', () => {
     const model = selected('anthropic', {
       type: 'anthropic',
@@ -528,7 +574,7 @@ describe('chat thinking', () => {
     );
     expect(
       chatModelSettings(model, { thinking: 'off' }).providerOptions?.anthropic?.thinking,
-    ).toBeUndefined();
+    ).toEqual({ type: 'disabled' });
     model.model.reasoning = {
       type: 'anthropic',
       thinking: 'adaptive',

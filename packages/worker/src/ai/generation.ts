@@ -131,7 +131,14 @@ function optionInMessage(message: string, kind: AiCredential['kind']): Option | 
 
 const OMIT_FIELDS: Record<Option, string[]> = {
   format: ['structuredOutputMode'],
-  reasoning: ['thinking', 'effort', 'reasoningEffort', 'reasoningBudget', 'reasoningSummary'],
+  reasoning: [
+    'thinking',
+    'effort',
+    'reasoningEffort',
+    'reasoningBudget',
+    'reasoningEnabled',
+    'reasoningSummary',
+  ],
   effort: ['effort', 'reasoningEffort'],
   thinking: ['thinking'],
   temperature: ['temperature'],
@@ -289,9 +296,29 @@ function applyChatThinking(base: Settings, credential: AiCredential, thinking: T
     base.providerOptions = {
       fireworks: { reasoningEffort: thinking === 'off' ? 'none' : thinking },
     };
-  if (reasoning.type === 'gateway' && reasoning.efforts?.length)
-    base.reasoning = clampEffort(thinking, reasoning.efforts) as NonNullable<Settings['reasoning']>;
+  applyGatewayThinking(base, reasoning, thinking);
   applyAnthropicThinking(base, reasoning, thinking);
+}
+function applyGatewayThinking(
+  base: Settings,
+  reasoning: AiCredential['model']['reasoning'],
+  thinking: Thinking,
+): void {
+  if (reasoning.type !== 'gateway') return;
+  if (reasoning.efforts?.length) {
+    base.reasoning = clampEffort(thinking, reasoning.efforts) as NonNullable<Settings['reasoning']>;
+  } else if (reasoning.toggle) {
+    delete base.reasoning;
+    base.providerOptions = { gateway: { reasoningEnabled: thinking !== 'off' } };
+  } else if (reasoning.budgetTokens !== undefined) {
+    const min = reasoning.budgetMin ?? reasoning.budgetTokens;
+    const max = Math.max(min, reasoning.budgetMax ?? min);
+    // Low, medium, and high use 25%, 50%, and 100% of the advertised budget range.
+    const fraction = { off: 0, low: 0.25, medium: 0.5, high: 1 }[thinking];
+    base.providerOptions = {
+      gateway: { reasoningBudget: Math.round(min + (max - min) * fraction) },
+    };
+  }
 }
 function applyAnthropicThinking(
   base: Settings,
@@ -303,7 +330,7 @@ function applyAnthropicThinking(
   if (!options) return;
   const modes = reasoning.thinkingModes ?? (reasoning.thinking ? [reasoning.thinking] : []);
   if (thinking === 'off' && modes.includes('disabled')) {
-    delete options.thinking;
+    options.thinking = { type: 'disabled' };
     delete options.effort;
     return;
   }

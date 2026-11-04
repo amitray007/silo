@@ -7,6 +7,7 @@ const effortOrder = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 const optionSchema = z.object({
   type: z.string(),
   values: z.array(z.string()).optional(),
+  max: z.number().int().nonnegative().optional(),
   min: z.number().int().nonnegative().optional(),
 });
 const modelSchema = z.object({
@@ -28,17 +29,23 @@ const modelSchema = z.object({
 const pageSchema = z.object({ data: z.array(z.unknown()) });
 
 function reasoning(options: z.infer<typeof optionSchema>[]): AiLiveModel['reasoning'] {
-  if (options.some((o) => o.type === 'toggle')) return { type: 'gateway', effort: 'none' };
+  const toggle = options.some((o) => o.type === 'toggle');
   const values = options.find((o) => o.type === 'effort')?.values ?? [];
-  const effort = effortOrder.find((value) => values.includes(value));
-  if (effort)
-    return {
-      type: 'gateway',
-      effort,
-      efforts: effortOrder.filter((value) => values.includes(value)),
-    };
+  const efforts = effortOrder.filter((value) => values.includes(value));
+  const effort = efforts[0];
   const budget = options.find((o) => o.type === 'budget_tokens');
-  return { type: 'gateway', ...(budget ? { budgetTokens: budget.min ?? 1 } : {}) };
+  return {
+    type: 'gateway',
+    ...(toggle ? { toggle: true } : {}),
+    ...(effort ? { efforts, effort } : toggle ? { effort: 'none' as const } : {}),
+    ...(budget
+      ? {
+          budgetTokens: budget.min ?? 1,
+          budgetMin: budget.min ?? 1,
+          ...(budget.max !== undefined ? { budgetMax: budget.max } : {}),
+        }
+      : {}),
+  };
 }
 
 function usable(m: z.infer<typeof modelSchema>): boolean {

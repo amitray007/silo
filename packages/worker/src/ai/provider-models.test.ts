@@ -235,6 +235,13 @@ describe('Gateway models', () => {
           gateway('budget', {
             reasoning_options: [{ type: 'budget_tokens', min: 64, max: 8192 }],
           }),
+          gateway('combined', {
+            reasoning_options: [
+              { type: 'toggle' },
+              { type: 'effort', values: ['low', 'high'] },
+              { type: 'budget_tokens', min: 0, max: 100 },
+            ],
+          }),
           gateway('image', { type: 'image' }),
           gateway('no-json', { tags: [] }),
           gateway('no-access', {
@@ -263,8 +270,20 @@ describe('Gateway models', () => {
         'anthropic/claude-opus-5.5',
         { type: 'gateway', effort: 'low', efforts: ['low', 'medium', 'high'] },
       ],
-      ['toggle', { type: 'gateway', effort: 'none' }],
-      ['budget', { type: 'gateway', budgetTokens: 64 }],
+      ['toggle', { type: 'gateway', toggle: true, effort: 'none' }],
+      ['budget', { type: 'gateway', budgetTokens: 64, budgetMin: 64, budgetMax: 8192 }],
+      [
+        'combined',
+        {
+          type: 'gateway',
+          toggle: true,
+          efforts: ['low', 'high'],
+          effort: 'low',
+          budgetTokens: 0,
+          budgetMin: 0,
+          budgetMax: 100,
+        },
+      ],
     ]);
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
       'https://ai-gateway.vercel.sh/v1/models?include_availability',
