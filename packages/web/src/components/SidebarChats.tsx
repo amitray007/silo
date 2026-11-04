@@ -39,7 +39,7 @@ export function SidebarChats({ onNavigate }: { onNavigate: () => void }) {
         label={title}
         variant="tag"
         active={chat.id === activeId}
-        icon={<ReaderIcon name={chat.linkId ? 'page' : 'library'} />}
+        icon={<ReaderIcon name={chat.linkId ? 'page' : 'librarian'} />}
         onClick={open(to)}
       />
     );
@@ -81,7 +81,7 @@ export function SidebarChats({ onNavigate }: { onNavigate: () => void }) {
             label="All chats"
             variant="tag"
             active={location.pathname === '/librarian' && !activeId}
-            icon={<ReaderIcon name="librarian" />}
+            icon={<ReaderIcon name="list" />}
             onClick={open('/librarian')}
           />
         </div>
