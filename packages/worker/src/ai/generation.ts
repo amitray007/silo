@@ -249,8 +249,23 @@ function rememberSettings(
   });
 }
 
-export function chatModelSettings(credential: AiCredential) {
+export function chatModelSettings(
+  credential: AiCredential,
+  options: { promptCache?: boolean } = {},
+) {
   const base = settingsFor(credential);
+  if (options.promptCache && (credential.kind === 'anthropic' || credential.kind === 'gateway')) {
+    const provider = credential.kind;
+    base.providerOptions = {
+      ...base.providerOptions,
+      [provider]: {
+        ...base.providerOptions?.[provider],
+        ...(provider === 'anthropic'
+          ? { cacheControl: { type: 'ephemeral' } }
+          : { caching: 'auto' }),
+      },
+    };
+  }
   omitOption(base, 'format');
   const { structuredOutput: _structuredOutput, ...settings } = base;
   return { ...settings, maxOutputTokens: 4096 };

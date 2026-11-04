@@ -3,7 +3,7 @@ import { generateText, NoOutputGeneratedError, Output } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { withModelSettings } from './generation.js';
+import { chatModelSettings, withModelSettings } from './generation.js';
 import { languageModelFor } from './model.js';
 import { runAiFeature } from './run.js';
 import { apiError, credential, okResult } from './test-helpers.js';
@@ -375,5 +375,44 @@ describe('bounded fallbacks', () => {
       generateText({ model, prompt: 'hi', maxRetries: 0, ...settings }),
     );
     expect(model.doGenerateCalls.map((c) => c.reasoning)).toEqual(['low', undefined]);
+  });
+});
+
+describe('chat prompt caching', () => {
+  it('opts in for Anthropic while preserving reasoning and omitting format', () => {
+    expect(chatModelSettings(credential, { promptCache: true }).providerOptions).toEqual({
+      anthropic: {
+        thinking: { type: 'disabled' },
+        effort: 'low',
+        cacheControl: { type: 'ephemeral' },
+      },
+    });
+    expect(chatModelSettings(credential).providerOptions?.anthropic).not.toHaveProperty(
+      'cacheControl',
+    );
+  });
+  it('creates Anthropic options when there are no reasoning settings', () => {
+    expect(
+      chatModelSettings(
+        {
+          ...credential,
+          model: { ...credential.model, reasoning: { type: 'openai' } },
+        },
+        { promptCache: true },
+      ).providerOptions,
+    ).toEqual({
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+    });
+  });
+  it('opts in for Gateway while preserving the reasoning budget', () => {
+    const gateway = {
+      ...credential,
+      kind: 'gateway' as const,
+      model: { ...credential.model, reasoning: { type: 'gateway' as const, budgetTokens: 1024 } },
+    };
+    expect(chatModelSettings(gateway, { promptCache: true }).providerOptions).toEqual({
+      gateway: { reasoningBudget: 1024, caching: 'auto' },
+    });
+    expect(chatModelSettings(gateway).providerOptions?.gateway).not.toHaveProperty('caching');
   });
 });

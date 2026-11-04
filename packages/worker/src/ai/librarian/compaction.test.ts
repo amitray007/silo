@@ -27,6 +27,7 @@ it('compacts once, persists the stored cutoff and reuses summary on the next run
   const model = new MockLanguageModelV4({ doGenerate: generate });
   const first = await compactConversation(request, messages, smallWindow, model, 'persona');
   expect(generate).toHaveBeenCalledTimes(1);
+  expect(model.doGenerateCalls[0]?.providerOptions?.anthropic).not.toHaveProperty('cacheControl');
   expect(saveChatSummary).toHaveBeenCalledExactlyOnceWith('chat', 'Owner prefers books', 8);
   expect(first.messages).toHaveLength(8);
   const second = await compactConversation(
