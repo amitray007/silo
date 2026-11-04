@@ -343,3 +343,19 @@ it('uses explicit Mermaid markers before languages and only nearby language wrap
     dom.window.close();
   }
 });
+
+describe('TeX conversion in a large document', () => {
+  it('converts every formula and keeps the surrounding text', async () => {
+    const dom = new JSDOM(
+      `<body>${'<p>filler</p>'.repeat(2_000)}<div id="c">${Array.from({ length: 150 }, (_, i) => `<p>Value $x_${i}$ and ${String.raw`\(y\)`}.</p>`).join('')}</div></body>`,
+    );
+    const container = dom.window.document.getElementById('c') as HTMLElement;
+    await enrichRichBlocks(container);
+    expect(container.querySelectorAll('math')).toHaveLength(300);
+    expect(container.querySelectorAll('p')[149]?.textContent).toMatch(
+      /^Value .*x149.* and .*y.*\.$/s,
+    );
+    expect(container.textContent).not.toContain('$x_');
+    dom.window.close();
+  });
+});

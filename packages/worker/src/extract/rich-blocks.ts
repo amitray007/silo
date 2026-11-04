@@ -187,6 +187,12 @@ const TEX_ATTEMPT_LIMIT = 2_000;
 interface TexBudget {
   attempts: number;
   bytes: number;
+  /**
+   * Bound once per run: jsdom's document named-property proxy rescans the whole document on
+   * each `document.create*` lookup after a mutation, which is quadratic in a conversion loop.
+   */
+  createFragment: () => DocumentFragment;
+  createTemplate: () => HTMLTemplateElement;
 }
 
 /** Search only a bounded window, including the closing delimiter. */
@@ -213,7 +219,7 @@ function texBody(text: string, start: number, opener: string) {
 function convertText(node: Text, budget: TexBudget): void {
   const text = node.data;
   if (text.length > 100 * 1024 || Buffer.byteLength(text) > 100 * 1024) return;
-  const fragment = node.ownerDocument.createDocumentFragment();
+  const fragment = budget.createFragment();
   const openers = /(?<!\\)(\$\$|\\\[|\\\(|\$)/g;
   let end = 0;
   let match: RegExpExecArray | null;
@@ -238,7 +244,7 @@ function convertText(node: Text, budget: TexBudget): void {
         trust: false,
       });
       fragment.append(text.slice(end, match.index));
-      const template = node.ownerDocument.createElement('template');
+      const template = budget.createTemplate();
       template.innerHTML = html;
       fragment.append(template.content);
       end = body.end;
@@ -268,7 +274,14 @@ export async function enrichRichBlocks(container: HTMLElement): Promise<void> {
     const node = walker.currentNode as Text;
     if (!node.parentElement?.closest('code, pre, kbd, samp, math')) nodes.push(node);
   }
-  const budget: TexBudget = { attempts: 0, bytes: 0 };
+  const owner = container.ownerDocument;
+  const createElement = owner.createElement.bind(owner);
+  const budget: TexBudget = {
+    attempts: 0,
+    bytes: 0,
+    createFragment: owner.createDocumentFragment.bind(owner),
+    createTemplate: () => createElement('template'),
+  };
   for (const node of nodes) {
     if (budget.attempts >= TEX_ATTEMPT_LIMIT || budget.bytes >= TEX_DOCUMENT_LIMIT) break;
     convertText(node, budget);

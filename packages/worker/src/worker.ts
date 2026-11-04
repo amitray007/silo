@@ -24,11 +24,18 @@ import {
 import { prepareAiAtStartup } from './ai/startup.js';
 import { closeBrowserReader } from './browser/reader.js';
 import { runEnrichJob } from './enrich-job.js';
-import { closeReaderPool } from './extract/reader-worker.js';
+import { closeReaderPool, prewarmReaderPool } from './extract/reader-worker.js';
 import { registerScheduledJobs } from './jobs/index.js';
 
 /** Local per-node worker slots (plan: "the worker" — not yet horizontally tuned). */
 const LOCAL_CONCURRENCY = 5;
+
+/**
+ * Idle pickup latency is up to one poll interval (pg-boss default 2 s). 0.5 s is pg-boss's
+ * floor; the extra idle polls are one cheap indexed query. LISTEN/NOTIFY stays off: it
+ * starved the queue under burst load in benchmarks.
+ */
+const ENRICH_POLL_SECONDS = 0.5;
 
 /** A running worker instance, returned by `startWorker()`. */
 export interface WorkerHandle {
@@ -51,6 +58,10 @@ export interface WorkerHandle {
  */
 export async function startWorker(): Promise<WorkerHandle> {
   const boss = createBoss();
+
+  // Fire and forget: the Reader thread's module load takes seconds, so overlap it with the
+  // database startup below instead of charging it to the first capture. Never throws.
+  prewarmReaderPool();
 
   boss.on('error', (error) => {
     // pg-boss's own internal errors (maintenance queries, connection issues)
@@ -87,7 +98,11 @@ export async function startWorker(): Promise<WorkerHandle> {
 
   await boss.work<unknown>(
     ENRICH_LINK_QUEUE,
-    { batchSize: 1, localConcurrency: LOCAL_CONCURRENCY },
+    {
+      batchSize: 1,
+      localConcurrency: LOCAL_CONCURRENCY,
+      pollingIntervalSeconds: ENRICH_POLL_SECONDS,
+    },
     async ([job]) => {
       // pg-boss guarantees at least one job per invocation with batchSize:1;
       // `noUncheckedIndexedAccess` still types `job` as possibly undefined —

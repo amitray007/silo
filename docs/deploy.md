@@ -64,6 +64,7 @@ docker compose -f docker-compose.prod.yml up --build
 | `SILO_PUBLIC_MCP_URL` | api | the exact MCP URL the "Copy config" button hands out (see below) |
 | `SILO_DATA_DIR` | api | where silo keeps non-database files; read aloud caches its voice models in `tts-cache/` here (about 0.6 GB for both engines). The compose file sets `/data` and mounts the `silo-data` volume; without a volume the models download again after each redeploy |
 | `SILO_MCP_ALLOWED_HOSTS` | mcp | your mcp hostname(s), comma-separated — REQUIRED behind a proxy (see below) |
+| `SILO_READER_THREADS` | api (runs the worker) | optional; how many Reader threads parse captured pages (1 to 8). Defaults to one fewer than the CPUs, between 1 and 3; each thread uses up to about 300 MB of RAM. A page's Reader deadline scales with its size, from 5 s up to 20 s |
 
 ### Rotating `SILO_SECRET_KEY`
 

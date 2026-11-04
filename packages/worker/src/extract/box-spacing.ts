@@ -52,6 +52,9 @@ export function prepareBoxSpacing(document: Document, rendered = false): void {
     boundary(parent, element.previousSibling, element);
     boundary(parent, element, element.nextSibling);
   }
+  // Bound once: jsdom's document named-property proxy rescans the whole document on every
+  // property lookup after a DOM mutation, which makes a per-node lookup quadratic.
+  const createText = document.createTextNode.bind(document);
   for (const [parent, positions] of boundaries)
-    for (const right of positions) parent.insertBefore(document.createTextNode(' '), right);
+    for (const right of positions) parent.insertBefore(createText(' '), right);
 }

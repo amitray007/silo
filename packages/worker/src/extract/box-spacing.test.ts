@@ -38,3 +38,34 @@ describe('box boundary spacing', () => {
     dom.window.close();
   });
 });
+
+describe('box boundary spacing on large documents', () => {
+  it('repairs every boundary in a long comment thread', () => {
+    const comments = 1_500;
+    const thread = Array.from(
+      { length: comments },
+      (_, i) => `<li><div>user${i}</div>says <div>comment ${i}</div>done</li>`,
+    ).join('');
+    const dom = new JSDOM(`<body><ul>${thread}</ul></body>`);
+    const document = dom.window.document;
+    prepareBoxSpacing(document);
+    const items = [...document.querySelectorAll('li')];
+    expect(items).toHaveLength(comments);
+    expect(items.map((item) => item.textContent)).toEqual(
+      Array.from({ length: comments }, (_, i) => `user${i} says comment ${i} done`),
+    );
+    dom.window.close();
+  });
+
+  it('inserts the same single-space text nodes the unbatched lookup would', () => {
+    const dom = new JSDOM(`<a><div>one</div><div>two</div>three</a>`);
+    const document = dom.window.document;
+    prepareBoxSpacing(document);
+    const anchor = document.querySelector('a');
+    const nodes = [...(anchor?.childNodes ?? [])].map((node) => node.nodeType);
+    // div, space, div, space, text: one inserted text node per boundary.
+    expect(nodes).toEqual([1, 3, 1, 3, 3]);
+    expect(anchor?.textContent).toBe('one two three');
+    dom.window.close();
+  });
+});

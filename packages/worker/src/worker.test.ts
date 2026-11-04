@@ -6,7 +6,9 @@ import {
 } from '@silo/db/test-support/disposable-database';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { PgBoss } from 'pg-boss';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import * as readerWorker from './extract/reader-worker.js';
 
 /**
  * Integration tests for `startWorker()` (plan 005, A1): proves the public
@@ -171,6 +173,27 @@ describeIfPg('startWorker (integration)', () => {
     } finally {
       await handle.stop();
       core.resetEnrichmentEnqueuer();
+    }
+  }, 60_000);
+
+  it('prewarms the Reader thread and polls the enrich queue every 500ms', async () => {
+    const prewarm = vi.spyOn(readerWorker, 'prewarmReaderPool').mockImplementation(() => {});
+    const work = vi.spyOn(PgBoss.prototype, 'work');
+    const worker = await import('./worker.js');
+    const handle = await worker.startWorker();
+    try {
+      expect(prewarm).toHaveBeenCalledTimes(1);
+      const enrich = work.mock.calls.find(([queue]) => queue === 'enrich-link');
+      expect(enrich?.[1]).toMatchObject({
+        batchSize: 1,
+        localConcurrency: 5,
+        pollingIntervalSeconds: 0.5,
+      });
+    } finally {
+      await handle.stop();
+      core.resetEnrichmentEnqueuer();
+      prewarm.mockRestore();
+      work.mockRestore();
     }
   }, 60_000);
 
