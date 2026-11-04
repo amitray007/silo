@@ -722,7 +722,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   animation: none;
 }
 .silo-chat[data-variant="page"] .silo-chat-messages {
-  padding: 24px max(16px, calc((100% - var(--silo-measure)) / 2)) 24px;
+  /* The bottom mask fades 48px; keep the last line and any approval buttons clear of it. */
+  padding: 24px max(16px, calc((100% - var(--silo-measure)) / 2)) 56px;
 }
 .silo-chat[data-variant="page"] .silo-chat-messages:has(> .silo-chat-empty:only-child) {
   display: grid;
@@ -881,12 +882,17 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-composer-chips {
   display: flex;
   gap: 6px;
-  padding: 1px;
+  /* Room for the 2px focus ring and its offset inside the scroll area. */
+  padding: 4px;
+  margin: -4px;
   overflow-x: auto;
   scrollbar-width: none;
   animation: siloQuickFade linear both;
   animation-timeline: scroll(self inline);
   mask-image: linear-gradient(to right, #000 calc(100% - var(--qfade)), transparent);
+}
+.silo-composer-chips:dir(rtl) {
+  mask-image: linear-gradient(to left, #000 calc(100% - var(--qfade)), transparent);
 }
 .silo-composer-chips::-webkit-scrollbar {
   display: none;
