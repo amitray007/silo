@@ -1148,13 +1148,14 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   height: 24px;
   padding: 0;
   border: 0;
-  background: none;
   justify-self: start;
   font: inherit;
   font-size: 13px;
   font-weight: 500;
 }
+/* The live label keeps the shimmer's gradient; only the button clears its background. */
 button.silo-reasoning-head {
+  background: none;
   color: var(--fnt);
   cursor: pointer;
 }

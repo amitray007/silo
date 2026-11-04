@@ -1,3 +1,4 @@
+import { APICallError } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { credential } from '../test-helpers.js';
@@ -124,7 +125,7 @@ describe('Librarian streaming', () => {
     const deltas = [...body.matchAll(/"type":"text-delta","id":"[^"]+","delta":"([^"]*)"/g)].map(
       (match) => match[1],
     );
-    expect(deltas).toEqual(['alpha ', 'beta ', 'gamma ']);
+    expect(deltas).toEqual(['alpha', ' ', 'beta', ' ', 'gamma', ' ']);
     const saved = vi.mocked(saveChatMessages).mock.calls[0]?.[1] as
       | { role: string; metadata?: { reasoningMs?: number } }[]
       | undefined;
@@ -605,4 +606,97 @@ it('caches a history prefix that the next turn replays unchanged', async () => {
   expect(withoutMarks(second.slice(0, firstMark + 1))).toEqual(
     withoutMarks(first.slice(0, firstMark + 1)),
   );
+});
+
+it.each(['openai', 'anthropic'] as const)(
+  'retries a %s 400 before output and remembers the rejected option',
+  async (kind) => {
+    const selected = {
+      ...credential,
+      kind,
+      model: {
+        ...credential.model,
+        id: `fallback-${kind}`,
+        reasoning:
+          kind === 'openai'
+            ? { type: 'openai' as const, effort: 'low' as const }
+            : { type: 'anthropic' as const, thinking: 'adaptive' as const },
+      },
+    };
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(selected);
+    const model = new MockLanguageModelV4({
+      doStream: async (options) => {
+        const provider = options.providerOptions?.[kind];
+        if (
+          provider?.reasoningSummary ||
+          (provider?.thinking as { display?: string } | undefined)?.display
+        )
+          throw new APICallError({
+            message:
+              kind === 'openai'
+                ? 'Unsupported parameter: reasoningSummary'
+                : 'Unsupported parameter: thinking.display',
+            url: 'https://test.invalid',
+            requestBodyValues: {},
+            statusCode: 400,
+            isRetryable: false,
+          });
+        return {
+          stream: new ReadableStream({
+            start(c) {
+              c.enqueue({ type: 'text-start', id: 't' });
+              c.enqueue({ type: 'text-delta', id: 't', delta: 'Recovered' });
+              c.enqueue({ type: 'text-end', id: 't' });
+              c.close();
+            },
+          }),
+        };
+      },
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    for (let i = 0; i < 2; i++) {
+      const response = await runLibrarian({
+        chatId: '',
+        transient: true,
+        messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+        link: null,
+      });
+      expect(await response.text()).toContain('Recovered');
+    }
+    expect(model.doStreamCalls).toHaveLength(3);
+  },
+);
+
+it('does not retry a rejected option after text has streamed', async () => {
+  vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(c) {
+          c.enqueue({ type: 'text-start', id: 't' });
+          c.enqueue({ type: 'text-delta', id: 't', delta: 'Already sent' });
+          c.enqueue({
+            type: 'error',
+            error: new APICallError({
+              message: 'Unsupported parameter: thinking.display',
+              url: 'https://test.invalid',
+              requestBodyValues: {},
+              statusCode: 400,
+              isRetryable: false,
+            }),
+          });
+          c.close();
+        },
+      }),
+    }),
+  });
+  vi.mocked(languageModelFor).mockReturnValue(model);
+  const response = await runLibrarian({
+    chatId: '',
+    transient: true,
+    messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+    link: null,
+  });
+  expect(await response.text()).toContain('Already');
+  expect(model.doStreamCalls).toHaveLength(1);
 });

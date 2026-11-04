@@ -414,6 +414,11 @@ describe('chat prompt caching', () => {
     };
     expect(chatModelSettings(adaptive).providerOptions?.anthropic?.thinking).toEqual({
       type: 'adaptive',
+    });
+    expect(
+      chatModelSettings(adaptive, { readableReasoning: true }).providerOptions?.anthropic?.thinking,
+    ).toEqual({
+      type: 'adaptive',
       display: 'summarized',
     });
     expect(chatModelSettings(credential).providerOptions?.anthropic?.thinking).toEqual({
@@ -427,7 +432,8 @@ describe('chat prompt caching', () => {
       model: { ...credential.model, reasoning },
     });
     expect(
-      chatModelSettings(openai({ type: 'openai', effort: 'low' })).providerOptions?.openai,
+      chatModelSettings(openai({ type: 'openai', effort: 'low' }), { readableReasoning: true })
+        .providerOptions?.openai,
     ).toEqual({ reasoningEffort: 'low', reasoningSummary: 'auto' });
     expect(chatModelSettings(openai({ type: 'openai' })).providerOptions).toBeUndefined();
   });

@@ -1,6 +1,6 @@
-import type { TextStreamPart, ToolSet } from 'ai';
+import { smoothStream, type TextStreamPart, type ToolSet } from 'ai';
 import { describe, expect, it } from 'vitest';
-import { reasoningTimer } from './reasoning-time.js';
+import { reasoningTimer, reasoningTiming } from './reasoning-time.js';
 
 const part = (type: string) => ({ type }) as unknown as TextStreamPart<ToolSet>;
 
@@ -28,4 +28,64 @@ describe('reasoningTimer', () => {
     expect(metadata({ part: part('text-delta') })).toBeUndefined();
     expect(metadata({ part: part('finish') })).toBeUndefined();
   });
+});
+
+it('adds resumed assistant reasoning time', () => {
+  let clock = 10;
+  const timer = reasoningTimer(() => clock, 500);
+  timer({ part: part('reasoning-delta') });
+  clock = 60;
+  expect(timer({ part: part('text-start') })).toEqual({ reasoningMs: 550 });
+});
+
+it('excludes smoothing delays from reasoning time', async () => {
+  let clock = 0;
+  const timing = reasoningTiming(0, () => clock);
+  const end = part('text-start');
+  const source = new ReadableStream<TextStreamPart<ToolSet>>({
+    start(c) {
+      c.enqueue({
+        type: 'reasoning-delta',
+        id: 'r',
+        text: 'one two three ',
+      } as TextStreamPart<ToolSet>);
+      c.enqueue(end);
+      c.close();
+    },
+  });
+  const smoothed = source.pipeThrough(timing.transform()).pipeThrough(
+    smoothStream({
+      delayInMs: 10,
+      _internal: {
+        delay: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+          clock += 100;
+        },
+      },
+    })({ tools: {} }),
+  );
+  await smoothed.pipeTo(new WritableStream({ write() {} }));
+  expect(clock).toBeGreaterThan(0);
+  expect(timing.messageMetadata({ part: end })).toEqual({ reasoningMs: 0 });
+});
+
+it('streams CJK words before the text ends', async () => {
+  const source = new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>();
+  const writer = source.writable.getWriter();
+  const reader = source.readable
+    .pipeThrough(
+      smoothStream({
+        delayInMs: null,
+        chunking: new Intl.Segmenter(undefined, { granularity: 'word' }),
+      })({ tools: {} }),
+    )
+    .getReader();
+  await writer.write({
+    type: 'text-delta',
+    id: 't',
+    text: '你好世界今天',
+  } as TextStreamPart<ToolSet>);
+  const next = await reader.read();
+  expect(next.value).toMatchObject({ type: 'text-delta', text: '你好' });
+  await reader.cancel();
 });
