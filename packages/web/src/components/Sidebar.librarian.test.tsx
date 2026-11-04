@@ -63,14 +63,14 @@ afterEach(() => vi.unstubAllGlobals());
 
 const where = () => screen.getByTestId('where').textContent;
 
-it('shows a Chats section above Feeds with New chat, the 5 latest chats and All chats', async () => {
+it('shows a Chats section above Feeds with New chat and the 5 latest chats', async () => {
   renderSidebar({ ready: true });
   const recent = await screen.findByRole('region', { name: 'Recent chats' });
   await waitFor(() => expect(within(recent).getAllByRole('link')).toHaveLength(5));
   expect(within(recent).getByRole('link', { name: 'Chat 1' })).toBeDefined();
   expect(within(recent).queryByRole('link', { name: 'Chat 6' })).toBeNull();
   expect(screen.getByRole('link', { name: 'New chat' }).getAttribute('href')).toBe('/?chat=new');
-  expect(screen.getByRole('link', { name: 'All chats' }).getAttribute('href')).toBe('/librarian');
+  expect(screen.queryByRole('link', { name: 'All chats' })).toBeNull();
   const before = screen.getByRole('button', { name: 'Chats' });
   const feeds = screen.getByRole('link', { name: 'Feeds' });
   expect(before.compareDocumentPosition(feeds) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -105,13 +105,10 @@ it('starts a new chat beside the list', async () => {
   expect(where()).toBe('/?chat=new');
 });
 
-it('opens the Librarian page from All chats and for a chat picked in Trash', async () => {
+it('opens the Librarian page for a chat picked in Trash', async () => {
   renderSidebar({ ready: true }, '/trash');
   fireEvent.click(await screen.findByRole('link', { name: 'Chat 1' }));
   expect(where()).toBe('/librarian?chat=chat-1');
-  fireEvent.click(screen.getByRole('link', { name: 'All chats' }));
-  expect(where()).toBe('/librarian');
-  expect(screen.getByRole('link', { name: 'All chats' }).getAttribute('aria-current')).toBe('page');
 });
 
 it('collapses and expands the section', async () => {

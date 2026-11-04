@@ -33,7 +33,7 @@ export function ContentFrame({
     <>
       <ContentHeader
         title={title}
-        collection={title === 'Library'}
+        collection={title === 'Library' || title === 'Chats'}
         count={count}
         below={headerBelow}
         {...(captureError !== undefined ? { captureError } : {})}

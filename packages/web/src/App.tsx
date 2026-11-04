@@ -58,7 +58,7 @@ function LibrarianRouteLoading() {
   return (
     <div className="silo-three-pane" data-reader="false">
       <section className="silo-listpane" aria-label="Chats">
-        <ContentFrame title="Librarian" headerSlot={null}>
+        <ContentFrame title="Chats" headerSlot={null}>
           <LoadingState />
         </ContentFrame>
       </section>
