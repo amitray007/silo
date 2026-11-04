@@ -15,13 +15,15 @@ const LIST_ITEM = /^([-*+]|\d+[.)])\s+/;
 const HEADING = /^#{1,6}\s+/;
 
 function plain(line: string): string {
-  return line
-    .replace(/^(#{1,6}|>|[-*+]|\d+[.)])\s+/, '')
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/<[^>]+>/g, '')
-    .replace(/[<>]/g, '')
-    .replace(/(\*\*|__|\*|`|~~)/g, '');
+  return (
+    line
+      .replace(/^(#{1,6}|>|[-*+]|\d+[.)])\s+/, '')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      // Speech only: drop angle brackets so stray HTML is not read as symbols.
+      .replace(/[<>]/g, '')
+      .replace(/(\*\*|__|\*|`|~~)/g, '')
+  );
 }
 
 /** Paragraphs, list items and headings of an answer's markdown; code and tables are not read. */
