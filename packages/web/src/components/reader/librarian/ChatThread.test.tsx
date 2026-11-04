@@ -62,7 +62,7 @@ function mount(chat: ThreadChat, input = '') {
   );
 }
 
-it('shows a muted Send until there is text, and the status while the answer is running', () => {
+it('shows a muted Send until there is text', () => {
   mount(fakeChat());
   expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.queryByRole('status')).toBeNull();
@@ -74,7 +74,7 @@ it('swaps Send for Stop while streaming, and Stop stops the stream', () => {
   expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
   expect(chat.stop).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole('status').textContent).toBe('Answering…');
+  expect(screen.queryByText('Answering…')).toBeNull();
 });
 
 it('offers Jump to latest after the reader scrolls up, and returns to the end on click', () => {
@@ -135,28 +135,92 @@ const streaming = (part: UIMessage['parts'][number]) =>
     messages: [text('u', 'user', 'Related?'), { id: 'a', role: 'assistant', parts: [part] }],
   });
 
-const shimmer = () => document.querySelector('.silo-reasoning-head.silo-shimmer')?.textContent;
+const shimmer = () => document.querySelector('.silo-trace-line .silo-shimmer')?.textContent;
 
-it('names a running step once, in the message, and leaves the status line silent', () => {
+it('names a running step once, in the fixed line, and has no separate status line', () => {
   mount(streaming(search('input-available')), 'x');
   expect(shimmer()).toBe('Searching your library');
+  expect(document.querySelector('.silo-chat-pending')).toBeNull();
   expect(screen.queryByRole('status')).toBeNull();
 });
 
-it('folds a finished step into "Used 1 tool" while the status line moves on', () => {
+it('says Thinking in the same line between steps, then folds into "Used 1 tool" once text flows', () => {
   const view = mount(streaming(search('input-available')), 'x');
+  const rerender = (chat: ThreadChat) =>
+    view.rerender(
+      <ChatThread
+        chat={chat}
+        composer={composer('x')}
+        actions={[]}
+        emptyText="Empty"
+        header={null}
+      />,
+    );
+  const line = document.querySelector('.silo-trace-line');
+  rerender(streaming(search('output-available')));
+  expect(document.querySelector('.silo-trace-line')).toBe(line);
+  expect(shimmer()).toBe('Thinking');
+  rerender(
+    fakeChat({
+      busy: true,
+      messages: [
+        text('u', 'user', 'Related?'),
+        {
+          id: 'a',
+          role: 'assistant',
+          parts: [search('output-available'), ...text('a', 'assistant', 'Two.').parts],
+        },
+      ],
+    }),
+  );
+  expect(shimmer()).toBeUndefined();
+  expect(screen.getByRole('button', { name: /^Used 1 tool/ })).toBeTruthy();
+  expect(screen.queryByText('Answering…')).toBeNull();
+});
+
+it('shows the fixed line from the first pending frame, before any answer part exists', () => {
+  mount(fakeChat({ busy: true, messages: [text('u', 'user', 'Hi')] }), 'x');
+  expect(shimmer()).toBe('Thinking');
+  expect(document.querySelector('.silo-chat-pending')).toBeNull();
+  expect(document.querySelector('.silo-chat-turn[data-fill]')).not.toBeNull();
+});
+
+it('holds the actions row unseen while the answer streams, and shows the real one after', () => {
+  const view = mount(
+    fakeChat({ busy: true, messages: [text('u', 'user', 'Hi'), text('a', 'assistant', 'Part')] }),
+  );
+  const pending = document.querySelector('.silo-chat-assistant .silo-chat-actions');
+  expect(pending?.hasAttribute('data-pending')).toBe(true);
+  expect(screen.queryByRole('button', { name: 'Copy answer' })).toBeNull();
   view.rerender(
     <ChatThread
-      chat={streaming(search('output-available'))}
-      composer={composer('x')}
+      chat={fakeChat({ messages: [text('u', 'user', 'Hi'), text('a', 'assistant', 'Part')] })}
+      composer={composer()}
       actions={[]}
       emptyText="Empty"
       header={null}
     />,
   );
-  expect(shimmer()).toBeUndefined();
-  expect(screen.getByRole('button', { name: /^Used 1 tool/ })).toBeTruthy();
-  expect(document.querySelector('.silo-status-in')?.textContent).toBe('Thinking…');
+  expect(screen.getByRole('button', { name: 'Copy answer' })).toBeTruthy();
+  expect(document.querySelector('.silo-chat-assistant [data-pending]')).toBeNull();
+});
+
+it('announces the turn twice, once when it starts and once when it ends', () => {
+  const view = mount(fakeChat());
+  const live = () => document.querySelector('p[aria-live="polite"]')?.textContent;
+  expect(live()).toBe('');
+  const rerender = (chat: ThreadChat) =>
+    view.rerender(
+      <ChatThread chat={chat} composer={composer()} actions={[]} emptyText="Empty" header={null} />,
+    );
+  rerender(fakeChat({ busy: true }));
+  expect(live()).toBe('Librarian is answering');
+  rerender(
+    fakeChat({ busy: true, messages: [text('u', 'user', 'Hi'), text('a', 'assistant', 'More')] }),
+  );
+  expect(live()).toBe('Librarian is answering');
+  rerender(fakeChat());
+  expect(live()).toBe('Answer ready');
 });
 
 it('keeps one running line while a parallel call of the same step is still running', () => {
@@ -430,8 +494,9 @@ it('with Show answers on completion, the running answer stays unrendered until t
   });
   const view = mount(running);
   await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
-  await vi.waitFor(() => expect(screen.queryByText(/Half an ans/)).toBeNull());
-  expect(screen.getByRole('status').textContent).toBe('Answering…');
+  await vi.waitFor(() => expect(shimmer()).toBe('Thinking'));
+  expect(document.querySelector('.silo-chat-answer')).toBeNull();
+  expect(screen.queryByText('Answering…')).toBeNull();
   view.rerender(
     <QueryClientProvider client={client}>
       <ChatThread
@@ -541,6 +606,32 @@ it('hides follow-ups after a request error', async () => {
   });
   expect(screen.queryByRole('button', { name: 'Loading follow-up' })).toBeNull();
   fetcher.mockRestore();
+});
+
+it('keeps the chip row in the composer from the first pending frame to the ready answer', () => {
+  client.clear();
+  const view = mount(fakeChat({ busy: true, messages: [text('u', 'user', 'Hi')] }));
+  const row = document.querySelector('.silo-composer-chips');
+  expect(row).not.toBeNull();
+  view.rerender(
+    <ChatThread
+      chat={fakeChat({
+        messages: [
+          text('u', 'user', 'Hi'),
+          {
+            ...text('a', 'assistant', 'Answer'),
+            metadata: { finalAnswer: true, suggestions: [{ kind: 'ask', text: 'Next' }] },
+          },
+        ],
+      })}
+      composer={composer()}
+      actions={[]}
+      emptyText="Empty"
+      header={null}
+    />,
+  );
+  expect(document.querySelector('.silo-composer-chips')).toBe(row);
+  expect(screen.getByRole('button', { name: 'Next' })).toBeTruthy();
 });
 
 it('renders stored suggestions without a request', () => {

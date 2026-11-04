@@ -12,7 +12,7 @@ const HITS_SHOWN = 4;
  * Seconds from the first tool starting to the last one finishing, measured here as the parts
  * arrive. A message loaded from storage never saw its tools run, so it has no duration.
  */
-function useToolSeconds(running: boolean): number | null {
+export function useToolSeconds(running: boolean): number | null {
   const [span, setSpan] = useState<{ start: number; end: number | null } | null>(null);
   useEffect(() => {
     const now = Date.now();
@@ -62,6 +62,16 @@ function Row({ row }: { row: StepRow }) {
   );
 }
 
+export function StepsList({ message }: { message: UIMessage }) {
+  return (
+    <ol className="silo-steps-list">
+      {stepRows(message).map((row) => (
+        <Row key={row.key} row={row} />
+      ))}
+    </ol>
+  );
+}
+
 /**
  * The tool steps of one answer. While a tool runs: one shimmering line naming it. Afterwards: a
  * quiet "Used N tools" disclosure that opens into a timeline.
@@ -90,13 +100,7 @@ export function Steps({ message }: { message: UIMessage }) {
         {seconds !== null && ` · ${seconds}s`}
         <ReaderIcon name="right" size={14} />
       </button>
-      {open && (
-        <ol className="silo-steps-list">
-          {stepRows(message).map((row) => (
-            <Row key={row.key} row={row} />
-          ))}
-        </ol>
-      )}
+      {open && <StepsList message={message} />}
     </div>
   );
 }

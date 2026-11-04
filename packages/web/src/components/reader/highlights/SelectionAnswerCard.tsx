@@ -59,7 +59,7 @@ export function SelectionAnswerCard({
             held={wholeAnswers && busy && index === assistant.length - 1}
           />
         ))}
-        {busy && status && <StatusLine label={status} className="silo-chat-pending" />}
+        {busy && status && <StatusLine label={status} className="silo-chat-pending" announce />}
         {error && (
           <p role="alert" className="silo-chat-error">
             {error}

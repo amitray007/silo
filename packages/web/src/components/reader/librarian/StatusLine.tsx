@@ -5,9 +5,18 @@ const LEAVE_MS = 110;
 
 /**
  * A one-line status that crossfades when its words change: the old label drifts out as the new
- * one drifts in, and the running label shimmers. Announces the current label only.
+ * one drifts in, and the running label shimmers. `announce` makes it a live region that reads
+ * the current label; the chat thread leaves it off and announces once per turn instead.
  */
-export function StatusLine({ label, className }: { label: string; className?: string }) {
+export function StatusLine({
+  label,
+  className,
+  announce = false,
+}: {
+  label: string;
+  className?: string;
+  announce?: boolean;
+}) {
   const [shown, setShown] = useState({ label, leaving: '' });
   if (shown.label !== label) setShown({ label, leaving: shown.label });
   useEffect(() => {
@@ -16,7 +25,7 @@ export function StatusLine({ label, className }: { label: string; className?: st
     return () => window.clearTimeout(timer);
   }, [shown.leaving]);
   return (
-    <p role="status" className={`silo-status ${className ?? ''}`.trim()}>
+    <p role={announce ? 'status' : undefined} className={`silo-status ${className ?? ''}`.trim()}>
       {shown.leaving && (
         <span key={`out-${shown.leaving}`} className="silo-status-out" aria-hidden="true">
           {shown.leaving}

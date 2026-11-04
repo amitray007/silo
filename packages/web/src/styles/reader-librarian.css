@@ -146,6 +146,17 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-messages > * + * {
   margin-top: 12px;
 }
+/* A question and its answer share one block. The newest sent turn is at least as tall as the log's
+   view (--silo-fill, set from script), so its answer streams into room that already exists. */
+.silo-chat-turn > * + * {
+  margin-top: 12px;
+}
+.silo-chat-turn:not(:first-child) {
+  margin-top: 20px;
+}
+.silo-chat-turn[data-fill] {
+  min-height: var(--silo-fill, 0px);
+}
 .silo-chat-message {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -183,9 +194,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-}
-.silo-chat-user:not(:first-child) {
-  margin-top: 20px;
 }
 .silo-chat-bubble {
   max-width: 80%;
@@ -228,6 +236,11 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: flex;
   gap: 2px;
   margin: 4px 0 0 -6px;
+  min-height: 28px;
+}
+/* While the answer streams the row holds its place unseen, then fades in without moving anything. */
+.silo-chat-actions[data-pending] {
+  visibility: hidden;
 }
 .silo-chat-actions .silo-reader-iconbtn {
   width: 28px;
@@ -452,7 +465,12 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   -webkit-line-clamp: 3;
   overflow: hidden;
 }
-.silo-chat-step,
+/* A step sits where it was typed, in the answer's own size and spacing: when a later tool call
+   turns streamed text into a step, only its colour changes. */
+.silo-chat-message .silo-chat-step {
+  margin-bottom: 8px;
+  color: var(--fnt);
+}
 .silo-chat-denied {
   margin: 0 0 4px;
   color: var(--fnt);
@@ -929,6 +947,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
    optional attached passage between them. The selection surface, the dock and the page share it. */
 .silo-composer {
   --send: 32px;
+  --chip: 32px;
   --field-pad: 14px;
   display: grid;
   gap: 8px;
@@ -1033,6 +1052,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   margin: -4px;
   overflow-x: auto;
   scrollbar-width: none;
+  min-height: calc(var(--chip) + 8px);
   animation: siloQuickFade linear both;
   animation-timeline: scroll(self inline);
   mask-image: linear-gradient(to right, #000 calc(100% - var(--qfade)), transparent);
@@ -1053,7 +1073,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
+  height: var(--chip);
   padding: 0 13px;
   border: 0;
   border-radius: 999px;
@@ -1300,6 +1320,37 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   to {
     background-position: -150% 0;
   }
+}
+
+/* The trace line: one 24px row above the answer. Its label changes words in place, and the live
+   reasoning tail hangs below it over the answer's empty room instead of pushing the answer. */
+.silo-trace {
+  position: relative;
+}
+.silo-trace-line {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 24px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 24px;
+  white-space: nowrap;
+}
+.silo-trace-line .silo-status {
+  margin: 0;
+}
+.silo-trace .silo-reasoning-live {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  animation: siloStatusIn 160ms var(--ease-out) both;
+}
+.silo-trace .silo-steps-list,
+.silo-trace .silo-reasoning-full {
+  margin-top: 4px;
 }
 
 /* Reasoning: live it shows the tail of the text; done it is a quiet disclosure. */
@@ -1630,6 +1681,7 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   }
   .silo-composer {
     --send: 40px;
+    --chip: 40px;
   }
   .silo-composer-chips button,
   .silo-selection-answer footer button,
