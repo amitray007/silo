@@ -64,6 +64,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       mcpAccess: true,
       linkPreviewImages: true,
       hoverPreview: false,
+      chatAnswers: 'streamed',
       reader: null,
       librarianActions: harness.mod().core.LIBRARIAN_ACTIONS_DEFAULTS,
       ai: {
@@ -92,6 +93,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     // stray internal/db-row field like `updatedAt` could leak through).
     expect(Object.keys(body).sort()).toEqual([
       'ai',
+      'chatAnswers',
       'hoverPreview',
       'librarianActions',
       'linkPreviewImages',

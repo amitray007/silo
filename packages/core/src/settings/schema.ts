@@ -128,6 +128,8 @@ const settingsSchema = {
     })
     .strict(),
   ai: aiSchema,
+  /** How Librarian answers arrive: word by word as they stream, or whole once finished. */
+  chatAnswers: z.enum(['streamed', 'complete']),
   /**
    * The synced reader preferences (type, width, pencil, highlight colour, read aloud). `null`
    * until the first write, so a browser can tell "never saved" from "saved the defaults" and
@@ -155,6 +157,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
   mcpAccess: true,
   linkPreviewImages: true,
   hoverPreview: false,
+  chatAnswers: 'streamed',
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true, palette: true },
     github: { enabled: true, hover: true, palette: true },

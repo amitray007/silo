@@ -125,6 +125,12 @@ export function useLibrarianActions() {
   return useMemo(() => resolveActions(data?.librarianActions), [data?.librarianActions]);
 }
 
+/** Whether Librarian answers arrive as they stream or whole, from Settings -> AI. */
+export function useChatAnswers(): 'streamed' | 'complete' {
+  const { data } = useSettings({ staleTime: 60_000 });
+  return data?.chatAnswers ?? 'streamed';
+}
+
 /** The chips of an empty article chat, from the owner's article list. */
 export function useArticleChips() {
   const actions = useLibrarianActions();

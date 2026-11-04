@@ -11,7 +11,8 @@ export type Unit = {
   pause: number;
 };
 
-type Planned = Pick<Segment, 'text' | 'block' | 'kind'>;
+/** What the plan needs of a sentence: an article's segments and a chat answer's both fit. */
+export type Planned = Pick<Segment, 'text' | 'block' | 'kind'>;
 
 const keptEdges = KEPT_LEAD_MS + KEPT_TAIL_MS;
 const PAUSES = {

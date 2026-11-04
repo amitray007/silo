@@ -8,6 +8,7 @@ import { createEngine, ENGINES, type EngineId, type TtsEngine, type Voice } from
 import { isEnglishText } from './language';
 import { Player } from './player';
 import { buildSegments, type Segment, segmentIndexAt } from './segments';
+import { takeSpeech } from './speechFocus';
 import { reportReaderLoad } from './voiceModels';
 
 type Status = 'idle' | 'loading' | 'ready' | 'error';
@@ -160,6 +161,7 @@ export function useReadAloud({
   }, []);
 
   const pauseRef = useRef<() => void>(() => {});
+  const releaseSpeech = useRef<() => void>(() => {});
   /** The one audio device. If it is suspended or interrupted while playing, playback pauses. */
   const audioContext = useCallback((): AudioContext => {
     if (!context.current) {
@@ -297,6 +299,11 @@ export function useReadAloud({
   const startAt = useCallback(
     async (from: number) => {
       player.press();
+      releaseSpeech.current();
+      // An answer read aloud in the chat stops when the article starts, and the reverse.
+      releaseSpeech.current = takeSpeech(() => {
+        if (live.current.playing) pauseRef.current();
+      });
       const sentences = ensure();
       const units = player.prepare(engines.current.get(live.current.engineId), from);
       const token = ++run.current;
@@ -502,6 +509,7 @@ export function useReadAloud({
     return () => {
       disposed.current = true;
       run.current += 1;
+      releaseSpeech.current();
       player.halt();
       void context.current?.close();
       context.current = undefined;

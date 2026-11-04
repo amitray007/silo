@@ -108,3 +108,4 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **AI chat titles, rename, export and sharing** - titles come from the first message today.
 - **Resumable streams after a server restart** - an answer in flight during a restart is lost.
 - **More custom quick actions** (surfaced in slice 7, 2026-11-03) - prompt variables such as `{title}`, sharing actions, and saving a typed question as an action.
+- **Regenerate and answer feedback** (surfaced in `docs/methods/chat-look.md`, 2026-11-04) - regenerate the last answer; thumbs up/down once something reads the feedback.

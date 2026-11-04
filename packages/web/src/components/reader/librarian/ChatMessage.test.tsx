@@ -1,8 +1,27 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useVoiceModel } from '../listen/voiceModels';
 import { ChatMessage } from './ChatMessage';
+
+vi.mock('../listen/voiceModels', () => ({ useVoiceModel: vi.fn() }));
+
+const voiceModel = (phase: 'absent' | 'downloaded') =>
+  vi.mocked(useVoiceModel).mockReturnValue({ phase } as ReturnType<typeof useVoiceModel>);
+
+beforeEach(() => {
+  voiceModel('absent');
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+const reply = (text: string, id = 'a'): UIMessage => ({
+  id,
+  role: 'assistant',
+  parts: [{ type: 'text', text }],
+});
 
 function search(id: string, count: number) {
   return {
@@ -136,28 +155,43 @@ it('shows denied calls and successful write traces', () => {
   expect(screen.queryByText('Moved to trash')).toBeNull();
 });
 
-it('opens saved-item citations through the router and keeps external links in a new tab', async () => {
-  const { MemoryRouter } = await import('react-router');
-  render(
-    <MemoryRouter>
-      <ChatMessage
-        message={{
-          id: 'citation',
-          role: 'assistant',
-          parts: [
-            {
-              type: 'text',
-              text: '[Saved](/?link=00000000-0000-4000-8000-000000000001) [Web](https://example.com)',
-            },
-          ],
-        }}
-      />
-    </MemoryRouter>,
+const SAVED = '00000000-0000-4000-8000-000000000001';
+
+async function renderCitations() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () => new Response(JSON.stringify({ link: { url: 'https://news.example.org/post' } })),
+    ),
   );
+  const { MemoryRouter } = await import('react-router');
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <ChatMessage message={reply(`[Saved](/?link=${SAVED}) [Web](https://www.example.com/a)`)} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+it('opens saved-item citations through the router and keeps external links in a new tab', async () => {
+  await renderCitations();
   const saved = await screen.findByRole('link', { name: 'Saved' });
-  expect(saved.getAttribute('href')).toBe('/?link=00000000-0000-4000-8000-000000000001');
+  expect(saved.getAttribute('href')).toBe(`/?link=${SAVED}`);
   expect(saved.getAttribute('target')).toBeNull();
   expect(screen.getByRole('link', { name: 'Web' }).getAttribute('target')).toBe('_blank');
+});
+
+it('puts the site favicon before each link: its own host, or the cited link domain', async () => {
+  await renderCitations();
+  const web = await screen.findByRole('link', { name: 'Web' });
+  expect(web.querySelector('img')?.getAttribute('src')).toBe('/api/favicon?domain=example.com');
+  const saved = screen.getByRole('link', { name: 'Saved' });
+  await waitFor(() =>
+    expect(saved.querySelector('img')?.getAttribute('src')).toBe(
+      '/api/favicon?domain=news.example.org',
+    ),
+  );
 });
 
 it('keeps completed paragraphs and list numbering through streaming and completion', () => {
@@ -178,4 +212,90 @@ it('keeps completed paragraphs and list numbering through streaming and completi
   view.rerender(<ChatMessage message={longer} />);
   expect(screen.getByText('First paragraph.')).toBe(paragraph);
   expect(screen.getAllByRole('list')).toHaveLength(1);
+});
+
+describe('chat look', () => {
+  it('shows the owner turn as a bubble and the Librarian answer as plain text beside its tile', () => {
+    const user = render(
+      <ChatMessage message={{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Why?' }] }} />,
+    );
+    expect(user.container.querySelector('.silo-chat-user .silo-chat-bubble')?.textContent).toBe(
+      'Why?',
+    );
+    user.unmount();
+    const { container } = render(<ChatMessage message={reply('Because.')} />);
+    expect(container.querySelector('.silo-chat-bubble')).toBeNull();
+    expect(container.querySelector('.silo-chat-avatar svg')).toBeTruthy();
+    expect(container.querySelector('.silo-chat-assistant-body')?.textContent).toContain('Because.');
+  });
+
+  it('keeps a passage quote inside the owner bubble', () => {
+    const { container } = render(
+      <ChatMessage
+        message={{
+          id: 'u',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Explain' }],
+          metadata: { quote: 'A passage.' },
+        }}
+      />,
+    );
+    expect(container.querySelector('.silo-chat-bubble .silo-chat-quote')?.textContent).toBe(
+      'A passage.',
+    );
+  });
+
+  it('copies the answer markdown and confirms with a check', async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    render(<ChatMessage message={reply('**Bold** answer.')} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy answer' }));
+    expect(writeText).toHaveBeenCalledWith('**Bold** answer.');
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
+  });
+
+  it('hides the actions while the answer streams or waits for an approval', () => {
+    const view = render(<ChatMessage message={reply('Partial')} streaming />);
+    expect(screen.queryByRole('button', { name: 'Copy answer' })).toBeNull();
+    view.rerender(<ChatMessage message={reply('Partial')} />);
+    expect(screen.getByRole('button', { name: 'Copy answer' })).toBeTruthy();
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <ChatMessage
+          message={{
+            id: 'a',
+            role: 'assistant',
+            parts: [
+              { type: 'text', text: 'Partial' },
+              {
+                type: 'dynamic-tool',
+                toolName: 'trash_link',
+                toolCallId: 'c',
+                state: 'approval-requested',
+                input: {},
+                approval: { id: 'x' },
+              },
+            ],
+          }}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Copy answer' })).toBeNull();
+  });
+
+  it('shows the read aloud button only when the chosen voice model is downloaded', () => {
+    const view = render(<ChatMessage message={reply('Because it is so.')} />);
+    expect(screen.queryByRole('button', { name: 'Read aloud' })).toBeNull();
+    voiceModel('downloaded');
+    view.rerender(<ChatMessage message={reply('Because it is so, and that is all.')} />);
+    expect(screen.getByRole('button', { name: 'Read aloud' })).toBeTruthy();
+  });
+
+  it('holds a streaming answer back and shows it whole once the message finishes', () => {
+    const view = render(<ChatMessage message={reply('Half an ans')} streaming held />);
+    expect(screen.queryByText(/Half an ans/)).toBeNull();
+    view.rerender(<ChatMessage message={reply('A whole answer.')} />);
+    expect(screen.getByText('A whole answer.')).toBeTruthy();
+    expect(document.querySelector('.silo-chat-answer')?.getAttribute('data-reveal')).toBe('true');
+  });
 });

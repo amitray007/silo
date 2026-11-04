@@ -1,17 +1,37 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 import { Block, type BlockProps, defaultRehypePlugins, Streamdown } from 'streamdown';
+import { useLinkUrl } from '../../../api/hooks';
+import { deriveDomain } from '../../../lib/url';
+import { Chip } from '../../Chip';
+import { ReaderIcon } from '../ReaderIcon';
+import { AnswerActions } from './AnswerActions';
 import { ApprovalRow } from './ApprovalRow';
 
-const itemCitation = /^\/\?link=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const itemCitation = /^\/\?link=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const FAVICON_PX = 14;
+
+/** The cited link's own site icon: the globe until its URL arrives. */
+function CitedFavicon({ id }: { id: string }) {
+  const { data: url } = useLinkUrl(id);
+  return <Chip domain={url ? deriveDomain(url) : null} size={FAVICON_PX} />;
+}
+
 function Citation({ href, children }: { href?: string | undefined; children?: React.ReactNode }) {
   const router = useInRouterContext();
-  if (href && itemCitation.test(href) && router) return <Link to={href}>{children}</Link>;
-  if (href && !itemCitation.test(href) && !/^https?:\/\//i.test(href))
-    return <span>{children}</span>;
+  const cited = href ? itemCitation.exec(href)?.[1] : undefined;
+  if (href && cited && router)
+    return (
+      <Link to={href}>
+        <CitedFavicon id={cited} />
+        {children}
+      </Link>
+    );
+  if (href && !cited && !/^https?:\/\//i.test(href)) return <span>{children}</span>;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer">
+      <Chip domain={href && !cited ? deriveDomain(href) : null} size={FAVICON_PX} />
       {children}
     </a>
   );
@@ -150,82 +170,107 @@ export function splitSteps(message: UIMessage): { steps: string[]; answer: strin
   return { steps, answer: answer.join('\n\n') };
 }
 
+function UserMessage({ message }: { message: UIMessage }) {
+  const text = message.parts
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n\n');
+  const meta = message.metadata;
+  const quote =
+    meta && typeof meta === 'object' && 'quote' in meta && typeof meta.quote === 'string'
+      ? meta.quote.trim()
+      : '';
+  return (
+    <div className="silo-chat-message silo-chat-user">
+      <div className="silo-chat-bubble">
+        <p>{text}</p>
+        {quote && <blockquote className="silo-chat-quote">{quote}</blockquote>}
+      </div>
+    </div>
+  );
+}
+
+const isAwaitingApproval = (message: UIMessage) =>
+  message.parts.some((part) => 'state' in part && part.state === 'approval-requested');
+
 export const ChatMessage = memo(function ChatMessage({
   message,
   onApproval,
   expired = false,
   streaming = false,
+  held = false,
   linkId,
 }: {
   message: UIMessage;
   expired?: boolean;
   /** This message is still arriving: newly mounted blocks fade in. */
   streaming?: boolean;
+  /** Keep the arriving answer unrendered until the message is whole (Settings -> AI, Show answers). */
+  held?: boolean;
   linkId?: string | undefined;
   onApproval?: (response: { id: string; approved: boolean }) => void;
 }) {
-  if (message.role === 'user') {
-    const text = message.parts
-      .filter((part) => part.type === 'text')
-      .map((part) => part.text)
-      .join('\n\n');
-    const meta = message.metadata;
-    const quote =
-      meta && typeof meta === 'object' && 'quote' in meta && typeof meta.quote === 'string'
-        ? meta.quote.trim()
-        : '';
-    return (
-      <div className="silo-chat-message silo-chat-user">
-        <p>{text}</p>
-        {quote && <blockquote className="silo-chat-quote">{quote}</blockquote>}
-      </div>
-    );
-  }
+  const [wasHeld, setWasHeld] = useState(false);
+  if (held && !wasHeld) setWasHeld(true);
+  if (message.role === 'user') return <UserMessage message={message} />;
   const { steps, answer } = splitSteps(message);
   const trace = traceLine(message);
+  const approving = isAwaitingApproval(message);
   return (
     <div className="silo-chat-message silo-chat-assistant" data-streaming={streaming}>
-      {steps.map((step) => (
-        <p key={step} className="silo-chat-step">
-          {step}
-        </p>
-      ))}
-      {message.parts.map((part) => {
-        if (!('state' in part)) return null;
-        if (part.state === 'output-denied')
-          return (
-            <p key={part.toolCallId} className="silo-chat-denied">
-              Not done.
+      <span className="silo-chat-avatar" aria-hidden="true">
+        <ReaderIcon name="librarian" size={16} />
+      </span>
+      <div className="silo-chat-assistant-body">
+        {!held &&
+          steps.map((step) => (
+            <p key={step} className="silo-chat-step">
+              {step}
             </p>
+          ))}
+        {message.parts.map((part) => {
+          if (!('state' in part)) return null;
+          if (part.state === 'output-denied')
+            return (
+              <p key={part.toolCallId} className="silo-chat-denied">
+                Not done.
+              </p>
+            );
+          if (part.state !== 'approval-requested') return null;
+          return (
+            <ApprovalRow
+              key={part.toolCallId}
+              name={toolName(part) ?? ''}
+              input={part.input}
+              expired={expired}
+              linkId={linkId}
+              onDecision={
+                onApproval
+                  ? (approved) => onApproval({ id: part.approval.id, approved })
+                  : undefined
+              }
+            />
           );
-        if (part.state !== 'approval-requested') return null;
-        return (
-          <ApprovalRow
-            key={part.toolCallId}
-            name={toolName(part) ?? ''}
-            input={part.input}
-            expired={expired}
-            linkId={linkId}
-            onDecision={
-              onApproval ? (approved) => onApproval({ id: part.approval.id, approved }) : undefined
-            }
-          />
-        );
-      })}
-      <Streamdown
-        skipHtml
-        animated={false}
-        BlockComponent={StreamChunk}
-        isAnimating={streaming}
-        rehypePlugins={citationPlugins}
-        components={markdownComponents}
-      >
-        {answer}
-      </Streamdown>
-      {trace &&
-        !message.parts.some((part) => 'state' in part && part.state === 'approval-requested') && (
-          <div className="silo-chat-trace">{trace}</div>
+        })}
+        {!held && (
+          <div className="silo-chat-answer" data-reveal={wasHeld}>
+            <Streamdown
+              skipHtml
+              animated={false}
+              BlockComponent={StreamChunk}
+              isAnimating={streaming}
+              rehypePlugins={citationPlugins}
+              components={markdownComponents}
+            >
+              {answer}
+            </Streamdown>
+          </div>
         )}
+        {trace && !approving && <div className="silo-chat-trace">{trace}</div>}
+        {!streaming && !approving && answer.trim() && (
+          <AnswerActions id={message.id} markdown={answer} />
+        )}
+      </div>
     </div>
   );
 });

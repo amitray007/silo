@@ -42,6 +42,7 @@ import {
   settingsRow,
   settingsRowDivided,
 } from './rowStyles';
+import { SettingsSelect } from './SettingsSelect';
 import { ToggleSwitch } from './ToggleSwitch';
 
 const FAILURE_WORDS: Record<AiTestCode, string> = {
@@ -57,6 +58,7 @@ const FAILURE_WORDS: Record<AiTestCode, string> = {
 };
 
 type AiSetting = SettingsMap['ai'];
+type ChatAnswers = NonNullable<SettingsMap['chatAnswers']>;
 
 /** "2 min ago" style age for an ISO timestamp. */
 function timeAgo(iso: string, now = Date.now()): string {
@@ -606,24 +608,61 @@ function FeatureRow({
   );
 }
 
+const ANSWER_MODES = [
+  {
+    options: [
+      { value: 'streamed', label: 'Streamed' },
+      { value: 'complete', label: 'On completion' },
+    ],
+  },
+] satisfies { options: { value: ChatAnswers; label: string }[] }[];
+
+/** How a Librarian answer arrives, on every Librarian surface. */
+function ChatAnswersRow({
+  value,
+  onChange,
+}: {
+  value: ChatAnswers;
+  onChange: (value: ChatAnswers) => void;
+}) {
+  return (
+    <div style={settingsRowDivided}>
+      <div style={{ flex: 1 }}>
+        <div style={rowLabel}>Show answers</div>
+        <div style={rowDesc}>Stream the Librarian's answer as it is written, or show it whole.</div>
+      </div>
+      <SettingsSelect
+        ariaLabel="Show answers"
+        value={value}
+        groups={ANSWER_MODES}
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
 function AiSections({
   ai,
   settingsAi,
   plugins,
   librarianActions,
+  chatAnswers,
   off,
   busy,
   patch,
   saveActions,
+  saveChatAnswers,
 }: {
   ai: AiSettingsResponse;
   settingsAi: AiSetting;
   plugins: SettingsMap['plugins'] | undefined;
   librarianActions: SettingsMap['librarianActions'];
+  chatAnswers: ChatAnswers;
   off: boolean;
   busy: boolean;
   patch: (change: AiSettingsChange) => void;
   saveActions: (next: LibrarianActions) => Promise<unknown>;
+  saveChatAnswers: (next: ChatAnswers) => void;
 }) {
   if (ai.status.secretKey !== 'ok') return <SecretKeyCallout state={ai.status.secretKey} />;
   return (
@@ -657,7 +696,10 @@ function AiSections({
         />
       ))}
       {settingsAi.features.librarian?.enabled === true && (
-        <QuickActionsEditor actions={resolveActions(librarianActions)} save={saveActions} />
+        <>
+          <ChatAnswersRow value={chatAnswers} onChange={saveChatAnswers} />
+          <QuickActionsEditor actions={resolveActions(librarianActions)} save={saveActions} />
+        </>
       )}
     </div>
   );
@@ -709,10 +751,12 @@ export function AiTab() {
           settingsAi={settingsAi}
           plugins={settings?.plugins}
           librarianActions={settings?.librarianActions}
+          chatAnswers={settings?.chatAnswers ?? 'streamed'}
           off={!enabled}
           busy={update.isPending}
           patch={patch}
           saveActions={(next) => update.mutateAsync({ librarianActions: next })}
+          saveChatAnswers={(next) => update.mutate({ chatAnswers: next })}
         />
       )}
     </>

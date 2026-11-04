@@ -6,6 +6,7 @@ import { useReadAloudPrefs } from '../../../lib/readerPrefs';
 import { ReaderPrefsProvider } from '../../../lib/useReaderPrefs';
 import { makeLink } from '../../../test/fixtures';
 import type { EngineId, LoadProgress, TtsEngine } from './engines';
+import { takeSpeech } from './speechFocus';
 import { useReadAloud } from './useReadAloud';
 
 const fake = vi.hoisted(() => ({
@@ -222,6 +223,19 @@ it('pauses when the audio device is suspended or interrupted, and Play resumes f
   act(() => hook.result.current.play());
   await waitFor(() => expect(hook.result.current.playing).toBe(true));
   expect(hook.result.current.current?.text).toMatch(/^The second paragraph|^And a second/);
+  hook.unmount();
+});
+
+it('pauses when an answer read aloud in the chat takes the speakers', async () => {
+  const { prose, scroll } = article();
+  const hook = renderHook(() => useReadAloud({ prose, scroll }));
+  act(() => hook.result.current.startAt(1));
+  await waitFor(() => expect(hook.result.current.playing).toBe(true));
+  act(() => {
+    takeSpeech(() => {});
+  });
+  expect(hook.result.current.playing).toBe(false);
+  expect(hook.result.current.index).toBe(1);
   hook.unmount();
 });
 
