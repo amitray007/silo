@@ -13,6 +13,7 @@ export function SelectionAnswerCard({
   busy,
   error,
   saveDisabled,
+  canSave,
   onClose,
   onStop,
   onSave,
@@ -25,6 +26,8 @@ export function SelectionAnswerCard({
   /** The line that explains a failure, or an empty string. */
   error: string;
   saveDisabled: boolean;
+  /** False when the link refuses writes: the answer can only continue in the chat. */
+  canSave: boolean;
   onClose: () => void;
   onStop: () => void;
   onSave: () => void;
@@ -70,14 +73,16 @@ export function SelectionAnswerCard({
           </button>
         ) : (
           <>
-            <button
-              type="button"
-              className="silo-selection-primary"
-              disabled={saveDisabled}
-              onClick={onSave}
-            >
-              Save as note
-            </button>
+            {canSave && (
+              <button
+                type="button"
+                className="silo-selection-primary"
+                disabled={saveDisabled}
+                onClick={onSave}
+              >
+                Save as note
+              </button>
+            )}
             <button type="button" disabled={saveDisabled} onClick={onContinue}>
               Continue in Librarian
             </button>

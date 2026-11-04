@@ -47,6 +47,7 @@ export function HighlightsLayer({
       <SelectionBar
         linkId={linkId}
         askReady={askReady}
+        canWrite={api.canWrite}
         chatOpen={chatOpen}
         onSaveAnswer={async (answer) => {
           await create(color, { answer });

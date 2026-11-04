@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import { useAi, useSaveReadingPosition } from '../../../api/hooks';
 import { useHasLibrarianChat } from '../../../api/librarian';
 import type { LinkJson } from '../../../api/types';
+import { isFeedPost } from '../../../lib/isFeedPost';
 import { deriveTitleFromUrl } from '../../../lib/url';
 import { useReaderPrefs } from '../../../lib/useReaderPrefs';
 import { MenuPresence } from '../../MenuPresence';
@@ -345,6 +346,7 @@ export function ReaderDock({
     prose,
     scroll,
     writable: canSavePosition(link, trashed),
+    askable: askReady && isFeedPost(link) && !trashed,
     // While the Highlight sheet is open, a selection is highlighted at once.
     autoColor: highlighting ? highlightColor : null,
   });

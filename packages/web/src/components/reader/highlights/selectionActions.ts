@@ -29,6 +29,8 @@ export type SelectionAction = {
   group: 'primary' | 'more';
   /** The Highlight action reveals the colour choices. */
   colors?: boolean;
+  /** The action writes a highlight, so a link that refuses writes leaves it out. */
+  writes?: boolean;
   run: (context: SelectionContext) => void;
 };
 
@@ -47,6 +49,7 @@ export const selectionActions: readonly SelectionAction[] = [
     hint: 'Mark the passage',
     group: 'primary',
     colors: true,
+    writes: true,
     run: (context) => context.highlight(context.color),
   },
   {
@@ -55,6 +58,7 @@ export const selectionActions: readonly SelectionAction[] = [
     label: 'Note',
     hint: 'Highlight and write a note',
     group: 'primary',
+    writes: true,
     run: (context) => context.note(),
   },
   {

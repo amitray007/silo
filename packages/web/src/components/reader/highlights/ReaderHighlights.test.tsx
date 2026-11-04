@@ -837,6 +837,61 @@ it('continues the temporary answer in a new dock chat after importing it', async
   expect(screen.queryByRole('region', { name: 'Passage answer' })).toBeNull();
 });
 
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+}
+
+it('offers only Ask on a feed post when the Librarian is ready', async () => {
+  serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  expect(within(toolbar).getByRole('button', { name: 'Ask' })).toBeDefined();
+  expect(within(toolbar).queryByRole('button', { name: /Highlight/ })).toBeNull();
+  expect(within(toolbar).queryByRole('button', { name: /Note/ })).toBeNull();
+});
+
+it('answers a feed post passage without offering to save it as a note', async () => {
+  serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  fireEvent.click(await toolbarButton('Ask'));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('An answer saved on the passage.');
+  expect(screen.queryByRole('button', { name: 'Save as note' })).toBeNull();
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue in Librarian' }).hasAttribute('disabled'),
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Continue in Librarian' }));
+  await screen.findByRole('region', { name: 'Librarian conversation' });
+  expect(posts).toHaveLength(0);
+});
+
+it('offers no toolbar on a feed post when the Librarian is not ready', async () => {
+  serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
+  mount(false);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  await settle();
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+});
+
+it('keeps the full toolbar on a library link when the Librarian is ready', async () => {
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  expect(within(toolbar).getByRole('button', { name: /Highlight/ })).toBeDefined();
+  expect(within(toolbar).getByRole('button', { name: /Note/ })).toBeDefined();
+  expect(within(toolbar).getByRole('button', { name: 'Ask' })).toBeDefined();
+});
+
 function selectSurface(element: Element) {
   const range = document.createRange();
   range.selectNodeContents(element);
