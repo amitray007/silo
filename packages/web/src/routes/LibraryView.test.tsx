@@ -9,6 +9,7 @@ import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
 import { bucketByDay } from '../lib/buckets';
 import { makeLink as link } from '../test/fixtures';
+import { expectStickerAbove } from '../test/sticker';
 import { LibraryView } from './LibraryView';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -87,12 +88,13 @@ describe('LibraryView', () => {
     expect(screen.getByRole('status', { name: 'Loading…' })).toBeDefined();
   });
 
-  it('shows the empty state when there are no links', () => {
+  it('shows the empty state when there are no links', async () => {
     mockUseInfiniteLinks({
       data: { pages: [{ links: [] } as LinksResponse], pageParams: [undefined] },
     });
     renderLibraryView();
     expect(screen.getByText('Nothing saved yet')).toBeDefined();
+    await expectStickerAbove('folder', 'Nothing saved yet');
   });
 
   it('shows a calm inline error using the ApiError message', () => {

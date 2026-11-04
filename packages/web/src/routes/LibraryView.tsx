@@ -8,7 +8,13 @@ import { useListView } from './shared/useListView';
 
 /** `/`'s empty state copy — "nothing kept yet at all" (distinct from `TagView`'s per-tag empty copy). */
 function LibraryEmptyState() {
-  return <EmptyState title="Nothing saved yet" body="Paste a link anywhere to save it." />;
+  return (
+    <EmptyState
+      sticker="folder"
+      title="Nothing saved yet"
+      body="Paste a link anywhere to save it."
+    />
+  );
 }
 
 /**

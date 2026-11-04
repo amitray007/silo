@@ -13,6 +13,7 @@ import {
   twitterSourceData,
   youtubeSourceData,
 } from '../test/fixtures';
+import { expectStickerAbove } from '../test/sticker';
 import { CommandPalette } from './CommandPalette';
 import { HoverPreviewProvider } from './HoverPreviewContext';
 
@@ -640,6 +641,7 @@ describe('CommandPalette', () => {
       await waitFor(() => expect(within(listbox).getByText('No results')).toBeDefined(), {
         timeout: 2000,
       });
+      await expectStickerAbove('search', 'No results');
       expect(within(listbox).queryByText('Stale but real')).toBeNull();
     });
   });

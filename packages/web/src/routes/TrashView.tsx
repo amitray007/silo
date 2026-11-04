@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteForeverDialog } from '../components/DeleteForeverDialog';
 import { TrashIcon } from '../components/NavIcons';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
+import { StickerSlot } from '../components/stickers/StickerSlot';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
 import { LoadingState } from './shared/ListStates';
@@ -47,17 +48,15 @@ function TrashEmptyNowButton() {
 /**
  * The trash empty state — a proper centered composition (user feedback:
  * "add a better empty state for trash"), matching the Library's rich
- * `EmptyState` shell (`CenteredPanel` + mark + headline + body) rather than
- * the previous bare left-aligned line. Uses the trash-can mark (a permitted
- * icon) instead of the grain dot, and the body explains the auto-empty
+ * `EmptyState` shell (`CenteredPanel` + sticker + headline + body) rather than
+ * the previous bare left-aligned line. Uses the bin sticker in the
+ * same slot as `EmptyState`, and the body explains the auto-empty
  * behavior so an empty trash reads as reassuring, not blank.
  */
 function TrashEmptyState({ purgeWindowDays }: { purgeWindowDays: number }) {
   return (
     <CenteredPanel empty>
-      <span style={{ color: 'var(--fnt)', display: 'inline-flex' }}>
-        <TrashIcon size={26} stroke="currentColor" />
-      </span>
+      <StickerSlot name="trash" />
       <p
         style={{
           margin: 'var(--s5) 0 0',

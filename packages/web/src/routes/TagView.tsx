@@ -14,7 +14,9 @@ import { useListView } from './shared/useListView';
 
 /** `/tags/:name`'s empty state copy — distinct from the Library's "nothing kept yet at all" (this tag specifically has no live links, not the whole store). */
 function TagEmptyState({ tag }: { tag: string }) {
-  return <EmptyState title={`No links tagged #${tag}`} body="Tag a link to see it here." />;
+  return (
+    <EmptyState sticker="tag" title={`No links tagged #${tag}`} body="Tag a link to see it here." />
+  );
 }
 
 /** Confirm tag removal while keeping every link in the library. */
