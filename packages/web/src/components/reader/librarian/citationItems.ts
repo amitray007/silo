@@ -56,3 +56,10 @@ export function matchCitation(title: string, items: CitationItem[]): string | un
   const ids = [...new Set(matches.map((item) => item.id))];
   return ids.length === 1 ? ids[0] : undefined;
 }
+
+/** The link text, then its part before a colon: search matches every word, and "Title: note" adds words the title lacks. */
+export function citationQueries(text: string): string[] {
+  const full = text.trim();
+  const head = full.split(':')[0]?.trim() ?? '';
+  return head && head !== full ? [full, head] : [full];
+}

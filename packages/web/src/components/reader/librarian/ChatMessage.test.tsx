@@ -357,6 +357,24 @@ it('heals a fake id through library search', async () => {
   );
 });
 
+it('retries library search with the title before a colon', async () => {
+  const { fetcher } = await renderHealing(undefined, []);
+  fetcher.mockImplementation(async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.includes(FAKE)) return new Response('{}', { status: 404 });
+    if (url.includes('/search?'))
+      return new Response(
+        JSON.stringify({
+          results: url.includes('subtitle') ? [] : [{ id: SAVED, title: 'Title' }],
+        }),
+      );
+    return new Response(JSON.stringify({ link: { url: 'https://saved.example/post' } }));
+  });
+  expect((await screen.findByRole('link', { name: 'Title: subtitle' })).getAttribute('href')).toBe(
+    `/?link=${SAVED}`,
+  );
+});
+
 it.each([
   { results: [] },
   {
