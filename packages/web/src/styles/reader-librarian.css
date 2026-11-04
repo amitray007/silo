@@ -254,6 +254,98 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     opacity: 1;
   }
 }
+.silo-chat-actions {
+  align-items: center;
+}
+.silo-chat-pager {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 6px;
+  color: var(--mut);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.silo-chat-actions .silo-chat-pager .silo-reader-iconbtn {
+  width: 24px;
+  height: 24px;
+}
+.silo-chat-actions .silo-reader-iconbtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.silo-chat-pager-count {
+  min-width: 34px;
+  text-align: center;
+}
+.silo-chat-pager-model {
+  max-width: 140px;
+  margin-left: 4px;
+  overflow: hidden;
+  color: var(--fnt);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The regenerate popover reuses the model picker's surface; these are its own rows. */
+.silo-palette-row.silo-regen-again {
+  flex: none;
+  gap: var(--s2);
+  height: 44px;
+  margin-top: var(--s1);
+  padding: 0 var(--s2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.silo-regen-again[aria-selected="true"] {
+  background: var(--menu-highlight);
+  box-shadow: var(--menu-highlight-shadow);
+}
+.silo-regen-again[aria-disabled="true"] {
+  opacity: 0.45;
+}
+.silo-regen-again-label {
+  flex: 1;
+}
+.silo-regen-again-model {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fnt);
+  font-size: 12px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-regen-unreadable {
+  display: grid;
+  gap: 2px;
+  padding: var(--s2) var(--s3);
+  color: var(--warn);
+  font-size: 12px;
+}
+.silo-regen-unreadable-name {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--mut);
+  font-weight: 500;
+}
+.silo-regen-foot {
+  flex: none;
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  border-top: 1px solid var(--line);
+  color: var(--fnt);
+  font-size: 12px;
+  line-height: 16px;
+}
+:root[data-theme="dark"] .silo-regen-foot,
+:root[data-theme="dark"] .silo-regen-again-model,
+:root[data-theme="dark"] .silo-chat-pager-model {
+  color: var(--mut);
+}
 .silo-chat-assistant :is(p, ul, ol, pre, blockquote) + :is(p, ul, ol, pre, blockquote) {
   margin-top: 8px;
 }
@@ -1477,7 +1569,8 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
 
 /* Touch: controls reach 40px (docs/rules/web-react.md). */
 @media (max-width: 640px), (pointer: coarse) {
-  .silo-chat-actions .silo-reader-iconbtn {
+  .silo-chat-actions .silo-reader-iconbtn,
+  .silo-chat-actions .silo-chat-pager .silo-reader-iconbtn {
     width: 40px;
     height: 40px;
   }

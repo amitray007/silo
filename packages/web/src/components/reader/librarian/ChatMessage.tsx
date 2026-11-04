@@ -3,7 +3,7 @@ import { memo, useCallback, useState } from 'react';
 import { type AnimateOptions, defaultRehypePlugins, Streamdown } from 'streamdown';
 import { copyLabel, useCopyFlash } from '../../SettingsTabs/copyFlash';
 import { ReaderIcon } from '../ReaderIcon';
-import { AnswerActions } from './AnswerActions';
+import { AnswerActions, type AnswerControls } from './AnswerActions';
 import { ApprovalRow } from './ApprovalRow';
 import { Citation, CitationItems, CitationResolved } from './Citations';
 import { citationItems } from './citationItems';
@@ -80,6 +80,7 @@ export const ChatMessage = memo(function ChatMessage({
   streaming = false,
   held = false,
   linkId,
+  controls,
 }: {
   message: UIMessage;
   expired?: boolean;
@@ -88,6 +89,8 @@ export const ChatMessage = memo(function ChatMessage({
   /** Keep the arriving answer unrendered until the message is whole (Settings -> AI, Show answers). */
   held?: boolean;
   linkId?: string | undefined;
+  /** Regenerate and version paging; given only for the last answer once it is finished. */
+  controls?: AnswerControls | undefined;
   onApproval?: (response: { id: string; approved: boolean }) => void;
 }) {
   const [wasHeld, setWasHeld] = useState(false);
@@ -161,7 +164,7 @@ export const ChatMessage = memo(function ChatMessage({
           <SourcesRow answer={answer} resolved={resolved} />
         )}
         {!streaming && !approving && answer.trim() && (
-          <AnswerActions id={message.id} markdown={answer} />
+          <AnswerActions id={message.id} markdown={answer} controls={controls} />
         )}
       </div>
     </div>

@@ -563,3 +563,41 @@ it('renders stored suggestions without a request', () => {
   );
   fetcher.mockRestore();
 });
+
+it('offers Regenerate on the last finished answer only, and not while one streams', () => {
+  const messages = [
+    text('u1', 'user', 'One'),
+    text('a1', 'assistant', 'First answer'),
+    text('u2', 'user', 'Two'),
+    text('a2', 'assistant', 'Second answer'),
+  ];
+  const view = mount(
+    fakeChat({ messages, canRegenerate: true, versions: [] } as Partial<ThreadChat>),
+  );
+  expect(screen.getAllByRole('button', { name: 'Regenerate answer' })).toHaveLength(1);
+  view.unmount();
+  mount(fakeChat({ messages, busy: true, canRegenerate: false } as Partial<ThreadChat>));
+  expect(screen.queryByRole('button', { name: 'Regenerate answer' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Previous version' })).toBeNull();
+});
+
+it('pages saved versions of the last answer and selects the neighbour', () => {
+  const selectVersion = vi.fn();
+  const saved = {
+    id: 'a0',
+    parts: [{ type: 'text', text: 'Older' }],
+    metadata: { model: { provider: 'openai', id: 'm', label: 'Older model' } },
+  };
+  mount(
+    fakeChat({
+      canRegenerate: true,
+      versions: [saved],
+      selectVersion,
+      answerModel: { provider: 'openai', id: 'n', label: 'Newer model' },
+    } as unknown as Partial<ThreadChat>),
+  );
+  expect(screen.getByText('2 / 2')).toBeTruthy();
+  expect(screen.getByText('Newer model')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Previous version' }));
+  expect(selectVersion).toHaveBeenCalledWith('a0');
+});
