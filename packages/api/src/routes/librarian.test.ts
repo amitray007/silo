@@ -57,6 +57,7 @@ describe('Librarian route access', () => {
     });
     expect(response.status).toBe(409);
     expect(streamLibrarianReply).toHaveBeenCalledWith({
+      abortSignal: expect.any(AbortSignal),
       chatId: '00000000-0000-4000-8000-000000000001',
       regenerate: input,
     });
@@ -95,6 +96,7 @@ describe('Librarian route access', () => {
     );
     expect(response.status).toBe(409);
     expect(streamLibrarianReply).toHaveBeenCalledWith({
+      abortSignal: expect.any(AbortSignal),
       chatId: '00000000-0000-4000-8000-000000000001',
       message,
     });

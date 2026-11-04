@@ -125,6 +125,7 @@ export function registerLibrarianRoutes(app: Hono): void {
     if (!parsed.success) return c.json({ error: 'invalid_message' }, 400);
     const result = await streamLibrarianReply({
       chatId: id,
+      abortSignal: c.req.raw.signal,
       ...('trigger' in parsed.data
         ? { regenerate: parsed.data }
         : { message: parsed.data.message }),

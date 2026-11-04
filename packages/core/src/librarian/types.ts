@@ -19,7 +19,7 @@ const answerMetadata = z
       .optional(),
   })
   .passthrough();
-const answerVersionSchema = z
+export const answerVersionSchema = z
   .object({
     id: z.string().min(1).max(200),
     parts: z.array(z.unknown()).max(200),

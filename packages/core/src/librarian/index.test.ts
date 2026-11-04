@@ -102,6 +102,42 @@ suite('Librarian persistence', () => {
     await c.deleteChat(chat.id);
     setLibrarianRunner(undefined);
   });
+  it('snapshots locked metadata and skips oversized history while rejecting unsafe selection', async () => {
+    const c = h.mod();
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing');
+    const old = {
+      id: 'size-old',
+      role: 'assistant' as const,
+      parts: [{ type: 'text', text: 'Old' }],
+    };
+    await c.saveChatMessages(chat.id, [old]);
+    const expected = (await c.getChat(chat.id))?.messages.at(-1);
+    if (!expected) throw new Error('missing');
+    await c.saveChatMessages(chat.id, [
+      { ...old, metadata: { suggestions: [{ kind: 'ask', text: 'Saved later' }] } },
+    ]);
+    const large = {
+      ...old,
+      id: 'size-large',
+      parts: [{ type: 'text', text: 'x'.repeat(1000001) }],
+    };
+    expect(await c.replaceLastAnswer(chat.id, expected, large)).toBe(true);
+    const stored = (await c.getChat(chat.id))?.messages.at(-1);
+    if (!stored) throw new Error('missing');
+    expect(
+      c.librarianMessageSchema.parse(stored).metadata?.versions?.[0]?.metadata.suggestions,
+    ).toEqual([{ kind: 'ask', text: 'Saved later' }]);
+    expect(await c.selectLibrarianVersion(chat.id, stored.id, old.id)).toMatchObject({
+      code: 'invalid_message',
+    });
+    expect((await c.getChat(chat.id))?.messages.at(-1)).toEqual(stored);
+    expect(await c.replaceLastAnswer(chat.id, stored, { ...old, id: 'size-new' })).toBe(true);
+    const next = (await c.getChat(chat.id))?.messages.at(-1);
+    expect(c.librarianMessageSchema.safeParse(next).success).toBe(true);
+    expect(c.librarianMessageSchema.parse(next).metadata?.versions).toHaveLength(1);
+    await c.deleteChat(chat.id);
+  });
   it('lists article titles and null for library or deleted articles', async () => {
     const c = h.mod();
     const { db, links } = await import('@silo/db');

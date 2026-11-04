@@ -1,9 +1,4 @@
-import {
-  answerVersion,
-  librarianMessageSchema,
-  replaceLastAnswer,
-  saveChatMessages,
-} from '@silo/core';
+import { librarianMessageSchema, replaceLastAnswer, saveChatMessages } from '@silo/core';
 import {
   getLibrarianToolSource,
   type LibrarianRequest,
@@ -92,10 +87,14 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     const timing = reasoningTiming(
       typeof parsedLast?.metadata?.reasoningMs === 'number' ? parsedLast.metadata.reasoningMs : 0,
     );
+    let failed = false;
+    let finished = false;
     const result = streamText({
       model: chatStreamingModel(model, credential),
       // The UI stream logs the fixed code; the SDK default logs raw provider errors.
-      onError: () => {},
+      onError: () => {
+        failed = true;
+      },
       ...input,
       messages: withRequestContext(input.messages, requestContext(request)),
       experimental_transform: [
@@ -114,21 +113,14 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     });
     const metadata = {
       model: { provider: credential.kind, id: credential.model.id, label: credential.model.label },
-      ...(request.replacing
-        ? {
-            versions: [
-              ...(librarianMessageSchema.parse(request.replacing).metadata?.versions ?? []),
-              answerVersion(request.replacing),
-            ].slice(-5),
-          }
-        : {}),
     };
     const replyStream = toUIMessageStream({
       stream: result.stream,
       originalMessages,
       generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
-      messageMetadata: ({ part }) =>
-        part.type === 'finish'
+      messageMetadata: ({ part }) => {
+        if (part.type === 'finish') finished = part.finishReason === 'stop';
+        return part.type === 'finish'
           ? {
               ...metadata,
               ...timing.messageMetadata({ part }),
@@ -136,7 +128,8 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
             }
           : part.type === 'start'
             ? metadata
-            : timing.messageMetadata({ part }),
+            : timing.messageMetadata({ part });
+      },
       onError: failure,
     });
     const stream = createUIMessageStream({
@@ -145,11 +138,18 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
         writer.merge(replyStream);
       },
       onError: failure,
-      onEnd: async ({ messages }) => {
+      onEnd: async ({ messages, isAborted, outcome }) => {
         try {
           if (request.replacing) {
             const answer = messages.at(-1);
-            if (answer?.role === 'assistant')
+            if (
+              answer?.role === 'assistant' &&
+              finished &&
+              !failed &&
+              !isAborted &&
+              outcome.status !== 'failed' &&
+              !request.abortSignal?.aborted
+            )
               await replaceLastAnswer(
                 request.chatId,
                 request.replacing,

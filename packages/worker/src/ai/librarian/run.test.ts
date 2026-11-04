@@ -5,6 +5,7 @@ import { credential } from '../test-helpers.js';
 
 vi.mock('@silo/core', () => ({
   saveChatMessages: vi.fn(),
+  replaceLastAnswer: vi.fn(),
   getSetting: vi.fn(() => false),
   librarianPersona: 'Librarian persona',
   promptVersion: 1,
@@ -22,7 +23,7 @@ vi.mock('./suggestions.js', () => ({
   suggestFollowups: vi.fn(async () => [{ kind: 'ask', text: 'What next?' }]),
 }));
 
-import { getSetting, saveChatMessages } from '@silo/core';
+import { getSetting, replaceLastAnswer, saveChatMessages } from '@silo/core';
 import {
   getLibrarianToolSource,
   resolveAiCredential,
@@ -110,6 +111,54 @@ describe('Librarian streaming', () => {
           }),
         ]),
       );
+    },
+  );
+  it.each(['error', 'abort', 'success'] as const)(
+    'regeneration persists only success: %s',
+    async (ending) => {
+      vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+      const abort = new AbortController();
+      vi.mocked(languageModelFor).mockReturnValue(
+        new MockLanguageModelV4({
+          doStream: async () => ({
+            stream: new ReadableStream({
+              start(c) {
+                c.enqueue({ type: 'text-start', id: 't' });
+                c.enqueue({ type: 'text-delta', id: 't', delta: 'Partial text ' });
+                if (ending === 'error')
+                  c.enqueue({ type: 'error', error: new Error('provider failed') });
+                if (ending === 'abort') abort.abort();
+                c.enqueue({ type: 'text-end', id: 't' });
+                c.enqueue({
+                  type: 'finish',
+                  finishReason: { unified: 'stop', raw: undefined },
+                  usage: {
+                    inputTokens: {
+                      total: 1,
+                      noCache: 1,
+                      cacheRead: undefined,
+                      cacheWrite: undefined,
+                    },
+                    outputTokens: { total: 1, text: 1, reasoning: undefined },
+                  },
+                });
+                c.close();
+              },
+            }),
+          }),
+        }),
+      );
+      const response = await runLibrarian({
+        chatId: 'chat',
+        transient: false,
+        link: null,
+        abortSignal: abort.signal,
+        replacing: { id: 'old', role: 'assistant', parts: [{ type: 'text', text: 'Old' }] },
+        messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+      });
+      await response.text();
+      expect(replaceLastAnswer).toHaveBeenCalledTimes(ending === 'success' ? 1 : 0);
+      expect(saveChatMessages).not.toHaveBeenCalled();
     },
   );
   it('streams reasoning with its total time and splits text into words', async () => {

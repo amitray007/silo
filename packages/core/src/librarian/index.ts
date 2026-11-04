@@ -6,6 +6,7 @@ import { resolveAction, resolveMessageAction } from './action-resolution.js';
 import { isApprovalContinuation } from './approval.js';
 import { beginLibrarianRun, getLibrarianRunner } from './ports.js';
 import {
+  answerVersionSchema,
   incomingUserMessageSchema,
   type LibrarianMessage,
   librarianMessageSchema,
@@ -376,10 +377,46 @@ export function answerVersion(message: LibrarianMessage) {
   const { versions: _versions, ...metadata } = parsed.metadata ?? {};
   return { id: message.id, parts: message.parts, metadata };
 }
+function replacementAnswer(
+  last: LibrarianMessage,
+  answer: LibrarianMessage,
+  selectingVersionId?: string,
+) {
+  const current = librarianMessageSchema.safeParse({
+    ...last,
+    metadata: last.metadata ?? undefined,
+  });
+  if (!current.success) return undefined;
+  const snapshot = answerVersionSchema.safeParse(answerVersion(current.data));
+  const versions = current.data.metadata?.versions ?? [];
+  // Keep five newest valid snapshots; skip an old answer over 1 MB rather than truncate it.
+  const nextVersions = snapshot.success ? [...versions, snapshot.data].slice(-5) : versions;
+  let replacement = {
+    ...answer,
+    metadata: { ...librarianMessageSchema.parse(answer).metadata, versions: nextVersions },
+  };
+  if (selectingVersionId) {
+    const chosen = versions.find((v) => v.id === selectingVersionId);
+    if (!chosen || !snapshot.success) return undefined;
+    replacement = {
+      ...answer,
+      id: chosen.id,
+      parts: chosen.parts,
+      metadata: {
+        ...chosen.metadata,
+        versions: versions.map((v) => (v.id === selectingVersionId ? snapshot.data : v)),
+      },
+    };
+  }
+  const valid = librarianMessageSchema.safeParse(replacement);
+  if (!valid.success) return undefined;
+  return valid.data;
+}
 export async function replaceLastAnswer(
   chatId: string,
   expected: LibrarianMessage,
   answer: LibrarianMessage,
+  selectingVersionId?: string,
 ) {
   return db.transaction(async (tx) => {
     const [chat] = await tx.select().from(chats).where(eq(chats.id, chatId)).for('update');
@@ -396,9 +433,11 @@ export async function replaceLastAnswer(
       JSON.stringify(last.parts) !== JSON.stringify(expected.parts)
     )
       return false;
+    const valid = replacementAnswer(last, answer, selectingVersionId);
+    if (!valid) return false;
     await tx
       .update(messages)
-      .set({ id: answer.id, parts: answer.parts, metadata: answer.metadata ?? null })
+      .set({ id: valid.id, parts: valid.parts, metadata: valid.metadata ?? null })
       .where(eq(messages.id, last.id));
     await tx
       .update(chats)
@@ -423,14 +462,16 @@ export async function selectLibrarianVersion(chatId: string, messageId: string, 
     const chosen = versions[index];
     if (!chosen) return { ok: false, code: 'invalid_message' } as const;
     const next = [...versions];
-    next[index] = answerVersion(last);
+    const snapshot = answerVersionSchema.safeParse(answerVersion(last));
+    if (!snapshot.success) return { ok: false, code: 'invalid_message' } as const;
+    next[index] = snapshot.data;
     const answer = {
       ...last,
       id: chosen.id,
       parts: chosen.parts,
       metadata: { ...chosen.metadata, versions: next },
     };
-    if (!(await replaceLastAnswer(chatId, last, answer)))
+    if (!(await replaceLastAnswer(chatId, last, answer, versionId)))
       return { ok: false, code: 'busy' } as const;
     return { ok: true, messages: (await getChat(chatId))?.messages ?? [] } as const;
   } finally {
