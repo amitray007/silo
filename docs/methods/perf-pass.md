@@ -146,3 +146,21 @@ same before and after.
 
 Out of scope: near-stopword terms stay ~9 s; fixing them needs a stored tag
 tsvector (schema change).
+
+### U4b-2 search cutoff follow-up (two measured regressions)
+
+The head-to-head at aa5f88d found two costs from U4b-1, both on already-cheap queries:
+- No-match / rare-term search: ~0.88x throughput at c=20 (core 5.2 -> 7.0 ms),
+  from the transaction (BEGIN, SET LOCAL, probe, COMMIT) on every probe.
+- Rare tag plus a term (`&tag=Topic-93`): 31 -> 55 ms at c=1, ~1.85x at c=20. The
+  old full-scan plan started from the tag; the candidate path cannot.
+
+Fix, still only choosing between the same two plans (output unchanged):
+- Two-stage probe. Stage 1 is the old cheap probe (candidates `limit 512`, no
+  transaction, one round trip, returns a count). Under 512: candidate path,
+  exactly as before U4b-1. Only at 512+ does stage 2 run the share-based probe in
+  the seqscan-off transaction.
+- A search or `countLinks` scoped by a selective tag (rarest `tag`/`tags` entry
+  has <= `SELECTIVE_TAG_MAX_LINKS` links, the list path's existing rule) keeps
+  the pre-U4b-1 rule: stage 1 only, so 512+ candidates fall back to the scan that
+  starts from the tag.
