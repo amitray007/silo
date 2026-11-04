@@ -234,9 +234,11 @@ describe('GET /api/favicon (unit)', () => {
 
       const first = await app.request('/api/favicon?domain=none.example');
       expect(first.status).toBe(404);
+      expect(first.headers.get('cache-control')).toBe('public, max-age=3600');
       expect(((await first.json()) as { error: string }).error).toBe('not_found');
       const second = await app.request('/api/favicon?domain=none.example');
       expect(second.status).toBe(404);
+      expect(second.headers.get('cache-control')).toBe('public, max-age=3600');
 
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(finder).toHaveBeenCalledTimes(1);

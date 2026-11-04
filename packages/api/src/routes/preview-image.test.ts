@@ -328,4 +328,147 @@ describeIfPg('GET /api/preview-image (integration)', () => {
     expect(second.headers.get('content-type')).toBe('image/jpeg');
     expect(fetchImageSafely).toHaveBeenCalledTimes(1);
   });
+
+  describe('failed fetches and concurrent requests', () => {
+    async function linkWithImage(slug: string, imageUrl: string): Promise<string> {
+      const { core } = harness.mod();
+      const created = await core.createLink({
+        url: `https://example.com/preview-image-${slug}`,
+        sourceKind: 'link',
+      });
+      await core.recordEnrichment(created.id, { status: 'full', imageUrl });
+      return created.id;
+    }
+
+    it('remembers a failed fetch: the repeat request is a 404 with no second upstream fetch', async () => {
+      const { app, fetchImageSafely } = harness.mod();
+      const id = await linkWithImage('miss-cached', 'https://cdn.example.com/broken.png');
+      fetchImageSafely.mockResolvedValue({ ok: false });
+
+      const first = await app.request(`/api/preview-image?linkId=${id}`);
+      const second = await app.request(`/api/preview-image?linkId=${id}`);
+
+      expect(first.status).toBe(404);
+      expect(second.status).toBe(404);
+      expect(((await second.json()) as { message: string }).message).toBe(
+        'Preview image unavailable',
+      );
+      expect(fetchImageSafely).toHaveBeenCalledTimes(1);
+    });
+
+    it('remembers a non-image upstream the same way', async () => {
+      const { app, fetchImageSafely } = harness.mod();
+      const id = await linkWithImage('miss-html', 'https://cdn.example.com/page.png');
+      fetchImageSafely.mockResolvedValue({
+        ok: true,
+        bytes: new Uint8Array([60]),
+        contentType: 'text/html',
+      });
+
+      expect((await app.request(`/api/preview-image?linkId=${id}`)).status).toBe(404);
+      expect((await app.request(`/api/preview-image?linkId=${id}`)).status).toBe(404);
+      expect(fetchImageSafely).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries after an hour', async () => {
+      const { app, fetchImageSafely } = harness.mod();
+      const id = await linkWithImage('miss-expiry', 'https://cdn.example.com/flaky.png');
+      fetchImageSafely.mockResolvedValueOnce({ ok: false });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        expect((await app.request(`/api/preview-image?linkId=${id}`)).status).toBe(404);
+
+        vi.setSystemTime(Date.now() + 59 * 60 * 1000);
+        expect((await app.request(`/api/preview-image?linkId=${id}`)).status).toBe(404);
+        expect(fetchImageSafely).toHaveBeenCalledTimes(1);
+
+        vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+        fetchImageSafely.mockResolvedValueOnce({
+          ok: true,
+          bytes: new Uint8Array([5]),
+          contentType: 'image/png',
+        });
+        expect((await app.request(`/api/preview-image?linkId=${id}`)).status).toBe(200);
+        expect(fetchImageSafely).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries at once when the link gets a different image url', async () => {
+      const { core, app, fetchImageSafely } = harness.mod();
+      const id = await linkWithImage('miss-new-url', 'https://cdn.example.com/old.png');
+      fetchImageSafely.mockResolvedValueOnce({ ok: false });
+      expect((await app.request(`/api/preview-image?linkId=${id}`)).status).toBe(404);
+
+      await core.recordEnrichment(id, {
+        status: 'full',
+        imageUrl: 'https://cdn.example.com/new.png',
+      });
+      fetchImageSafely.mockResolvedValueOnce({
+        ok: true,
+        bytes: new Uint8Array([1]),
+        contentType: 'image/png',
+      });
+      expect((await app.request(`/api/preview-image?linkId=${id}`)).status).toBe(200);
+      expect(fetchImageSafely).toHaveBeenLastCalledWith('https://cdn.example.com/new.png');
+    });
+
+    it('does not remember "no image yet": an image added by enrichment is served right away', async () => {
+      const { core, app, fetchImageSafely } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/preview-image-enrich-later',
+        sourceKind: 'link',
+      });
+      expect((await app.request(`/api/preview-image?linkId=${created.id}`)).status).toBe(404);
+
+      await core.recordEnrichment(created.id, {
+        status: 'full',
+        imageUrl: 'https://cdn.example.com/arrived.png',
+      });
+      fetchImageSafely.mockResolvedValue({
+        ok: true,
+        bytes: new Uint8Array([2]),
+        contentType: 'image/png',
+      });
+      expect((await app.request(`/api/preview-image?linkId=${created.id}`)).status).toBe(200);
+    });
+
+    it('coalesces concurrent requests for one link into one upstream fetch', async () => {
+      const { app, fetchImageSafely } = harness.mod();
+      const id = await linkWithImage('coalesce', 'https://cdn.example.com/slow.png');
+      let release: (value: { ok: true; bytes: Uint8Array; contentType: string }) => void = () => {};
+      fetchImageSafely.mockReturnValue(
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      );
+
+      const pending = Array.from({ length: 8 }, () =>
+        app.request(`/api/preview-image?linkId=${id}`),
+      );
+      await vi.waitFor(() => expect(fetchImageSafely).toHaveBeenCalledTimes(1));
+      release({ ok: true, bytes: new Uint8Array([7, 7]), contentType: 'image/png' });
+      const responses = await Promise.all(pending);
+
+      expect(responses.map((r) => r.status)).toEqual(Array(8).fill(200));
+      for (const res of responses) {
+        expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([7, 7]);
+      }
+      expect(fetchImageSafely).toHaveBeenCalledTimes(1);
+    });
+
+    it('coalesced requests share a failure, and the next request after it is not stuck', async () => {
+      const { app, fetchImageSafely } = harness.mod();
+      const id = await linkWithImage('coalesce-fail', 'https://cdn.example.com/dead.png');
+      fetchImageSafely.mockResolvedValue({ ok: false });
+
+      const responses = await Promise.all(
+        Array.from({ length: 5 }, () => app.request(`/api/preview-image?linkId=${id}`)),
+      );
+
+      expect(responses.map((r) => r.status)).toEqual(Array(5).fill(404));
+      expect(fetchImageSafely).toHaveBeenCalledTimes(1);
+    });
+  });
 });
