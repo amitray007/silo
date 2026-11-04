@@ -83,15 +83,31 @@ describe('phone bottom bar', () => {
   });
 });
 
-it('opens Librarian from More on phones only when ready', () => {
-  ready = true;
-  setup();
-  fireEvent.click(screen.getByRole('button', { name: 'More' }));
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Librarian' }));
-  expect(screen.getByRole('status').textContent).toBe('/librarian');
-});
-it('hides Librarian from More when off', () => {
-  setup();
-  fireEvent.click(screen.getByRole('button', { name: 'More' }));
-  expect(screen.queryByRole('menuitem', { name: 'Librarian' })).toBeNull();
+describe('Chat tab', () => {
+  it('sits next to Library and Search when the Librarian is ready, and opens /librarian', () => {
+    ready = true;
+    setup();
+    const bar = within(screen.getByRole('navigation', { name: 'Phone navigation' }));
+    expect(bar.getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual([
+      'Library',
+      'Chat',
+      'Search',
+      'More',
+    ]);
+    fireEvent.click(bar.getByRole('button', { name: 'Chat' }));
+    expect(screen.getByRole('status').textContent).toBe('/librarian');
+    expect(bar.getByRole('button', { name: 'Chat' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('has no Librarian item in More', () => {
+    ready = true;
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: 'More' }));
+    expect(screen.queryByRole('menuitem', { name: 'Librarian' })).toBeNull();
+  });
+
+  it('is absent while the Librarian is off', () => {
+    setup();
+    expect(screen.queryByRole('button', { name: 'Chat' })).toBeNull();
+  });
 });

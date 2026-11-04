@@ -7,10 +7,11 @@ import { useAuth } from '../auth/AuthContext';
 import { formatCount } from '../lib/formatCount';
 import { useTheme } from '../theme/ThemeProvider';
 import { BrandMark } from './BrandMark';
-import { LibrarianIcon, LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon } from './NavIcons';
+import { LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useSettings } from './SettingsContext';
+import { SidebarChats } from './SidebarChats';
 import { SidebarFeeds } from './SidebarFeeds';
 import { SidebarTags } from './SidebarTags';
 import { TagMenu } from './TagMenu';
@@ -170,16 +171,9 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
           icon={<LibraryIcon />}
           onNavigate={onNavigate}
         />
-        {librarianReady && (
-          <NavItemLink
-            to="/librarian"
-            label="Librarian"
-            icon={<LibrarianIcon />}
-            onNavigate={onNavigate}
-          />
-        )}
       </div>
       <div className="silo-sidebar-sections">
+        {librarianReady && <SidebarChats onNavigate={onNavigate} />}
         <SidebarFeeds onNavigate={onNavigate} />
         <SidebarTags
           tags={tags}

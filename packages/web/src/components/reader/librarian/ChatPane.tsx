@@ -28,10 +28,13 @@ export function ChatPane({
   chatId,
   onBack,
   onCreated,
+  backLabel = 'Back to chats',
 }: {
   chatId: string | null;
   onBack: () => void;
   onCreated: (id: string) => void;
+  /** What Back returns to; the Library's pane goes back to its links. */
+  backLabel?: string;
 }) {
   const chat = useLibrarianPageChat(chatId, onCreated);
   const article = useChatArticle(chatId);
@@ -51,8 +54,8 @@ export function ChatPane({
         <button
           type="button"
           className="silo-reader-iconbtn silo-chatpage-back"
-          aria-label="Back to chats"
-          title="Back to chats"
+          aria-label={backLabel}
+          title={backLabel}
           onClick={onBack}
         >
           <ReaderIcon name="back" />

@@ -1,17 +1,15 @@
-import { type CSSProperties, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import type { CSSProperties } from 'react';
+import { Link } from 'react-router';
 import { useLibrarianReady } from '../api/librarian';
 import { ListPaneDivider } from '../components/reader/ListPaneDivider';
 import { ChatList } from '../components/reader/librarian/ChatList';
 import { ChatPane } from '../components/reader/librarian/ChatPane';
 import { ReaderIcon } from '../components/reader/ReaderIcon';
 import { layoutMedia, useMediaQuery } from '../lib/breakpoints';
+import { NEW_CHAT, useChatParam } from '../lib/useChatParam';
 import { useEscapeLayer } from '../lib/useEscapeLayer';
 import { useListWidth } from '../lib/useListWidth';
 import { ContentFrame } from './shared/ListHeader';
-
-/** `?chat=` holds a chat's id, or this for a new library chat that has no row yet. */
-const NEW_CHAT = 'new';
 
 function NewChatButton({ onClick }: { onClick: () => void }) {
   return (
@@ -62,26 +60,9 @@ export function LibrarianView() {
 }
 
 function ReadyLibrarianView() {
-  const [params, setParams] = useSearchParams();
+  const { open, chatId, show, close } = useChatParam();
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const [listWidth] = useListWidth();
-  const param = params.get('chat');
-  const open = param !== null;
-  const chatId = param === NEW_CHAT ? null : param;
-  const show = useCallback(
-    (id: string | null, replace = false) =>
-      setParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          if (id) next.set('chat', id);
-          else next.delete('chat');
-          return next;
-        },
-        { replace },
-      ),
-    [setParams],
-  );
-  const close = useCallback(() => show(null, true), [show]);
   // Escape leaves a chat that covers the whole window, the way it leaves the reader.
   useEscapeLayer(fullWindow && open, close);
   return (
