@@ -1073,6 +1073,7 @@ export function invalidateLinkQueries(
   queryClient.invalidateQueries({ queryKey: ['links'] });
   queryClient.invalidateQueries({ queryKey: ['links-recents'] });
   queryClient.invalidateQueries({ queryKey: ['link'] });
+  queryClient.invalidateQueries({ queryKey: ['link-url'] });
   if (affects.counts) {
     queryClient.invalidateQueries({ queryKey: ['saved-links'] });
     queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
@@ -1306,6 +1307,7 @@ function insertIntoTrashCache(
 function invalidateTrashQueries(queryClient: ReturnType<typeof useQueryClient>): void {
   queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
   queryClient.invalidateQueries({ queryKey: ['link'] });
+  queryClient.invalidateQueries({ queryKey: ['link-url'] });
   queryClient.invalidateQueries({ queryKey: ['saved-links'] });
   queryClient.invalidateQueries({ queryKey: queryKeys.trash() });
   queryClient.invalidateQueries({ queryKey: queryKeys.counts() });

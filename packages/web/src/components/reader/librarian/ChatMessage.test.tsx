@@ -179,20 +179,22 @@ async function renderCitations() {
 
 it('opens saved-item citations through the router and keeps external links in a new tab', async () => {
   await renderCitations();
-  const saved = await screen.findByRole('link', { name: /^Saved/ });
+  const saved = await screen.findByRole('link', { name: 'Saved' });
   expect(saved.getAttribute('href')).toBe(`/?link=${SAVED}`);
   expect(saved.getAttribute('target')).toBeNull();
-  expect(screen.getByRole('link', { name: 'Web (example)' }).getAttribute('target')).toBe('_blank');
+  expect(screen.getByRole('link', { name: 'Web' }).getAttribute('target')).toBe('_blank');
 });
 
-it('shows a pill with the site favicon and short name: its own host, or the cited link domain', async () => {
+it('shows a pill with the link text and the site favicon: its own host, or the cited link domain', async () => {
   await renderCitations();
-  const web = await screen.findByRole('link', { name: 'Web (example)' });
-  expect(web.textContent).toBe('example');
+  const web = await screen.findByRole('link', { name: 'Web' });
+  expect(web.textContent).toBe('Web');
   expect(web.querySelector('img')?.getAttribute('src')).toBe('/api/favicon?domain=example.com');
-  const saved = await screen.findByRole('link', { name: 'Saved (example)' });
-  expect(saved.querySelector('img')?.getAttribute('src')).toBe(
-    '/api/favicon?domain=news.example.org',
+  const saved = await screen.findByRole('link', { name: 'Saved' });
+  await waitFor(() =>
+    expect(saved.querySelector('img')?.getAttribute('src')).toBe(
+      '/api/favicon?domain=news.example.org',
+    ),
   );
 });
 

@@ -1,4 +1,4 @@
-import { createContext, isValidElement, useContext } from 'react';
+import { createContext, isValidElement, useContext, useEffect } from 'react';
 import { useInRouterContext } from 'react-router';
 import { ApiError } from '../../../api/client';
 import { useCitationMatch, useLinkCard } from '../../../api/hooks';
@@ -9,6 +9,8 @@ import type { CitationItem } from './citationItems';
 const itemCitation = /^\/\?link=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 export const CitationItems = createContext<CitationItem[]>([]);
+/** A pill whose id was a made-up one reports the real link it matched, so Sources lists that link. */
+export const CitationResolved = createContext<(raw: string, resolved: string) => void>(() => {});
 
 function citationText(node: React.ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') return String(node);
@@ -25,6 +27,10 @@ function SavedCitation({ id, children }: { id: string; children?: React.ReactNod
   // Only a confirmed 404 means a made-up id; any other failure keeps the cited link.
   const missing = isMissing(useLinkCard(id).error);
   const { data: matched } = useCitationMatch(citationText(children), items, missing);
+  const report = useContext(CitationResolved);
+  useEffect(() => {
+    if (matched) report(id, matched);
+  }, [id, matched, report]);
   if (!missing) return <SavedPill id={id}>{children}</SavedPill>;
   return matched ? <SavedPill id={matched}>{children}</SavedPill> : children;
 }

@@ -116,6 +116,7 @@ function newEntry(client: QueryClient, id: string | null): Entry {
           'search',
           'link-titles',
           'link',
+          'link-url',
           'tags',
           'counts',
           'saved-links',

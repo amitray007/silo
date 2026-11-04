@@ -1,11 +1,11 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { memo, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { type AnimateOptions, defaultRehypePlugins, Streamdown } from 'streamdown';
 import { copyLabel, useCopyFlash } from '../../SettingsTabs/copyFlash';
 import { ReaderIcon } from '../ReaderIcon';
 import { AnswerActions } from './AnswerActions';
 import { ApprovalRow } from './ApprovalRow';
-import { Citation, CitationItems } from './Citations';
+import { Citation, CitationItems, CitationResolved } from './Citations';
 import { citationItems } from './citationItems';
 import { messageReasoning, Reasoning } from './Reasoning';
 import { SourcesRow } from './SourcesRow';
@@ -91,6 +91,12 @@ export const ChatMessage = memo(function ChatMessage({
   onApproval?: (response: { id: string; approved: boolean }) => void;
 }) {
   const [wasHeld, setWasHeld] = useState(false);
+  const [resolved, setResolved] = useState<Record<string, string>>({});
+  const resolve = useCallback(
+    (raw: string, real: string) =>
+      setResolved((seen) => (seen[raw] === real ? seen : { ...seen, [raw]: real })),
+    [],
+  );
   if (held && !wasHeld) setWasHeld(true);
   if (message.role === 'user') return <UserMessage message={message} />;
   const { steps, answer } = splitSteps(message);
@@ -137,19 +143,23 @@ export const ChatMessage = memo(function ChatMessage({
         {!held && (
           <div className="silo-chat-answer" data-reveal={wasHeld}>
             <CitationItems value={citationItems(message)}>
-              <Streamdown
-                skipHtml
-                animated={wordFade}
-                isAnimating={streaming}
-                rehypePlugins={citationPlugins}
-                components={markdownComponents}
-              >
-                {answer}
-              </Streamdown>
+              <CitationResolved value={resolve}>
+                <Streamdown
+                  skipHtml
+                  animated={wordFade}
+                  isAnimating={streaming}
+                  rehypePlugins={citationPlugins}
+                  components={markdownComponents}
+                >
+                  {answer}
+                </Streamdown>
+              </CitationResolved>
             </CitationItems>
           </div>
         )}
-        {!streaming && !held && !approving && answer.trim() && <SourcesRow answer={answer} />}
+        {!streaming && !held && !approving && answer.trim() && (
+          <SourcesRow answer={answer} resolved={resolved} />
+        )}
         {!streaming && !approving && answer.trim() && (
           <AnswerActions id={message.id} markdown={answer} />
         )}

@@ -41,6 +41,8 @@ export function runningLabel(part: Part): string {
   return 'Working';
 }
 
+const isFailed = (part: Part) => 'state' in part && part.state === 'output-error';
+
 function searchRow(parts: Part[]): StepRow {
   const counts = parts.map(toolCount).filter((count): count is number => count !== null);
   const hits = new Map<string, string | null>();
@@ -73,6 +75,17 @@ const plainRow = (key: string, icon: ReaderIconName, label: string): StepRow => 
   hits: [],
 });
 
+const FAILED_LABELS: Record<string, string> = {
+  get_link: 'Couldn’t read the article',
+  list_highlights: 'Couldn’t read your notes',
+};
+const failedRow = (name: string) =>
+  plainRow(
+    `failed-${SEARCH_TOOLS.has(name) ? 'search' : name}`,
+    'warning',
+    SEARCH_TOOLS.has(name) ? 'Search failed' : (FAILED_LABELS[name] ?? 'A step failed'),
+  );
+
 const writeRow = (name: string) => {
   const trace = WRITE_TRACES[name] ?? 'Worked';
   return plainRow(`write-${trace}`, WRITE_ICONS[trace] ?? 'check', trace);
@@ -90,12 +103,11 @@ export function stepRows(message: UIMessage): StepRow[] {
   };
   for (const part of finished) {
     const name = toolName(part) ?? '';
-    const failed = 'state' in part && part.state === 'output-error';
-    if (SEARCH_TOOLS.has(name))
-      add(searchRow(finished.filter((p) => SEARCH_TOOLS.has(toolName(p) ?? ''))));
+    if (isFailed(part)) add(failedRow(name));
+    else if (SEARCH_TOOLS.has(name))
+      add(searchRow(finished.filter((p) => SEARCH_TOOLS.has(toolName(p) ?? '') && !isFailed(p))));
     else if (name === 'get_link') add(readRow(part));
     else if (name === 'list_highlights') add(plainRow('notes', 'note', 'Read your notes'));
-    else if (failed) add(plainRow('failed', 'warning', 'A step failed'));
     else add(writeRow(name));
   }
   return rows;

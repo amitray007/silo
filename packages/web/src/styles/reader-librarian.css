@@ -333,6 +333,12 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 .silo-chat-pending {
   color: var(--fnt);
+  /* Aligns with the answer text, past the avatar column and its gap (28px + 10px). */
+  margin-left: 38px;
+}
+.silo-chat[data-variant="dock"] .silo-chat-pending,
+.silo-selection-body .silo-chat-pending {
+  margin-left: 0;
 }
 
 /* Approval: a card in the answer, one ink primary and one quiet secondary. */
@@ -1265,13 +1271,13 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   font-weight: 500;
   line-height: 1;
   text-decoration: none;
-  vertical-align: 1px;
+  vertical-align: -0.28em;
 }
 .silo-cite .silo-letter-chip {
   border-radius: 999px;
 }
 .silo-cite-name {
-  max-width: 14ch;
+  max-width: 36ch;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1299,7 +1305,6 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   color: var(--ink);
   font-size: 12.5px;
   line-height: 1.5;
-  pointer-events: none;
   animation: siloStatusIn 140ms var(--ease-out) both;
 }
 .silo-cite-card-site {

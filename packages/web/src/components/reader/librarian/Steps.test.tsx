@@ -130,3 +130,17 @@ it('keeps the approval card for a pending call and "Not done." for a denied one'
   expect(screen.getByRole('group')).toBeTruthy();
   expect(screen.queryByRole('button', { name: /^Used/ })).toBeNull();
 });
+
+it('labels failed searches and reads as failures, not as done', () => {
+  render(
+    <ChatMessage
+      message={message(
+        tool('search_links', 'output-error', undefined, 's'),
+        tool('get_link', 'output-error', undefined, 'g'),
+      )}
+    />,
+  );
+  open('Used 2 tools');
+  const rows = [...document.querySelectorAll('.silo-steps-row')].map((row) => row.textContent);
+  expect(rows).toEqual(['Search failed', 'Couldn’t read the article']);
+});
