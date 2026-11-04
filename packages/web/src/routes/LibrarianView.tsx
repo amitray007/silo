@@ -77,10 +77,7 @@ function ReadyLibrarianView() {
         aria-label="Chats"
         inert={fullWindow && open}
       >
-        <ContentFrame
-          title="Librarian"
-          headerSlot={<NewChatButton onClick={() => show(NEW_CHAT)} />}
-        >
+        <ContentFrame title="Chats" headerSlot={<NewChatButton onClick={() => show(NEW_CHAT)} />}>
           <ChatList
             selectedId={chatId}
             onOpen={(id) => show(id)}

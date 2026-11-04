@@ -1,9 +1,16 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Outlet, Route, Routes } from 'react-router';
+import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { layoutMedia } from '../lib/breakpoints';
 import { ContentHeader } from './ContentHeader';
+
+function Where() {
+  return <output data-testid="where">{useLocation().pathname}</output>;
+}
+
+let librarianReady = false;
+vi.mock('../api/librarian', () => ({ useLibrarianReady: () => librarianReady }));
 
 function renderCollection({ phone, sidebarHidden }: { phone: boolean; sidebarHidden: boolean }) {
   const media = window.matchMedia;
@@ -26,7 +33,15 @@ function renderCollection({ phone, sidebarHidden }: { phone: boolean; sidebarHid
       <MemoryRouter>
         <Routes>
           <Route element={<Outlet context={{ showSidebar: () => {}, sidebarHidden }} />} path="*">
-            <Route path="*" element={<ContentHeader title="Library" collection />} />
+            <Route
+              path="*"
+              element={
+                <>
+                  <ContentHeader title="Library" collection />
+                  <Where />
+                </>
+              }
+            />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -35,6 +50,7 @@ function renderCollection({ phone, sidebarHidden }: { phone: boolean; sidebarHid
 }
 
 afterEach(() => {
+  librarianReady = false;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -102,5 +118,22 @@ describe('ContentHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: /Library/ }));
     expect(await screen.findByRole('menuitem', { name: /react/ })).toBeDefined();
     expect(screen.getByRole('menuitem', { name: /Trash/ })).toBeDefined();
+  });
+
+  it('hides Chats in the switcher while the Librarian is off', async () => {
+    renderCollection({ phone: false, sidebarHidden: false });
+    fireEvent.click(screen.getByRole('button', { name: /Library/ }));
+    await screen.findByRole('menuitem', { name: /Trash/ });
+    expect(screen.queryByRole('menuitem', { name: /Chats/ })).toBeNull();
+  });
+
+  it('lists Chats between Library and Trash and opens the Librarian page when ready', async () => {
+    librarianReady = true;
+    renderCollection({ phone: false, sidebarHidden: false });
+    fireEvent.click(screen.getByRole('button', { name: /Library/ }));
+    const items = (await screen.findAllByRole('menuitem')).map((item) => item.textContent);
+    expect(items.map((text) => text?.replace(/\d+$/, ''))).toEqual(['Library', 'Chats', 'Trash']);
+    fireEvent.click(screen.getByRole('menuitem', { name: /Chats/ }));
+    expect(screen.getByTestId('where').textContent).toBe('/librarian');
   });
 });
