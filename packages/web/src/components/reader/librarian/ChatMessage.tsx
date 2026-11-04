@@ -1,33 +1,56 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { memo, useState } from 'react';
+import { createContext, isValidElement, memo, useContext, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 import { Block, type BlockProps, defaultRehypePlugins, Streamdown } from 'streamdown';
-import { useLinkUrl } from '../../../api/hooks';
+import { ApiError } from '../../../api/client';
+import { useCitationMatch, useLinkUrl } from '../../../api/hooks';
 import { deriveDomain } from '../../../lib/url';
 import { Chip } from '../../Chip';
+import { copyLabel, useCopyFlash } from '../../SettingsTabs/copyFlash';
 import { ReaderIcon } from '../ReaderIcon';
 import { AnswerActions } from './AnswerActions';
 import { ApprovalRow } from './ApprovalRow';
+import { citationItems } from './citationItems';
 
 const itemCitation = /^\/\?link=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 const FAVICON_PX = 14;
 
-/** The cited link's own site icon: the globe until its URL arrives. */
-function CitedFavicon({ id }: { id: string }) {
-  const { data: url } = useLinkUrl(id);
-  return <Chip domain={url ? deriveDomain(url) : null} size={FAVICON_PX} />;
+const CitationItems = createContext<ReturnType<typeof citationItems>>([]);
+
+function citationText(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(citationText).join('');
+  if (isValidElement<{ children?: React.ReactNode }>(node))
+    return citationText(node.props.children);
+  return '';
+}
+
+const isMissing = (error: unknown) => error instanceof ApiError && error.status === 404;
+
+function SavedCitation({ id, children }: { id: string; children?: React.ReactNode }) {
+  const items = useContext(CitationItems);
+  // Only a confirmed 404 means a made-up id; any other failure keeps the cited link.
+  const missing = isMissing(useLinkUrl(id).error);
+  const { data: matched } = useCitationMatch(citationText(children), items, missing);
+  if (!missing) return <CitationLink id={id}>{children}</CitationLink>;
+  return matched ? <CitationLink id={matched}>{children}</CitationLink> : children;
+}
+
+/** A saved-item link with its site icon: the globe until its URL arrives. */
+function CitationLink({ id, children }: { id: string; children?: React.ReactNode }) {
+  const { data: url, error } = useLinkUrl(id);
+  if (!useInRouterContext() || isMissing(error)) return children;
+  return (
+    <Link to={`/?link=${id}`}>
+      <Chip domain={url ? deriveDomain(url) : null} size={FAVICON_PX} />
+      {children}
+    </Link>
+  );
 }
 
 function Citation({ href, children }: { href?: string | undefined; children?: React.ReactNode }) {
-  const router = useInRouterContext();
   const cited = href ? itemCitation.exec(href)?.[1] : undefined;
-  if (href && cited && router)
-    return (
-      <Link to={href}>
-        <CitedFavicon id={cited} />
-        {children}
-      </Link>
-    );
+  if (cited) return <SavedCitation id={cited}>{children}</SavedCitation>;
   if (href && !cited && !/^https?:\/\//i.test(href)) return <span>{children}</span>;
   return (
     <a href={href} target="_blank" rel="noopener noreferrer">
@@ -171,6 +194,8 @@ export function splitSteps(message: UIMessage): { steps: string[]; answer: strin
 }
 
 function UserMessage({ message }: { message: UIMessage }) {
+  const { copied, copyText } = useCopyFlash();
+  const label = copyLabel(copied, 'Copy message');
   const text = message.parts
     .filter((part) => part.type === 'text')
     .map((part) => part.text)
@@ -185,6 +210,17 @@ function UserMessage({ message }: { message: UIMessage }) {
       <div className="silo-chat-bubble">
         <p>{text}</p>
         {quote && <blockquote className="silo-chat-quote">{quote}</blockquote>}
+      </div>
+      <div className="silo-chat-actions">
+        <button
+          type="button"
+          className="silo-reader-iconbtn"
+          aria-label={label}
+          title={label}
+          onClick={() => copyText(text)}
+        >
+          <ReaderIcon name={copied === true ? 'check' : 'copy'} size={16} />
+        </button>
       </div>
     </div>
   );
@@ -254,16 +290,18 @@ export const ChatMessage = memo(function ChatMessage({
         })}
         {!held && (
           <div className="silo-chat-answer" data-reveal={wasHeld}>
-            <Streamdown
-              skipHtml
-              animated={false}
-              BlockComponent={StreamChunk}
-              isAnimating={streaming}
-              rehypePlugins={citationPlugins}
-              components={markdownComponents}
-            >
-              {answer}
-            </Streamdown>
+            <CitationItems value={citationItems(message)}>
+              <Streamdown
+                skipHtml
+                animated={false}
+                BlockComponent={StreamChunk}
+                isAnimating={streaming}
+                rehypePlugins={citationPlugins}
+                components={markdownComponents}
+              >
+                {answer}
+              </Streamdown>
+            </CitationItems>
           </div>
         )}
         {trace && !approving && <div className="silo-chat-trace">{trace}</div>}

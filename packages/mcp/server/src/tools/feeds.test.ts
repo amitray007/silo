@@ -81,7 +81,8 @@ describeMcpTool('silo_mcp_feeds', 'MCP feed tools', (context) => {
     expect(page.nextCursor).toEqual(expect.any(String));
     const [text] = first.content as Array<{ type: 'text'; text: string }>;
     for (const result of page.results) {
-      expect(text?.text).toContain(result.id);
+      expect(text?.text).toContain(`${result.title} (id: ${result.id}) —`);
+      expect(text?.text?.split(`(id: ${result.id})`)).toHaveLength(2);
       expect(text?.text).toContain(result.title);
       expect(text?.text).toContain(result.url);
     }

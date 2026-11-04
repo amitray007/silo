@@ -57,6 +57,9 @@ describeMcpTool(
 
       const [content] = result.content as Array<{ type: 'text'; text: string }>;
       expect(content?.text).toContain('related to');
+      expect(content?.text).toContain(
+        `Another article on distributed consensus (id: ${relatedId}) —`,
+      );
     });
 
     it('an unknown/trashed seed id -> empty results, not an error', async () => {

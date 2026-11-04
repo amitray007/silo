@@ -49,7 +49,7 @@ export function registerSearchFeedPosts(server: McpServer): void {
           results.length
             ? [
                 `Found ${results.length} posts.`,
-                ...results.map((result) => `${toRankedResultLine(result)} (id: ${result.id})`),
+                ...results.map(toRankedResultLine),
                 'Use get_link with an id to read it. Pass nextCursor, when present, to continue.',
               ].join('\n')
             : 'No matching posts. Try another query, or list_feeds to choose a subscription.',
