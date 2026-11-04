@@ -433,6 +433,30 @@ describeIfPg('oauth core logic (integration)', () => {
       expect(await ops.authenticateOAuthToken(issued.accessToken, RESOURCE)).toBe(true);
       expect(await ops.authenticateOAuthToken(issued.accessToken, RESOURCE)).toBe(true);
     });
+
+    it('throttles last_used_at to once a minute, and refreshes a stale value', async () => {
+      const client = await registerClient();
+      const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+      const read = async () => {
+        const rows = await rawDb.select().from(accessTokens);
+        return rows.find((r) => r.kind === 'oauth_access')?.lastUsedAt;
+      };
+
+      expect(await ops.authenticateOAuthToken(issued.accessToken, RESOURCE)).toBe(true);
+      const first = await read();
+      expect(first).toBeInstanceOf(Date);
+
+      expect(await ops.authenticateOAuthToken(issued.accessToken, RESOURCE)).toBe(true);
+      expect((await read())?.getTime()).toBe(first?.getTime());
+
+      const old = new Date(Date.now() - 120_000);
+      await rawDb
+        .update(accessTokens)
+        .set({ lastUsedAt: old })
+        .where(eq(accessTokens.kind, 'oauth_access'));
+      expect(await ops.authenticateOAuthToken(issued.accessToken, RESOURCE)).toBe(true);
+      expect((await read())?.getTime()).toBeGreaterThan(old.getTime() + 60_000);
+    });
   });
 
   describe('rotateRefreshToken', () => {

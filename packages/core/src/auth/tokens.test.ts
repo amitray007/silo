@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { accessTokens as AccessTokensTable } from '@silo/db';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { drizzle } from 'drizzle-orm/node-postgres';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
+import type * as LastUsedOps from './last-used.js';
 import type * as TokensOps from './tokens.js';
 
 /**
@@ -29,10 +30,11 @@ const describeIfPg = postgresReachable() ? describe : describe.skip;
 describeIfPg('access token operations (integration)', () => {
   const harness = setupPgHarness('silo_core_tokens_test', async () => {
     const tokensMod = await import('./tokens.js');
+    const lastUsedMod = await import('./last-used.js');
     const dbMod = await import('@silo/db');
-    return { ...tokensMod, accessTokens: dbMod.accessTokens };
+    return { ...tokensMod, ...lastUsedMod, accessTokens: dbMod.accessTokens };
   });
-  let ops: typeof TokensOps;
+  let ops: typeof TokensOps & typeof LastUsedOps;
   let accessTokens: typeof AccessTokensTable;
   let rawDb: ReturnType<typeof drizzle>;
 
@@ -108,6 +110,80 @@ describeIfPg('access token operations (integration)', () => {
         .from(accessTokens)
         .where(eq(accessTokens.id, created.id));
       expect(after?.lastUsedAt).toBeInstanceOf(Date);
+    });
+
+    describe('last_used_at throttle', () => {
+      async function lastUsed(id: string): Promise<Date | null | undefined> {
+        const [row] = await rawDb.select().from(accessTokens).where(eq(accessTokens.id, id));
+        return row?.lastUsedAt;
+      }
+
+      async function setLastUsedAgo(id: string, seconds: number): Promise<Date> {
+        const at = new Date(Date.now() - seconds * 1000);
+        await rawDb.update(accessTokens).set({ lastUsedAt: at }).where(eq(accessTokens.id, id));
+        return at;
+      }
+
+      it('does not rewrite a value younger than the refresh window', async () => {
+        const created = await ops.generateAccessToken('throttle-fresh');
+        const recent = await setLastUsedAgo(created.id, ops.LAST_USED_REFRESH_SECONDS - 30);
+
+        expect(await ops.verifyAccessToken(created.token)).toBe(true);
+
+        expect((await lastUsed(created.id))?.getTime()).toBe(recent.getTime());
+      });
+
+      it('refreshes a value older than the refresh window', async () => {
+        const created = await ops.generateAccessToken('throttle-stale');
+        const old = await setLastUsedAgo(created.id, ops.LAST_USED_REFRESH_SECONDS + 5);
+
+        expect(await ops.verifyAccessToken(created.token)).toBe(true);
+
+        const after = await lastUsed(created.id);
+        expect(after?.getTime()).toBeGreaterThan(old.getTime() + 60_000);
+        expect(Date.now() - (after?.getTime() ?? 0)).toBeLessThan(30_000);
+      });
+
+      it('accepts a concurrent burst on a never-used token, then leaves the stored value alone', async () => {
+        const created = await ops.generateAccessToken('throttle-burst');
+
+        const results = await Promise.all(
+          Array.from({ length: 10 }, () => ops.verifyAccessToken(created.token)),
+        );
+        expect(results.every(Boolean)).toBe(true);
+        const first = await lastUsed(created.id);
+        expect(first).toBeInstanceOf(Date);
+
+        // Still inside the window: later verifications leave the stored value untouched.
+        await ops.verifyAccessToken(created.token);
+        expect((await lastUsed(created.id))?.getTime()).toBe(first?.getTime());
+      });
+
+      it('still authenticates when the bookkeeping write fails', async () => {
+        const created = await ops.generateAccessToken('throttle-write-fails');
+        await rawDb.execute(sql`
+          create or replace function test_block_token_update() returns trigger language plpgsql
+          as $$ begin raise exception 'update blocked for test'; end $$`);
+        await rawDb.execute(sql`
+          create trigger test_block_token_update before update on access_tokens
+          for each row execute function test_block_token_update()`);
+        try {
+          expect(await ops.verifyAccessToken(created.token)).toBe(true);
+          expect(await lastUsed(created.id)).toBeNull();
+        } finally {
+          await rawDb.execute(sql`drop trigger test_block_token_update on access_tokens`);
+          await rawDb.execute(sql`drop function test_block_token_update()`);
+        }
+      });
+
+      it('a token revoked inside the throttle window is denied on the very next call', async () => {
+        const created = await ops.generateAccessToken('throttle-then-revoke');
+        expect(await ops.verifyAccessToken(created.token)).toBe(true);
+        // last_used_at is now fresh, so the next verify skips the write; revoke must still bite.
+        expect(await ops.revokeAccessToken(created.id)).toBe(true);
+        expect(await ops.verifyAccessToken(created.token)).toBe(false);
+        expect(await ops.verifyAccessToken(created.token)).toBe(false);
+      });
     });
 
     it('a revoked token no longer verifies', async () => {

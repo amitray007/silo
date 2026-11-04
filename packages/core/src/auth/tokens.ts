@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { accessTokens, db } from '@silo/db';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
+import { lastUsedIsStale, touchLastUsed } from './last-used.js';
 
 /**
  * DB-backed named access tokens (access-tokens slice, U1): lets the user
@@ -119,10 +120,15 @@ export async function revokeAccessToken(id: string): Promise<boolean> {
  * actionable from a hash-lookup's timing, and the lookup itself is a DB index
  * seek, not a byte-by-byte comparison in application code.
  *
- * On a match, best-effort updates `last_used_at = now()` — wrapped in
- * try/catch so a failure to write that bookkeeping column can NEVER cause an
- * otherwise-valid credential to be rejected; the function still returns
- * `true` even if the update throws.
+ * On a match, best-effort updates `last_used_at = now()`, at most once per
+ * `LAST_USED_REFRESH_SECONDS` (60 s; see `last-used.ts`), so the displayed
+ * "last used" is accurate to within a minute. A failure to write that
+ * bookkeeping column can NEVER cause an otherwise-valid credential to be
+ * rejected; the function still returns `true` even if the update throws.
+ *
+ * There is deliberately no in-process cache of validation results: the API and
+ * the MCP server are separate processes, so a revoke in one could not clear a
+ * cache in the other, and a revoked token must stop working immediately.
  *
  * Scoped to `kind='bearer'` (MCP OAuth slice, Unit 3 fix): `access_tokens`
  * is now a unified store shared with `oauth_access`/`oauth_refresh` rows
@@ -137,21 +143,15 @@ export async function verifyAccessToken(rawToken: string): Promise<boolean> {
   const tokenHash = sha256Hex(rawToken);
 
   const [row] = await db
-    .select({ id: accessTokens.id })
+    .select({ id: accessTokens.id, stale: lastUsedIsStale })
     .from(accessTokens)
     .where(and(eq(accessTokens.tokenHash, tokenHash), eq(accessTokens.kind, 'bearer')))
     .limit(1);
 
   if (!row) return false;
 
-  try {
-    await db
-      .update(accessTokens)
-      .set({ lastUsedAt: sql`now()` })
-      .where(eq(accessTokens.id, row.id));
-  } catch {
-    // Best-effort bookkeeping only — a failure here must never fail auth.
-  }
+  // Throttled: see last-used.ts. Skipped entirely (no round-trip) while the stored value is fresh.
+  if (row.stale) await touchLastUsed(row.id);
 
   return true;
 }
