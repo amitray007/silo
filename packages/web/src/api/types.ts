@@ -309,6 +309,7 @@ export type SettingsMap = {
   /** List-row hover cards. Default false; independent of palette previews. */
   hoverPreview: boolean;
   /** How Librarian answers arrive; absent reads as 'streamed'. */
+  librarianSuggestions?: boolean;
   chatAnswers?: 'streamed' | 'complete';
   plugins: {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };

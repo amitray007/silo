@@ -456,3 +456,8 @@ it('defaults old read-aloud settings to relaxed pauses and validates pause write
     expect(() => readerPatchSchema.parse({ readAloud: { pauses } })).toThrow();
   }
 });
+
+it('defaults Librarian follow-ups on for existing settings', () => {
+  expect(SETTINGS_DEFAULTS.librarianSuggestions).toBe(true);
+  expect(parseSettingValue('librarianSuggestions', false)).toBe(false);
+});

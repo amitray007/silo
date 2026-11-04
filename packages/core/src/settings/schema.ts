@@ -129,6 +129,7 @@ const settingsSchema = {
     .strict(),
   ai: aiSchema,
   /** How Librarian answers arrive: word by word as they stream, or whole once finished. */
+  librarianSuggestions: z.boolean(),
   chatAnswers: z.enum(['streamed', 'complete']),
   /**
    * The synced reader preferences (type, width, pencil, highlight colour, read aloud). `null`
@@ -157,6 +158,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
   mcpAccess: true,
   linkPreviewImages: true,
   hoverPreview: false,
+  librarianSuggestions: true,
   chatAnswers: 'streamed',
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true, palette: true },

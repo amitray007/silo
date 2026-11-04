@@ -455,3 +455,48 @@ it('stops its answers speaking when the dock chat folds', () => {
   view.rerender(thread(false));
   expect(stopAnswerSpeech).toHaveBeenCalledWith('a');
 });
+
+it.each([
+  { busy: false, pendingApproval: false, shown: true },
+  { busy: true, pendingApproval: false, shown: false },
+  { busy: false, pendingApproval: true, shown: false },
+])('shows only the last assistant follow-ups ($shown)', ({ busy, pendingApproval, shown }) => {
+  const suggestion = (id: string, label: string): UIMessage => ({
+    id,
+    role: 'assistant',
+    parts: [
+      {
+        type: 'data-suggestions',
+        data: { status: 'ready', items: [{ kind: 'ask', text: label }] },
+      },
+    ],
+  });
+  const chat = fakeChat({
+    busy,
+    pendingApproval,
+    messages: [suggestion('old', 'Old follow-up'), suggestion('last', 'Latest follow-up')],
+  });
+  mount(chat);
+  expect(screen.queryByRole('button', { name: 'Old follow-up' })).toBeNull();
+  expect(!!screen.queryByRole('button', { name: 'Latest follow-up' })).toBe(shown);
+  if (shown) {
+    fireEvent.click(screen.getByRole('button', { name: 'Latest follow-up' }));
+    expect(chat.send).toHaveBeenCalledWith('Latest follow-up', undefined, undefined);
+  }
+});
+
+it('shows pending skeletons once the answer text has ended', () => {
+  mount(
+    fakeChat({
+      busy: true,
+      messages: [
+        {
+          id: 'a',
+          role: 'assistant',
+          parts: [{ type: 'data-suggestions', data: { status: 'pending' } }],
+        },
+      ],
+    }),
+  );
+  expect(screen.getAllByRole('button', { name: 'Loading follow-up' })).toHaveLength(3);
+});

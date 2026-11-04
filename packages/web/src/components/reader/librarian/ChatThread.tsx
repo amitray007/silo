@@ -131,6 +131,7 @@ export function ChatThread({
   useRefreshOnRemovedAction(chat.error?.message);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
+  const suggestions = followups(chat, lastAssistant);
   const reasoningShown = showsLiveReasoning(lastAssistant, wholeAnswers);
   const status = statusLabel(chat.messages);
   const send = (text: string, action?: string) => {
@@ -250,6 +251,8 @@ export function ChatThread({
           )
         }
         passage={passage && { quote: passage.quote, onRemove: () => setPassage(undefined) }}
+        suggestions={suggestions}
+        onSuggestion={(text) => send(text)}
         quick={quick}
         quickDisabled={disabled}
         onQuick={(id, label) => {
@@ -258,4 +261,15 @@ export function ChatThread({
       />
     </div>
   );
+}
+
+function followups(chat: ThreadChat, message: UIMessage | undefined) {
+  const part = message?.parts.find((part) => part.type === 'data-suggestions');
+  const data =
+    part && 'data' in part
+      ? (part.data as { status: string; items?: { kind: string; text: string }[] })
+      : undefined;
+  return !chat.pendingApproval && !chat.loading && (!chat.busy || data?.status === 'pending')
+    ? data
+    : undefined;
 }

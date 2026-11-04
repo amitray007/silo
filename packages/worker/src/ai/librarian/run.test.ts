@@ -5,6 +5,7 @@ import { credential } from '../test-helpers.js';
 
 vi.mock('@silo/core', () => ({
   saveChatMessages: vi.fn(),
+  getSetting: vi.fn(() => false),
   librarianPersona: 'Librarian persona',
   promptVersion: 1,
   librarianMessageSchema: { parse: (m: unknown) => m },
@@ -16,16 +17,29 @@ vi.mock('@silo/core/ai-credential', () => ({
 }));
 vi.mock('../model.js', () => ({ languageModelFor: vi.fn() }));
 
-import { saveChatMessages } from '@silo/core';
+vi.mock('./suggestions.js', () => ({
+  suggestFollowups: vi.fn(async () => [{ kind: 'ask', text: 'What next?' }]),
+}));
+
+import { getSetting, saveChatMessages } from '@silo/core';
 import { getLibrarianToolSource, resolveAiFeatureCredential } from '@silo/core/ai-credential';
 import { languageModelFor } from '../model.js';
 import { runLibrarian } from './run.js';
+import { suggestFollowups } from './suggestions.js';
 
 afterEach(() => vi.clearAllMocks());
 describe('Librarian streaming', () => {
-  it.each([false, true])(
-    'streams text and persists only durable replies (transient=%s)',
-    async (transient) => {
+  it.each([
+    [false, false, false],
+    [false, true, false],
+    [false, true, true],
+    [true, true, false],
+  ])(
+    'streams text and persists suggestions only when enabled (transient=%s enabled=%s)',
+    async (transient, enabled, empty) => {
+      const items = empty ? [] : [{ kind: 'ask' as const, text: 'What next?' }];
+      vi.mocked(suggestFollowups).mockResolvedValue(items);
+      vi.mocked(getSetting).mockResolvedValue(enabled);
       vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
       vi.mocked(languageModelFor).mockReturnValue(
         new MockLanguageModelV4({
@@ -62,7 +76,29 @@ describe('Librarian streaming', () => {
         messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
         link: null,
       });
-      expect(await response.text()).toContain('Hello');
+      const body = await response.text();
+      expect(body).toContain('Hello');
+      if (enabled && !transient) {
+        expect(body).toContain('data-suggestions');
+        expect(body).toContain('pending');
+        expect(body).not.toContain('errorText');
+        if (empty) expect(body).toContain('"items":[]');
+        else expect(body).toContain('What next?');
+        expect(saveChatMessages).toHaveBeenCalledWith(
+          'chat',
+          expect.arrayContaining([
+            expect.objectContaining({
+              role: 'assistant',
+              parts: expect.arrayContaining([
+                expect.objectContaining({
+                  type: 'data-suggestions',
+                  data: { status: 'ready', items },
+                }),
+              ]),
+            }),
+          ]),
+        );
+      } else expect(suggestFollowups).not.toHaveBeenCalled();
       expect(endRun).toHaveBeenCalled();
       if (transient) {
         expect(saveChatMessages).not.toHaveBeenCalled();
@@ -431,7 +467,9 @@ describe('Librarian streaming', () => {
       messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Read' }] }],
       link: null,
     });
-    expect(await response.text()).toContain('tool-approval-request');
+    const pausedBody = await response.text();
+    expect(pausedBody).toContain('tool-approval-request');
+    expect(pausedBody).not.toContain('data-suggestions');
     expect(step).toBe(1);
     expect(call).not.toHaveBeenCalled();
     const saved = structuredClone(vi.mocked(saveChatMessages).mock.calls.at(-1)?.[1]);

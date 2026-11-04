@@ -65,6 +65,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       linkPreviewImages: true,
       hoverPreview: false,
       chatAnswers: 'streamed',
+      librarianSuggestions: true,
       reader: null,
       librarianActions: harness.mod().core.LIBRARIAN_ACTIONS_DEFAULTS,
       ai: {
@@ -96,6 +97,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       'chatAnswers',
       'hoverPreview',
       'librarianActions',
+      'librarianSuggestions',
       'linkPreviewImages',
       'mcpAccess',
       'plugins',

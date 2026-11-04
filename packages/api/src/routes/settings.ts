@@ -50,6 +50,7 @@ const settingsPatchBodySchema = z
     // card shows the captured og:image.
     linkPreviewImages: z.boolean().optional(),
     hoverPreview: z.boolean().optional(),
+    librarianSuggestions: z.boolean().optional(),
     chatAnswers: z.enum(['streamed', 'complete']).optional(),
     // Plan 026: per-source objects (master `enabled` + the render features that
     // source supports). Mirrors `core`'s `settingsSchema.plugins` exactly —
@@ -147,7 +148,11 @@ export function registerSettingsRoutes(app: Hono): void {
       return c.json({ error: 'payload_too_large', message: 'Request body exceeds 16 KB' }, 413);
     }
     const body = settingsPatchBodySchema.parse(input);
-    if (body.ai !== undefined || body.librarianActions !== undefined) {
+    if (
+      body.ai !== undefined ||
+      body.librarianActions !== undefined ||
+      body.librarianSuggestions !== undefined
+    ) {
       const denied = operatorOnlyFailure(c);
       if (denied) return denied;
     }
