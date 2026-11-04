@@ -17,6 +17,24 @@ export function deriveDomain(url: string): string {
   }
 }
 
+const SECOND_LEVEL = new Set(['co', 'com', 'org', 'net', 'gov', 'ac', 'edu']);
+
+/**
+ * A short site name for a pill: the registrable label without its suffix
+ * ("simonwillison.net" -> "simonwillison", "bbc.co.uk" -> "bbc"). A bare or
+ * single-label host passes through.
+ */
+export function siteName(domain: string): string {
+  const labels = domain
+    .replace(/^www\./i, '')
+    .toLowerCase()
+    .split('.');
+  if (labels.length < 2) return labels.join('.');
+  const second = labels.at(-2) ?? '';
+  const drop = labels.length > 2 && second.length <= 3 && SECOND_LEVEL.has(second) ? 2 : 1;
+  return labels.at(-1 - drop) ?? labels[0] ?? domain;
+}
+
 /**
  * The row's title fallback when `LinkJson.title` is `null`: the url with its
  * `http://`/`https://` scheme stripped (the prototype's fallback — confirmed

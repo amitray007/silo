@@ -11,7 +11,7 @@ import {
   useLibrarianChats,
 } from '../../../api/librarian';
 import { STREAM_UPDATE_MS } from '../../../lib/motion';
-import { toolName, WRITE_TRACES } from './ChatMessage';
+import { toolName, WRITE_TRACES } from './tools';
 
 const ERROR_WORDS: Record<string, string> = {
   approval_pending: 'Allow or deny the waiting request first.',

@@ -35,6 +35,7 @@ export function SelectionAnswerCard({
 }) {
   const assistant = messages.filter((message) => message.role === 'assistant');
   const wholeAnswers = useChatAnswers() === 'complete';
+  const status = statusLabel(messages);
   return (
     <section tabIndex={-1} className="silo-selection-answer" aria-label="Passage answer">
       <header>
@@ -58,7 +59,7 @@ export function SelectionAnswerCard({
             held={wholeAnswers && busy && index === assistant.length - 1}
           />
         ))}
-        {busy && <StatusLine label={statusLabel(messages)} className="silo-chat-pending" />}
+        {busy && status && <StatusLine label={status} className="silo-chat-pending" />}
         {error && (
           <p role="alert" className="silo-chat-error">
             {error}

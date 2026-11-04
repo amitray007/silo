@@ -1,5 +1,6 @@
 import {
   type InfiniteData,
+  queryOptions,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -203,25 +204,35 @@ export function useRefreshReader(linkId: string) {
   });
 }
 
+export type LinkCard = { url: string; title: string | null; createdAt: string };
+
 /**
- * A cited link's URL, for its favicon: a one-character text window keeps the response small, and
- * a link's URL never changes, so one fetch per id is enough.
+ * What a cited link's pill, hover card and sources row show: URL, title and saved date. A
+ * one-character text window keeps the response small, and one fetch per id is enough.
  */
-export function useLinkUrl(id: string) {
-  return useQuery({
+export const linkCardOptions = (id: string) =>
+  queryOptions({
     queryKey: ['link-url', id] as const,
     queryFn: ({ signal }) =>
       apiGet<LinkResponse>(
         `/api/links/${encodeURIComponent(id)}?textOffset=0&textLimit=1`,
         signal,
-      ).then((data) => data.link.url),
+      ).then(
+        ({ link }): LinkCard => ({ url: link.url, title: link.title, createdAt: link.createdAt }),
+      ),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
     retryOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-}
+
+/** A cited link's URL, for its favicon. */
+export const useLinkUrl = (id: string) =>
+  useQuery({ ...linkCardOptions(id), select: (card) => card.url });
+
+/** A cited link's URL, title and saved date: the same cached request as `useLinkUrl`. */
+export const useLinkCard = (id: string) => useQuery(linkCardOptions(id));
 
 /** Fetch one link's detail for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {

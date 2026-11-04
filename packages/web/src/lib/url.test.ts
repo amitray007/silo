@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveDomain, deriveTitleFromUrl, looksLikeUrl, normalizeFeedUrl } from './url';
+import { deriveDomain, deriveTitleFromUrl, looksLikeUrl, normalizeFeedUrl, siteName } from './url';
 
 describe('deriveDomain', () => {
   it('returns the hostname for a valid url', () => {
@@ -81,5 +81,20 @@ describe('normalizeFeedUrl', () => {
     'mailto:owner@example.com',
   ])('preserves %s for scheme validation', (value) => {
     expect(normalizeFeedUrl(value)).toBe(value);
+  });
+});
+
+describe('siteName', () => {
+  it('drops the suffix and any subdomain', () => {
+    expect(siteName('simonwillison.net')).toBe('simonwillison');
+    expect(siteName('www.news.example.org')).toBe('example');
+  });
+
+  it('drops a two-part suffix', () => {
+    expect(siteName('bbc.co.uk')).toBe('bbc');
+  });
+
+  it('passes a single-label host through', () => {
+    expect(siteName('localhost')).toBe('localhost');
   });
 });

@@ -1,65 +1,17 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { createContext, isValidElement, memo, useContext, useState } from 'react';
-import { Link, useInRouterContext } from 'react-router';
+import { memo, useState } from 'react';
 import { type AnimateOptions, defaultRehypePlugins, Streamdown } from 'streamdown';
-import { ApiError } from '../../../api/client';
-import { useCitationMatch, useLinkUrl } from '../../../api/hooks';
-import { deriveDomain } from '../../../lib/url';
-import { Chip } from '../../Chip';
 import { copyLabel, useCopyFlash } from '../../SettingsTabs/copyFlash';
 import { ReaderIcon } from '../ReaderIcon';
 import { AnswerActions } from './AnswerActions';
 import { ApprovalRow } from './ApprovalRow';
+import { Citation, CitationItems } from './Citations';
 import { citationItems } from './citationItems';
 import { messageReasoning, Reasoning } from './Reasoning';
+import { SourcesRow } from './SourcesRow';
+import { Steps } from './Steps';
+import { splitSteps, toolName } from './tools';
 
-const itemCitation = /^\/\?link=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
-const FAVICON_PX = 14;
-
-const CitationItems = createContext<ReturnType<typeof citationItems>>([]);
-
-function citationText(node: React.ReactNode): string {
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(citationText).join('');
-  if (isValidElement<{ children?: React.ReactNode }>(node))
-    return citationText(node.props.children);
-  return '';
-}
-
-const isMissing = (error: unknown) => error instanceof ApiError && error.status === 404;
-
-function SavedCitation({ id, children }: { id: string; children?: React.ReactNode }) {
-  const items = useContext(CitationItems);
-  // Only a confirmed 404 means a made-up id; any other failure keeps the cited link.
-  const missing = isMissing(useLinkUrl(id).error);
-  const { data: matched } = useCitationMatch(citationText(children), items, missing);
-  if (!missing) return <CitationLink id={id}>{children}</CitationLink>;
-  return matched ? <CitationLink id={matched}>{children}</CitationLink> : children;
-}
-
-/** A saved-item link with its site icon: the globe until its URL arrives. */
-function CitationLink({ id, children }: { id: string; children?: React.ReactNode }) {
-  const { data: url, error } = useLinkUrl(id);
-  if (!useInRouterContext() || isMissing(error)) return children;
-  return (
-    <Link to={`/?link=${id}`}>
-      <Chip domain={url ? deriveDomain(url) : null} size={FAVICON_PX} />
-      {children}
-    </Link>
-  );
-}
-
-function Citation({ href, children }: { href?: string | undefined; children?: React.ReactNode }) {
-  const cited = href ? itemCitation.exec(href)?.[1] : undefined;
-  if (cited) return <SavedCitation id={cited}>{children}</SavedCitation>;
-  if (href && !cited && !/^https?:\/\//i.test(href)) return <span>{children}</span>;
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer">
-      <Chip domain={href && !cited ? deriveDomain(href) : null} size={FAVICON_PX} />
-      {children}
-    </a>
-  );
-}
 const citationPlugins: NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']> =
   Object.entries(defaultRehypePlugins).map<
     NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']>[number]
@@ -82,111 +34,8 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof Streamdown>['c
   img: () => null,
 };
 
-function textCount(text: string): number | null {
-  try {
-    return resultCount(JSON.parse(text));
-  } catch {
-    const count = /^(\d+) (?:results?|links?)/.exec(text)?.[1];
-    if (count) return Number(count);
-    return /^No (?:results|links)/.test(text) ? 0 : null;
-  }
-}
-function resultCount(output: unknown): number | null {
-  if (typeof output === 'string') return textCount(output);
-  if (Array.isArray(output)) return output.length;
-  if (!output || typeof output !== 'object') return null;
-  if ('count' in output && typeof output.count === 'number') return output.count;
-  if ('results' in output && Array.isArray(output.results)) return output.results.length;
-  if ('links' in output && Array.isArray(output.links)) return output.links.length;
-  if ('text' in output && typeof output.text === 'string') {
-    return textCount(output.text);
-  }
-  return null;
-}
-function toolCount(part: UIMessage['parts'][number]) {
-  return 'output' in part ? resultCount(part.output) : null;
-}
-export const WRITE_TRACES: Record<string, string> = {
-  capture_link: 'Saved to your library',
-  edit_link: 'Edited',
-  add_link_tag: 'Tagged',
-  remove_link_tag: 'Tagged',
-  create_tag: 'Tagged',
-  rename_tag: 'Tagged',
-  add_highlight: 'Highlighted',
-  edit_highlight: 'Highlighted',
-  trash_link: 'Moved to trash',
-  hard_delete_link: 'Deleted',
-  delete_tag: 'Deleted',
-  delete_highlight: 'Deleted',
-  restore_link: 'Restored',
-  subscribe_feed: 'Subscribed',
-  unsubscribe_feed: 'Unsubscribed',
-  archive_feed_post: 'Archived',
-  unarchive_feed_post: 'Restored',
-  save_feed_post: 'Saved to your library',
-  rename_feed: 'Edited',
-  refresh_feed: 'Refreshed',
-  refresh_reader: 'Refreshed',
-  retry_capture: 'Retried',
-};
-const SEARCH_TOOLS = new Set(['search_links', 'find_related', 'list_links']);
 /** Words fade in as they arrive; sd-fadeIn and the reduced-motion rule live in reader-librarian.css. */
 const wordFade: AnimateOptions = { animation: 'fadeIn', duration: 250, sep: 'word' };
-
-export function toolName(part: UIMessage['parts'][number]): string | null {
-  if (part.type === 'dynamic-tool') return part.toolName;
-  return part.type.startsWith('tool-') ? part.type.slice(5) : null;
-}
-
-const RUNNING = new Set(['input-streaming', 'input-available']);
-/** A tool call that has not returned yet: the status line names it, so the trace must not. */
-export function isRunning(part: UIMessage['parts'][number]): boolean {
-  return toolName(part) !== null && 'state' in part && RUNNING.has(part.state);
-}
-
-function writeTrace(part: UIMessage['parts'][number]): string | undefined {
-  if (!('state' in part) || part.state !== 'output-available') return undefined;
-  return WRITE_TRACES[toolName(part) ?? ''];
-}
-/** The steps that share one trace phrase: every search reads as "Searched your library". */
-const stepOf = (name: string | null) => (name && SEARCH_TOOLS.has(name) ? 'search' : name);
-
-/** "Searched your library", with the number of links found when every search reported one. */
-function searchTrace(parts: UIMessage['parts']): string | undefined {
-  const searches = parts.filter((part) => SEARCH_TOOLS.has(toolName(part) ?? ''));
-  if (searches.length === 0) return undefined;
-  const counts = searches.map(toolCount).filter((count): count is number => count !== null);
-  const found = counts.reduce((sum, count) => sum + count, 0);
-  return `Searched your library${counts.length > 0 ? ` · ${found} links` : ''}`;
-}
-
-function traceLine(message: UIMessage): string {
-  // A step that is running is the status line's to show; its trace waits until it finishes.
-  const running = new Set(message.parts.filter(isRunning).map((part) => stepOf(toolName(part))));
-  const done = message.parts.filter(
-    (part) => !isRunning(part) && !running.has(stepOf(toolName(part))),
-  );
-  const names = done.map(toolName);
-  const traces = new Set(done.map(writeTrace).filter((text): text is string => text !== undefined));
-  if (names.includes('get_link')) traces.add('Read this article');
-  if (names.includes('list_highlights')) traces.add('Read your notes');
-  const searched = searchTrace(done);
-  if (searched) traces.add(searched);
-  return [...traces].join(' · ');
-}
-
-/** Text written before a later tool call is the model thinking aloud; the answer comes after the last call. */
-export function splitSteps(message: UIMessage): { steps: string[]; answer: string } {
-  const lastTool = message.parts.findLastIndex((part) => toolName(part) !== null);
-  const steps: string[] = [];
-  const answer: string[] = [];
-  message.parts.forEach((part, index) => {
-    if (part.type !== 'text' || !part.text.trim()) return;
-    (index < lastTool ? steps : answer).push(part.text);
-  });
-  return { steps, answer: answer.join('\n\n') };
-}
 
 function UserMessage({ message }: { message: UIMessage }) {
   const { copied, copyText } = useCopyFlash();
@@ -245,7 +94,6 @@ export const ChatMessage = memo(function ChatMessage({
   if (held && !wasHeld) setWasHeld(true);
   if (message.role === 'user') return <UserMessage message={message} />;
   const { steps, answer } = splitSteps(message);
-  const trace = traceLine(message);
   const approving = isAwaitingApproval(message);
   const reasoning = held ? null : messageReasoning(message);
   return (
@@ -261,6 +109,7 @@ export const ChatMessage = memo(function ChatMessage({
               {step}
             </p>
           ))}
+        <Steps message={message} />
         {message.parts.map((part) => {
           if (!('state' in part)) return null;
           if (part.state === 'output-denied')
@@ -300,7 +149,7 @@ export const ChatMessage = memo(function ChatMessage({
             </CitationItems>
           </div>
         )}
-        {trace && !approving && <div className="silo-chat-trace">{trace}</div>}
+        {!streaming && !held && !approving && answer.trim() && <SourcesRow answer={answer} />}
         {!streaming && !approving && answer.trim() && (
           <AnswerActions id={message.id} markdown={answer} />
         )}

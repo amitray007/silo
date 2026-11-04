@@ -1,4 +1,5 @@
 import type { UIMessage } from '@ai-sdk/react';
+import { SEARCH_TOOLS, toolName } from './tools';
 
 export type CitationItem = { id: string; title: string | null };
 
@@ -34,14 +35,16 @@ function readItems(output: unknown): CitationItem[] {
     .flatMap(([, value]) => readItems(value));
 }
 
+/** The links one tool call returned: only the library read tools carry citable ids. */
+export function partCitations(part: UIMessage['parts'][number]): CitationItem[] {
+  const name = toolName(part) ?? '';
+  return [...SEARCH_TOOLS, 'get_link'].includes(name) && 'output' in part
+    ? readItems(part.output)
+    : [];
+}
+
 export function citationItems(message: UIMessage): CitationItem[] {
-  return message.parts.flatMap((part) => {
-    const name = part.type === 'dynamic-tool' ? part.toolName : part.type.slice(5);
-    return ['search_links', 'find_related', 'list_links', 'get_link'].includes(name) &&
-      'output' in part
-      ? readItems(part.output)
-      : [];
-  });
+  return message.parts.flatMap(partCitations);
 }
 
 export function matchCitation(title: string, items: CitationItem[]): string | undefined {

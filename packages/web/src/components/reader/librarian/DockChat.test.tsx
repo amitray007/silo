@@ -86,7 +86,7 @@ it('resumes stored messages and folds with minus, grid and Escape', async () => 
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(fold).toHaveBeenCalledTimes(3);
 });
-it('renders article and search traces from tool results', () => {
+it('lists article and search steps from tool results', () => {
   render(
     <ChatMessage
       message={{
@@ -113,7 +113,10 @@ it('renders article and search traces from tool results', () => {
       }}
     />,
   );
-  expect(screen.getByText('Read this article · Searched your library · 2 links')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Used 2 tools' }));
+  expect(screen.getByText('Read the article')).toBeTruthy();
+  expect(screen.getByText('Searched your library')).toBeTruthy();
+  expect(screen.getByText('2 links')).toBeTruthy();
 });
 it('shows a fixed error without provider details', async () => {
   setup();

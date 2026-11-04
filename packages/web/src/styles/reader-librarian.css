@@ -249,10 +249,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     opacity: 1;
   }
 }
-.silo-chat-assistant a .silo-letter-chip {
-  margin-right: 4px;
-  vertical-align: -2px;
-}
 .silo-chat-assistant :is(p, ul, ol, pre, blockquote) + :is(p, ul, ol, pre, blockquote) {
   margin-top: 8px;
 }
@@ -314,14 +310,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 .silo-chat-denied {
   color: var(--mut);
-}
-.silo-chat-trace {
-  margin-top: 8px;
-  color: var(--fnt);
-  font-size: 12px;
-  line-height: 16px;
-  /* The finished step arrives as its running status leaves: the same 160ms, 2px drift. */
-  animation: siloStatusIn 160ms var(--ease-out) both;
 }
 .silo-chat-empty {
   margin: 0;
@@ -1189,6 +1177,228 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
 .silo-reasoning-full {
   line-height: 1.6;
 }
+/* Steps: the timeline under the "Used N tools" disclosure. */
+.silo-steps-list {
+  display: grid;
+  margin: 0;
+  padding: 0 0 0 2px;
+  list-style: none;
+}
+.silo-steps-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 0 8px;
+  padding-bottom: 10px;
+  font-size: 13px;
+}
+.silo-steps-row:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  left: 9.5px;
+  top: 22px;
+  bottom: 2px;
+  width: 1px;
+  background: var(--line-2);
+}
+.silo-steps-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--fnt);
+}
+.silo-steps-label {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  min-height: 20px;
+  min-width: 0;
+  line-height: 20px;
+  color: var(--mut);
+}
+.silo-steps-label small {
+  color: var(--fnt);
+  font-size: 12px;
+}
+.silo-steps-hits {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.silo-steps-hit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  max-width: 220px;
+  padding: 0 8px 0 4px;
+  border-radius: 6px;
+  background: var(--hov);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  color: var(--mut);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-steps-more {
+  padding: 0 8px;
+  color: var(--fnt);
+}
+
+/* Inline citation pills and their hover card. */
+.silo-chat-assistant a.silo-cite {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  margin: 0 1px;
+  padding: 0 7px 0 3px;
+  border-radius: 999px;
+  background: var(--hov);
+  box-shadow: inset 0 0 0 0.5px var(--line-2);
+  color: var(--mut);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  vertical-align: 1px;
+}
+.silo-cite .silo-letter-chip {
+  border-radius: 999px;
+}
+.silo-cite-name {
+  max-width: 14ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+@media (hover: hover) {
+  .silo-chat-assistant a.silo-cite:hover {
+    background: var(--sel);
+    color: var(--ink);
+  }
+}
+.silo-chat-assistant a.silo-cite:focus-visible {
+  background: var(--sel);
+  color: var(--ink);
+}
+.silo-cite-card {
+  position: fixed;
+  z-index: 50;
+  display: grid;
+  gap: 4px;
+  width: 280px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg2);
+  box-shadow: var(--menu-shadow);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.5;
+  pointer-events: none;
+  animation: siloStatusIn 140ms var(--ease-out) both;
+}
+.silo-cite-card-site {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--fnt);
+  font-size: 11.5px;
+}
+.silo-cite-card-site time {
+  margin-left: auto;
+}
+.silo-cite-card b {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Sources: overlapping favicons and a count, opening a grid of the cited links. */
+.silo-sources {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.silo-sources-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+  height: 28px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--hov);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  color: var(--mut);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .silo-sources-btn:hover {
+    background: var(--sel);
+    color: var(--ink);
+  }
+}
+.silo-sources-stack {
+  display: inline-flex;
+}
+.silo-sources-stack .silo-letter-chip {
+  border-radius: 999px;
+  box-shadow: 0 0 0 1.5px var(--bg);
+}
+.silo-sources-stack .silo-letter-chip + .silo-letter-chip {
+  margin-left: -5px;
+}
+.silo-sources-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.silo-chat[data-variant="dock"] .silo-sources-grid,
+.silo-selection-body .silo-sources-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.silo-chat-assistant .silo-sources-grid a {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 0 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--bg2);
+  box-shadow: var(--elev-1);
+  text-decoration: none;
+}
+.silo-sources-grid b {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.silo-sources-grid a > span:last-child {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--fnt);
+  font-size: 11.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .silo-sources-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @keyframes siloStatusIn {
   from {
     opacity: 0;
@@ -1218,6 +1428,9 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   .silo-status-out {
     animation-name: siloFade;
   }
+  .silo-cite-card {
+    animation: none;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .silo-chat-title svg {
@@ -1225,8 +1438,7 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   }
   .silo-chat-surface,
   .silo-chat-bar,
-  .silo-chat-answer,
-  .silo-chat-trace {
+  .silo-chat-answer {
     animation: none;
   }
 }
