@@ -378,6 +378,30 @@ it('keeps a cited link when its lookup fails for another reason', async () => {
   expect(fetcher.mock.calls.some(([url]) => String(url).includes('/search?'))).toBe(false);
 });
 
+it('drops the link when the matched item was deleted too', async () => {
+  const fetcher = vi.fn(async () => new Response('{}', { status: 404 }));
+  vi.stubGlobal('fetch', fetcher);
+  const { MemoryRouter } = await import('react-router');
+  const message = reply(`[Title](/?link=${SAVED})`);
+  message.parts.unshift({
+    type: 'dynamic-tool',
+    toolName: 'search_links',
+    toolCallId: 's',
+    state: 'output-available',
+    input: {},
+    output: `Data (JSON):\n${JSON.stringify({ results: [{ id: SAVED, title: 'Title' }] })}`,
+  });
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <ChatMessage message={message} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(screen.queryByRole('link')).toBeNull());
+  expect(screen.getByText('Title')).toBeTruthy();
+});
+
 it('heals a fake id through library search', async () => {
   await renderHealing(undefined, [{ id: SAVED, title: 'Title' }]);
   await waitFor(() =>

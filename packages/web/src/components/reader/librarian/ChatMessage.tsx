@@ -25,11 +25,12 @@ function citationText(node: React.ReactNode): string {
   return '';
 }
 
+const isMissing = (error: unknown) => error instanceof ApiError && error.status === 404;
+
 function SavedCitation({ id, children }: { id: string; children?: React.ReactNode }) {
   const items = useContext(CitationItems);
-  const { error } = useLinkUrl(id);
   // Only a confirmed 404 means a made-up id; any other failure keeps the cited link.
-  const missing = error instanceof ApiError && error.status === 404;
+  const missing = isMissing(useLinkUrl(id).error);
   const { data: matched } = useCitationMatch(citationText(children), items, missing);
   if (!missing) return <CitationLink id={id}>{children}</CitationLink>;
   return matched ? <CitationLink id={matched}>{children}</CitationLink> : children;
@@ -37,8 +38,8 @@ function SavedCitation({ id, children }: { id: string; children?: React.ReactNod
 
 /** A saved-item link with its site icon: the globe until its URL arrives. */
 function CitationLink({ id, children }: { id: string; children?: React.ReactNode }) {
-  const { data: url } = useLinkUrl(id);
-  if (!useInRouterContext()) return children;
+  const { data: url, error } = useLinkUrl(id);
+  if (!useInRouterContext() || isMissing(error)) return children;
   return (
     <Link to={`/?link=${id}`}>
       <Chip domain={url ? deriveDomain(url) : null} size={FAVICON_PX} />
