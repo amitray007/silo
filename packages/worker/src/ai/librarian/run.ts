@@ -108,7 +108,6 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       stopWhen: isStepCount(8),
       maxRetries: 2,
       telemetry: { isEnabled: false },
-      ...(request.abortSignal ? { abortSignal: request.abortSignal } : {}),
       ...chatModelSettings(credential, { promptCache: true, readableReasoning: true }),
     });
     const metadata = {
@@ -147,8 +146,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
               finished &&
               !failed &&
               !isAborted &&
-              outcome.status !== 'failed' &&
-              !request.abortSignal?.aborted
+              outcome.status !== 'failed'
             )
               await replaceLastAnswer(
                 request.chatId,

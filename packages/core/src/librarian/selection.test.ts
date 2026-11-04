@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { importMessagesSchema, quickRequestSchema } from './types.js';
+import { answerVersionSchema, importMessagesSchema, quickRequestSchema } from './types.js';
 
 const quote = { quote: 'A passage', paragraph: 2, action: 'explain' };
 it('validates the quick request without accepting unsupported actions or oversized selections', () => {
@@ -39,4 +39,16 @@ it('imports only an ordered text turn with selection metadata and a bounded answ
     [{ ...user, metadata: {} }, assistant],
   ])
     expect(importMessagesSchema.safeParse({ messages }).success).toBe(false);
+});
+
+it('bounds snapshots by UTF-8 bytes at one million bytes', () => {
+  const part = { type: 'text', text: '' };
+  const snapshot = { id: 'v', parts: [part], metadata: {} };
+  const overhead = new TextEncoder().encode(JSON.stringify(snapshot)).length;
+  part.text =
+    'é'.repeat(Math.floor((1000000 - overhead) / 2)) + 'x'.repeat((1000000 - overhead) % 2);
+  expect(new TextEncoder().encode(JSON.stringify(snapshot))).toHaveLength(1000000);
+  expect(answerVersionSchema.safeParse(snapshot).success).toBe(true);
+  part.text += 'é';
+  expect(answerVersionSchema.safeParse(snapshot).success).toBe(false);
 });

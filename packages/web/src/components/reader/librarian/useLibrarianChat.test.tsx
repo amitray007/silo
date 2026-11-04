@@ -142,3 +142,29 @@ it('sends the regenerate contract, preserves rejected content and selects a stor
   await act(async () => result.current.selectVersion('old'));
   await waitFor(() => expect(result.current.messages).toEqual([selected]));
 });
+
+it('shows the mapped selection error from the API code', async () => {
+  const { result } = setup('selection-error-test');
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  const normal = vi.mocked(fetch).getMockImplementation()!;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (String(input).endsWith('/select'))
+      return new Response(
+        JSON.stringify({ error: 'invalid_message', message: 'Could not select answer.' }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      );
+    if (!String(input).includes('?'))
+      return json({
+        chat: { id: 'selection-chat', title: 'Test' },
+        messages: [{ id: 'answer', role: 'assistant', parts: [{ type: 'text', text: 'Answer' }] }],
+      });
+    return normal(input, init);
+  });
+  act(() => result.current.open('selection-chat'));
+  await waitFor(() => expect(result.current.canRegenerate).toBe(true));
+  await act(async () => result.current.selectVersion('old'));
+  expect(result.current.failed).toBe(true);
+  expect(result.current.errorText).toBe(
+    'This answer changed. Reload the conversation and try again.',
+  );
+});

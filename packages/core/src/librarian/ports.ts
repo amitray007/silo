@@ -22,7 +22,6 @@ export type LibrarianRequest = {
   endRun?: () => void;
   messages: LibrarianMessage[];
   link: { id: string; title: string | null; url: string; site: string | null } | null;
-  abortSignal?: AbortSignal | undefined;
 };
 export type LibrarianRunner = (request: LibrarianRequest) => Promise<Response>;
 let runner: LibrarianRunner | undefined;

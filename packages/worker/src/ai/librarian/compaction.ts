@@ -62,7 +62,6 @@ async function summarize(
     maxRetries: 0,
     timeout: { totalMs: 20_000 },
     telemetry: { isEnabled: false },
-    ...(request.abortSignal ? { abortSignal: request.abortSignal } : {}),
   });
   if (!result.text.trim()) throw new Error('Empty summary');
   await saveChatSummary(request.chatId, result.text, through);

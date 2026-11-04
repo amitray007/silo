@@ -2,6 +2,7 @@ import { Chat, type UIMessage, useChat } from '@ai-sdk/react';
 import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai';
 import { useEffect, useReducer, useState, useSyncExternalStore } from 'react';
+import { ApiError } from '../../../api/client';
 import { queryKeys } from '../../../api/hooks';
 import {
   type LibrarianAnswerMetadata,
@@ -268,6 +269,9 @@ function useEntryChat({
   const remove = useDeleteLibrarianChat();
   const { chat, chatId } = entry;
   const [, rerender] = useReducer((count: number) => count + 1, 0);
+  const [selectionError, setSelectionError] = useState<{ entry: Entry; message: string } | null>(
+    null,
+  );
   const [failedEntry, setFailedEntry] = useState<Entry | null>(null);
   const [creatingEntry, setCreatingEntry] = useState<Entry | null>(null);
   const detail = useLibrarianChatDetail(resolved ?? undefined);
@@ -307,6 +311,7 @@ function useEntryChat({
   ) {
     if (!text.trim() || pendingApproval || busy || loading || listError || detail.error) return;
     setFailedEntry(null);
+    setSelectionError(null);
     setCreatingEntry(entry);
     try {
       return await sendEntryTurn(
@@ -331,6 +336,8 @@ function useEntryChat({
     !busy && !loading && !pendingApproval && state.messages.at(-1)?.role === 'assistant';
   async function regenerate(model?: { provider: AiProviderKind; id: string }) {
     if (!canRegenerate) return;
+    setSelectionError(null);
+    setFailedEntry(null);
     const previous = [...chat.messages];
     await chat.regenerate({ messageId: previous.at(-1)?.id ?? '', body: model ? { model } : {} });
     if (chat.error) chat.messages = previous;
@@ -340,12 +347,23 @@ function useEntryChat({
     const last = chat.messages.at(-1);
     if (!canRegenerate || !chatId.current || !last) return;
     setCreatingEntry(entry);
+    setFailedEntry(null);
+    setSelectionError(null);
     try {
       chat.messages = (
         await librarianApi.selectVersion(chatId.current, last.id, versionId)
       ).messages;
-    } catch {
+    } catch (error) {
       setFailedEntry(entry);
+      setSelectionError({
+        entry,
+        message:
+          error instanceof ApiError
+            ? error.error
+            : error instanceof Error
+              ? error.message
+              : String(error),
+      });
     } finally {
       setCreatingEntry(null);
     }
@@ -365,7 +383,9 @@ function useEntryChat({
     busy,
     loading,
     failed: failedEntry === entry || !!state.error || listError || !!detail.error,
-    errorText: chatErrorText(state.error?.message),
+    errorText: chatErrorText(
+      selectionError?.entry === entry ? selectionError.message : state.error?.message,
+    ),
   };
 }
 

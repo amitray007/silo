@@ -120,7 +120,7 @@ suite('Librarian persistence', () => {
     const large = {
       ...old,
       id: 'size-large',
-      parts: [{ type: 'text', text: 'x'.repeat(1000001) }],
+      parts: [{ type: 'text', text: 'é'.repeat(500001) }],
     };
     expect(await c.replaceLastAnswer(chat.id, expected, large)).toBe(true);
     const stored = (await c.getChat(chat.id))?.messages.at(-1);
@@ -337,33 +337,6 @@ suite('Librarian persistence', () => {
     expect((await send('run3')).ok).toBe(true);
     finish?.();
     setLibrarianRunner(undefined);
-  });
-  it('frees a quick slot on abort while runners remain pending', async () => {
-    const c = h.mod();
-    const { setLibrarianRunner } = await import('./ports.js');
-    const id = crypto.randomUUID();
-    await h
-      .rawDb()
-      .execute(
-        sql`INSERT INTO links (id, source_kind, url, canonical_url) VALUES (${id}, 'link', ${'https://example.com/quick'}, ${'https://example.com/quick'})`,
-      );
-    const runner = vi.fn(() => new Promise<Response>(() => {}));
-    setLibrarianRunner(runner);
-    const controllers = Array.from({ length: 3 }, () => new AbortController());
-    const input = { linkId: id, action: 'explain', quote: 'Passage', paragraph: 1 };
-    try {
-      void c.quickLibrarianReply(input, controllers[0]?.signal);
-      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(1));
-      void c.quickLibrarianReply(input, controllers[1]?.signal);
-      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2));
-      expect(await c.quickLibrarianReply(input)).toEqual({ ok: false, code: 'busy' });
-      controllers[0]?.abort();
-      void c.quickLibrarianReply(input, controllers[2]?.signal);
-      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(3));
-    } finally {
-      for (const controller of controllers) controller.abort();
-      setLibrarianRunner(undefined);
-    }
   });
   it('limits quick runs to two and frees completed slots', async () => {
     const c = h.mod();

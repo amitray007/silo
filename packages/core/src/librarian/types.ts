@@ -26,7 +26,7 @@ export const answerVersionSchema = z
     metadata: answerMetadata.refine((m) => !('versions' in m)),
   })
   .strict()
-  .refine((v) => JSON.stringify(v).length <= 1000000);
+  .refine((v) => new TextEncoder().encode(JSON.stringify(v)).length <= 1000000);
 export const regenerateRequestSchema = z
   .object({
     trigger: z.literal('regenerate'),

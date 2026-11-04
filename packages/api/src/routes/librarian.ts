@@ -33,7 +33,7 @@ export function registerLibrarianRoutes(app: Hono): void {
   app.use('/librarian/*', operatorOnly);
   app.post('/librarian/quick', async (c) => {
     const input = quickRequestSchema.parse(await c.req.json());
-    const result = await quickLibrarianReply(input, c.req.raw.signal);
+    const result = await quickLibrarianReply(input);
     if (result.ok) return result.response;
     return c.json(
       { error: result.code, message: 'Could not start Librarian reply.' },
@@ -125,7 +125,6 @@ export function registerLibrarianRoutes(app: Hono): void {
     if (!parsed.success) return c.json({ error: 'invalid_message' }, 400);
     const result = await streamLibrarianReply({
       chatId: id,
-      abortSignal: c.req.raw.signal,
       ...('trigger' in parsed.data
         ? { regenerate: parsed.data }
         : { message: parsed.data.message }),

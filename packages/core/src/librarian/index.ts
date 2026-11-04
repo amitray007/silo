@@ -218,12 +218,10 @@ export async function streamLibrarianReply({
   chatId,
   message: incoming,
   regenerate,
-  abortSignal,
 }: {
   chatId: string;
   message?: LibrarianMessage;
   regenerate?: import('zod').z.infer<typeof regenerateRequestSchema>;
-  abortSignal?: AbortSignal;
 }) {
   if (!(await isAiFeatureOn('librarian'))) return { ok: false, code: 'ai_not_ready' } as const;
   const endRun = beginLibrarianRun(chatId);
@@ -268,7 +266,6 @@ export async function streamLibrarianReply({
       response: await runner({
         ...context,
         chatId,
-        abortSignal,
         endRun,
       }),
     } as const;
@@ -281,15 +278,12 @@ export async function streamLibrarianReply({
 export { importMessagesSchema, quickRequestSchema } from './types.js';
 
 let activeQuickRuns = 0;
-export async function quickLibrarianReply(
-  input: {
-    linkId: string;
-    action: string;
-    quote: string;
-    paragraph: number;
-  },
-  abortSignal?: AbortSignal,
-) {
+export async function quickLibrarianReply(input: {
+  linkId: string;
+  action: string;
+  quote: string;
+  paragraph: number;
+}) {
   if (!(await isAiFeatureOn('librarian'))) return { ok: false, code: 'ai_not_ready' } as const;
   const runner = getLibrarianRunner();
   if (!runner) return { ok: false, code: 'unavailable' } as const;
@@ -302,8 +296,6 @@ export async function quickLibrarianReply(
       activeQuickRuns--;
     }
   };
-  // A cancelled stream may never reach the runner's onEnd; free the slot on abort too.
-  abortSignal?.addEventListener('abort', endRun, { once: true });
   try {
     const [link] = await db
       .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
@@ -324,7 +316,6 @@ export async function quickLibrarianReply(
         ...(ownerAction ? { ownerAction } : {}),
         chatId: '',
         transient: true,
-        abortSignal,
         endRun,
         link,
         messages: [
