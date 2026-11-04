@@ -1,9 +1,23 @@
+import { readFileSync } from 'node:fs';
 import type { UIMessage } from '@ai-sdk/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVoiceModel } from '../listen/voiceModels';
 import { ChatMessage } from './ChatMessage';
+
+vi.mock('@streamdown/mermaid', () => ({
+  mermaid: {
+    name: 'mermaid',
+    type: 'diagram',
+    language: 'mermaid',
+    getMermaid: () => ({
+      render: async () => ({
+        svg: '<svg width="3000" height="100" viewBox="0 0 3000 100"><text>Wide diagram</text></svg>',
+      }),
+    }),
+  },
+}));
 
 vi.mock('../listen/voiceModels', () => ({ useVoiceModel: vi.fn() }));
 
@@ -35,6 +49,44 @@ function search(id: string, count: number) {
 }
 
 describe('ChatMessage', () => {
+  it('leaves horizontal and vertical diagram wheels to native scrolling', async () => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          queueMicrotask(() =>
+            callback(
+              [{ isIntersecting: true } as IntersectionObserverEntry],
+              this as unknown as IntersectionObserver,
+            ),
+          );
+        }
+        takeRecords() {
+          return [{ isIntersecting: true } as IntersectionObserverEntry];
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const { container } = render(
+      <ChatMessage message={reply('```mermaid\ngraph LR; A-->B\n```')} />,
+    );
+    const diagram = await waitFor(() => {
+      const element = container.querySelector('[data-streamdown="mermaid"] svg');
+      expect(element).toBeTruthy();
+      return element as SVGElement;
+    });
+    expect(readFileSync('src/styles/reader-librarian.css', 'utf8')).toMatch(
+      /\[data-streamdown="mermaid"\] :is\(div, \[role="application"\]\)\s*\{[^}]*touch-action: auto !important/s,
+    );
+    for (const delta of [{ deltaX: 120 }, { deltaY: 120 }]) {
+      const wheel = new WheelEvent('wheel', { ...delta, bubbles: true, cancelable: true });
+      diagram.dispatchEvent(wheel);
+      expect(wheel.defaultPrevented).toBe(false);
+    }
+  });
+
   it('gives an answer with no steps and no reasoning no line above its text', () => {
     const { container, rerender } = render(
       <ChatMessage message={{ id: 'q', role: 'assistant', parts: [] }} streaming fixedTrace />,

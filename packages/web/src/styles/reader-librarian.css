@@ -382,6 +382,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   max-height: none;
   cursor: auto !important;
   transform: none !important;
+  touch-action: auto !important;
 }
 .silo-chat-answer [data-streamdown="mermaid"] [role="img"] {
   width: max-content;
