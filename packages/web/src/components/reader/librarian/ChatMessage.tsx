@@ -12,6 +12,7 @@ import { SourcesRow } from './SourcesRow';
 import { Steps } from './Steps';
 import { TurnTrace } from './TurnTrace';
 import { splitSteps, toolName } from './tools';
+import { codeThemes, useRichBlocks } from './useRichBlocks';
 
 const citationPlugins: NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']> =
   Object.entries(defaultRehypePlugins).map<
@@ -174,9 +175,10 @@ export const ChatMessage = memo(function ChatMessage({
       setResolved((seen) => (seen[raw] === real ? seen : { ...seen, [raw]: real })),
     [],
   );
+  const { steps, answer } = splitSteps(message);
+  const plugins = useRichBlocks(message.role === 'user' ? '' : answer);
   if (held && !wasHeld) setWasHeld(true);
   if (message.role === 'user') return <UserMessage message={message} />;
-  const { steps, answer } = splitSteps(message);
   const approving = isAwaitingApproval(message);
   const reasoning = held ? null : messageReasoning(message);
   return (
@@ -216,6 +218,8 @@ export const ChatMessage = memo(function ChatMessage({
                   animated={wordFade}
                   isAnimating={streaming}
                   rehypePlugins={citationPlugins}
+                  plugins={plugins}
+                  shikiTheme={codeThemes}
                   components={markdownComponents}
                 >
                   {answer}

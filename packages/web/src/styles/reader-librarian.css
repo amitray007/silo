@@ -143,6 +143,17 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-messages:has(> .silo-chat-empty:only-child) {
   padding-bottom: 12px;
 }
+/* The dock sheet opens at the height it keeps, so the first question moves nothing; the empty
+   greeting sits mid-sheet. */
+.silo-chat[data-variant="dock"] .silo-chat-panel {
+  height: var(--silo-chat-max, auto);
+}
+.silo-chat[data-variant="dock"] .silo-chat-messages:has(> .silo-chat-empty:only-child) {
+  display: grid;
+  place-items: center;
+  text-align: center;
+  mask-image: none;
+}
 .silo-chat-messages > * + * {
   margin-top: 12px;
 }
@@ -348,6 +359,44 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 :root[data-theme="dark"] .silo-chat-answer [data-streamdown="code-block-body"] code span span {
   color: var(--shiki-dark, var(--sdm-c, inherit));
+}
+/* A diagram sits in a quiet frame like code. Streamdown sizes it with an inline height and a pan-zoom
+   transform; the answer wants it at natural size, scrolling sideways when wider than the column. */
+.silo-chat-answer [data-streamdown="mermaid-block"] {
+  margin-block: 4px;
+  border-radius: 8px;
+  background: var(--hov);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  overflow: hidden;
+}
+.silo-chat-answer [data-streamdown="mermaid-block"] > :first-child {
+  display: none;
+}
+.silo-chat-answer [data-streamdown="mermaid"] {
+  max-height: min(70vh, 32rem);
+  overflow: auto;
+  padding: 12px;
+}
+.silo-chat-answer [data-streamdown="mermaid"] :is(div, [role="application"]) {
+  height: auto !important;
+  max-height: none;
+  cursor: auto !important;
+  transform: none !important;
+}
+.silo-chat-answer [data-streamdown="mermaid"] [role="img"] {
+  width: max-content;
+  margin-inline: auto;
+}
+.silo-chat-answer [data-streamdown="mermaid"] svg {
+  display: block;
+}
+/* Maths follows the text colour; a wide block scrolls instead of widening the column. */
+.silo-chat-answer .katex {
+  font-size: 1.05em;
+}
+.silo-chat-answer .katex-display {
+  margin: 8px 0;
+  overflow: auto hidden;
 }
 .silo-chat-answer [data-streamdown="inline-code"] {
   padding: 1px 4px;
@@ -1021,9 +1070,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   width: min(var(--silo-measure), calc(100% - 32px));
   margin-inline: auto;
 }
-.silo-chat[data-variant="page"] > .silo-chat-hint {
-  margin-bottom: 8px;
-}
 .silo-chat[data-variant="page"] > .silo-chat-bar {
   margin-bottom: max(16px, env(safe-area-inset-bottom, 0px));
 }
@@ -1045,8 +1091,14 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   box-shadow: 0 0 0 1.5px var(--bg2);
 }
 
+/* The hint floats over the thread's fade, or sits in the chip row when the bar keeps one, so
+   showing it moves neither the sheet nor the field. */
 .silo-chat-hint {
-  align-self: center;
+  position: absolute;
+  z-index: 1;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  translate: -50% 0;
   margin: 0;
   padding: 6px 12px;
   border-radius: 999px;
@@ -1056,11 +1108,18 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.silo-chat-bar:has(.silo-composer-chips) > .silo-chat-hint {
+  top: 1px;
+  bottom: auto;
 }
 
 /* The bar has no surface of its own: chips and a pill field sit on the sheet or page. The thread
    above fades out under it (see .silo-chat-messages). */
 .silo-chat-bar {
+  position: relative;
   animation: siloChatBar 160ms var(--ease-out);
 }
 

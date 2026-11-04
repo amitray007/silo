@@ -64,6 +64,28 @@ describe('ChatMessage', () => {
     expect(screen.getByText('17 links')).toBeTruthy();
   });
 
+  it('highlights fenced code and typesets $$ maths once their plugins load', async () => {
+    const { container } = render(
+      <ChatMessage
+        message={reply('```ts\nconst answer: number = 42;\n```\n\nIt is $$x^2 + y^2$$ here.')}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('.katex')).toBeTruthy(), { timeout: 8000 });
+    await waitFor(
+      () =>
+        expect(
+          container.querySelector('[data-streamdown="code-block-body"] span[style*="--sdm-c"]'),
+        ).toBeTruthy(),
+      { timeout: 8000 },
+    );
+  }, 20000);
+
+  it('leaves a plain answer without code, maths or diagram blocks', () => {
+    const { container } = render(<ChatMessage message={reply('Just words, and a $5 price.')} />);
+    expect(container.querySelector('[data-streamdown="code-block"], .katex')).toBeNull();
+    expect(container.textContent).toContain('$5 price');
+  });
+
   it('shows text written before a tool call as a muted step, apart from the answer', () => {
     const message: UIMessage = {
       id: 'a2',
