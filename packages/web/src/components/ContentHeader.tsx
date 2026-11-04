@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router';
 import { useCounts, useTags } from '../api/hooks';
+import { useLibrarianReady } from '../api/librarian';
 import { layoutMedia, useMediaQuery } from '../lib/breakpoints';
 import { formatCount } from '../lib/formatCount';
 import { MenuPresence } from './MenuPresence';
@@ -26,6 +27,10 @@ interface ContentHeaderProps {
   below?: ReactNode;
 }
 
+const collectionNames = ['Library', 'Chats', 'Trash'] as const;
+const collectionIcon = { Library: 'sidebar', Chats: 'librarian', Trash: 'trash' } as const;
+const collectionPath = { Library: '/', Chats: '/librarian', Trash: '/trash' } as const;
+
 /**
  * The v3 content header bar (`docs/design/app/Silo-v3.html`): a full-width row
  * above the scrolling body — view title + count on the left, a `flex:1`
@@ -42,8 +47,10 @@ function CollectionTitle({ title }: { title: string }) {
   const frame = useOutletContext<{ showSidebar: () => void; sidebarHidden: boolean } | undefined>();
   const { data: counts } = useCounts();
   const { data: tags } = useTags();
+  const chatsReady = useLibrarianReady();
   // The switcher is the only Trash entry. The sidebar already lists tags, so the tag section shows
   // only when the sidebar is out of view (phone, hidden, or no frame).
+  const names = chatsReady ? collectionNames : collectionNames.filter((name) => name !== 'Chats');
   const showTags = phone || !frame || frame.sidebarHidden;
   return (
     <div className="silo-collection">
@@ -62,19 +69,21 @@ function CollectionTitle({ title }: { title: string }) {
       <MenuPresence>
         {open && (
           <MenuSurface sheet={false} onClose={() => setOpen(false)}>
-            {(['Library', 'Trash'] as const).map((name) => (
+            {names.map((name) => (
               <MenuAction
                 key={name}
                 pressed={name === title}
-                icon={<ReaderIcon name={name === 'Library' ? 'sidebar' : 'trash'} />}
+                icon={<ReaderIcon name={collectionIcon[name]} />}
                 onClick={() => {
                   setOpen(false);
-                  navigate(name === 'Library' ? '/' : '/trash');
+                  navigate(collectionPath[name]);
                 }}
               >
                 {name}
                 <span className="silo-collection-count">
-                  {counts ? formatCount(name === 'Library' ? counts.live : counts.trash) : ''}
+                  {counts && name !== 'Chats'
+                    ? formatCount(name === 'Library' ? counts.live : counts.trash)
+                    : ''}
                 </span>
               </MenuAction>
             ))}
@@ -123,7 +132,9 @@ export function ContentHeader({
 }: ContentHeaderProps) {
   return (
     <header className="silo-panehead">
-      {collection && typeof title === 'string' && (title === 'Library' || title === 'Trash') ? (
+      {collection &&
+      typeof title === 'string' &&
+      (title === 'Library' || title === 'Chats' || title === 'Trash') ? (
         <CollectionTitle title={title} />
       ) : (
         <h1>{title}</h1>

@@ -13,7 +13,7 @@ function isPlainClick(event: MouseEvent) {
   return !(event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 }
 
-/** Recent Librarian chats, a new-chat row, and the way to the full history. Shown only when the Librarian is ready. */
+/** Recent Librarian chats and a new-chat row. Shown only when the Librarian is ready. */
 export function SidebarChats({ onNavigate }: { onNavigate: () => void }) {
   const [expanded, setExpanded] = useState(true);
   const navigate = useNavigate();
@@ -75,15 +75,6 @@ export function SidebarChats({ onNavigate }: { onNavigate: () => void }) {
           <section className="silo-tag-scroll" aria-label="Recent chats" aria-busy={all.isLoading}>
             {recent.map(row)}
           </section>
-          <NavItem
-            href="/librarian"
-            title="All chats"
-            label="All chats"
-            variant="tag"
-            active={location.pathname === '/librarian' && !activeId}
-            icon={<ReaderIcon name="list" />}
-            onClick={open('/librarian')}
-          />
         </div>
       )}
     </div>
