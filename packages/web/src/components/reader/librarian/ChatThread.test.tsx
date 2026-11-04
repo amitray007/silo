@@ -206,7 +206,7 @@ it('keeps the empty chat quick actions in the composer, not beside the log', () 
     />,
   );
   const related = screen.getByRole('button', { name: 'Related' });
-  expect(container.querySelector('.silo-composer-quick')?.contains(related)).toBe(true);
+  expect(container.querySelector('.silo-composer-chips')?.contains(related)).toBe(true);
 });
 
 it.each([false, true])('uses the motion preference when jumping: reduced=%s', (reduced) => {

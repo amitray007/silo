@@ -580,7 +580,7 @@ it('shows the owner chips: a hidden built-in is gone, a custom one follows the b
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
   expect(await screen.findByRole('button', { name: 'Plain words' })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Explain' })).toBeNull();
-  const names = Array.from(document.querySelectorAll('.silo-composer-quick button')).map(
+  const names = Array.from(document.querySelectorAll('.silo-composer-chips button')).map(
     (b) => b.textContent,
   );
   expect(names).toEqual(['Simplify', 'Counterpoint', 'Plain words']);
