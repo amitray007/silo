@@ -389,6 +389,31 @@ it('ends the conversation spinner and shows the error after a detail fetch fails
   }
 });
 
+it('hides stored follow-ups and asks for none when Suggest follow-ups is off', async () => {
+  client.clear();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ librarianSuggestions: false }))),
+  );
+  mount(
+    fakeChat({
+      chatId: 'off',
+      messages: [
+        {
+          ...text('off-a', 'assistant', 'Answer'),
+          metadata: { finalAnswer: true, suggestions: [{ kind: 'ask', text: 'Hidden chip' }] },
+        },
+      ],
+    }),
+  );
+  await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+  await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Hidden chip' })).toBeNull());
+  expect(
+    vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/suggestions')),
+  ).toHaveLength(0);
+  vi.unstubAllGlobals();
+});
+
 function answerSettings(chatAnswers: 'streamed' | 'complete') {
   client.clear();
   vi.stubGlobal(

@@ -29,10 +29,10 @@ it('drops invalid items, clamps length, and limits suggestions to three', async 
   ]);
 });
 
-it('returns no suggestions and logs only a fixed code on provider failure', async () => {
+it('reports a failure as null, not an empty list, and logs only a fixed code', async () => {
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.mocked(generateText).mockRejectedValue(new Error('SECRET_PROVIDER_TEXT'));
-  expect(await suggestFollowups(credential, 'test-model', 'Question', 'Answer')).toEqual([]);
+  expect(await suggestFollowups(credential, 'test-model', 'Question', 'Answer')).toBeNull();
   expect(warn).toHaveBeenCalledWith('silo ai: librarian@v1 failed (provider_error)');
   warn.mockRestore();
 });

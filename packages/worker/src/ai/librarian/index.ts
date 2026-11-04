@@ -12,7 +12,7 @@ export function registerLibrarian(): { close: () => void } {
     const credential = await resolveAiFeatureCredential('librarian');
     return credential
       ? suggestFollowups(credential, languageModelFor(credential), question, answer)
-      : [];
+      : null;
   });
   return {
     close: () => {

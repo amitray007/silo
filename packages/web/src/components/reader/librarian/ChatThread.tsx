@@ -5,6 +5,7 @@ import {
   useLibrarianActions,
   useLibrarianSuggestions,
   useRefreshOnRemovedAction,
+  useSuggestFollowups,
 } from '../../../api/librarian';
 import { isWord, passageChips } from '../../../lib/librarianActions';
 import { reducedMotion } from '../../../lib/motion';
@@ -131,11 +132,12 @@ export function ChatThread({
   const wholeAnswers = useChatAnswers() === 'complete';
   useRefreshOnRemovedAction(chat.error?.message);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
+  const suggestFollowups = useSuggestFollowups();
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
   const suggestions = useLibrarianSuggestions(
     chat.chatId,
     lastAssistant,
-    canShowSuggestions(chat, active),
+    canShowSuggestions(chat, active, suggestFollowups),
   );
   const reasoningShown = showsLiveReasoning(lastAssistant, wholeAnswers);
   const status = statusLabel(chat.messages);
@@ -268,7 +270,8 @@ export function ChatThread({
   );
 }
 
-function canShowSuggestions(chat: ThreadChat, active: boolean) {
+function canShowSuggestions(chat: ThreadChat, active: boolean, wanted: boolean) {
+  if (!wanted) return false;
   const last = chat.messages.at(-1);
   return (
     active &&

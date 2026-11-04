@@ -51,7 +51,10 @@ export function beginLibrarianRun(chatId: string): (() => void) | undefined {
 }
 
 export type Suggestions = { kind: 'ask' | 'do'; text: string }[];
-let suggestionsRunner: ((question: string, answer: string) => Promise<Suggestions>) | undefined;
+/** Resolves to null when the model call failed: a failure is retried later, never stored. */
+let suggestionsRunner:
+  | ((question: string, answer: string) => Promise<Suggestions | null>)
+  | undefined;
 export function setLibrarianSuggestionsRunner(value: typeof suggestionsRunner) {
   suggestionsRunner = value;
 }

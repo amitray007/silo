@@ -2,7 +2,7 @@ import type { UIMessage } from '@ai-sdk/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { articleChips, libraryChips, resolveActions } from '../lib/librarianActions';
-import { apiDelete, apiGet, apiPost, apiUrl } from './client';
+import { ApiError, apiDelete, apiGet, apiPost, apiUrl } from './client';
 import { queryKeys, useAi, useSettings } from './hooks';
 
 export type ChatSummary = {
@@ -125,6 +125,12 @@ export function useLibrarianActions() {
   return useMemo(() => resolveActions(data?.librarianActions), [data?.librarianActions]);
 }
 
+/** Whether the Librarian suggests follow-ups after an answer, from Settings -> AI (on by default). */
+export function useSuggestFollowups(): boolean {
+  const { data } = useSettings({ staleTime: 60_000 });
+  return data?.librarianSuggestions !== false;
+}
+
 /** Whether Librarian answers arrive as they stream or whole, from Settings -> AI. */
 export function useChatAnswers(): 'streamed' | 'complete' {
   const { data } = useSettings({ staleTime: 60_000 });
@@ -168,7 +174,9 @@ export function useLibrarianSuggestions(
         {},
       ),
     enabled: enabled && !!chatId && stored === undefined,
-    retry: false,
+    // 409: the stream finished before the answer was saved; ask again shortly.
+    retry: (count, error) => error instanceof ApiError && error.status === 409 && count < 5,
+    retryDelay: 400,
     staleTime: Infinity,
   });
   if (!enabled) return undefined;

@@ -52,6 +52,6 @@ export async function suggestFollowups(
     return items;
   } catch (error) {
     logAiFailure('librarian', 1, aiErrorCode(error));
-    return [];
+    return null;
   }
 }

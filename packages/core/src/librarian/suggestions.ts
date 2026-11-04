@@ -6,7 +6,10 @@ import { getChat } from './index.js';
 import { getLibrarianSuggestionsRunner, type Suggestions } from './ports.js';
 import { type LibrarianMessage, librarianMessageSchema, suggestionsSchema } from './types.js';
 
-const pending = new Map<string, Promise<Suggestions | null>>();
+/** The answer is not stored yet: the stream finished before its save. The client asks again. */
+export const SUGGESTIONS_NOT_READY = 'not_ready' as const;
+type Outcome = Suggestions | null | typeof SUGGESTIONS_NOT_READY;
+const pending = new Map<string, Promise<Outcome>>();
 function text(message: LibrarianMessage | undefined) {
   return (
     message?.parts
@@ -30,7 +33,10 @@ function eligible(message: LibrarianMessage | undefined, id: string) {
     )
   );
 }
-export async function requestLibrarianSuggestions(chatId: string, messageId: string) {
+export async function requestLibrarianSuggestions(
+  chatId: string,
+  messageId: string,
+): Promise<Outcome> {
   if (!(await getSetting('librarianSuggestions')) || !(await isAiFeatureOn('librarian')))
     return null;
   const key = `${chatId}:${messageId}`;
@@ -44,17 +50,24 @@ export async function requestLibrarianSuggestions(chatId: string, messageId: str
     pending.delete(key);
   }
 }
-async function generate(chatId: string, messageId: string): Promise<Suggestions | null> {
+async function generate(chatId: string, messageId: string): Promise<Outcome> {
   const stored = await getChat(chatId);
   const last = stored?.messages.at(-1);
+  // The client heard the stream finish; the answer is saved a moment later.
+  if (stored && last?.role === 'user' && !stored.messages.some((m) => m.id === messageId))
+    return SUGGESTIONS_NOT_READY;
   if (!eligible(last, messageId) || !last) return null;
   const metadata = librarianMessageSchema.parse(last).metadata;
   if (metadata?.suggestions) return metadata.suggestions;
   const runner = getLibrarianSuggestionsRunner();
   if (!runner) return [];
-  const items = suggestionsSchema.parse(
-    await runner(text(stored?.messages.findLast((m) => m.role === 'user')), text(last)),
+  const result = await runner(
+    text(stored?.messages.findLast((m) => m.role === 'user')),
+    text(last),
   );
+  // A failed call shows no chips now and may be retried on a later visit.
+  if (result === null) return [];
+  const items = suggestionsSchema.parse(result);
   return db.transaction(async (tx) => {
     await tx.select().from(chats).where(eq(chats.id, chatId)).for('update');
     const rows = await tx

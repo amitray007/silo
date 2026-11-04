@@ -346,6 +346,8 @@ suite('Librarian persistence', () => {
       { id: 's-u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] },
     ]);
     expect(await requestLibrarianSuggestions(chat.id, 's-u')).toBeNull();
+    // The stream finished but its answer is not saved yet: the client is told to ask again.
+    expect(await requestLibrarianSuggestions(chat.id, 's-a')).toBe('not_ready');
     const parts = Array.from({ length: 200 }, () => ({ type: 'text', text: 'Answer' }));
     await c.saveChatMessages(chat.id, [
       { id: 's-a', role: 'assistant', parts, metadata: { finalAnswer: true } },
@@ -391,6 +393,23 @@ suite('Librarian persistence', () => {
     expect(
       (await c.getChat(chat.id))?.messages.find((m) => m.id === 'race-a')?.metadata,
     ).not.toHaveProperty('suggestions');
+    // A failed model call shows nothing now and is not stored, so a later visit can retry.
+    const failing = vi.fn(async () => null);
+    setLibrarianSuggestionsRunner(failing);
+    await c.saveChatMessages(chat.id, [
+      {
+        id: 'fail-a',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Answer' }],
+        metadata: { finalAnswer: true },
+      },
+    ]);
+    expect(await requestLibrarianSuggestions(chat.id, 'fail-a')).toEqual([]);
+    expect(
+      (await c.getChat(chat.id))?.messages.find((m) => m.id === 'fail-a')?.metadata,
+    ).not.toHaveProperty('suggestions');
+    expect(await requestLibrarianSuggestions(chat.id, 'fail-a')).toEqual([]);
+    expect(failing).toHaveBeenCalledTimes(2);
     const emptyRunner = vi.fn(async () => []);
     setLibrarianSuggestionsRunner(emptyRunner);
     await c.saveChatMessages(chat.id, [
