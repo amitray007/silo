@@ -43,17 +43,19 @@ export function ModelOptions({
   groups,
   value,
   onPick,
+  logoSize = 14,
 }: {
   groups: ModelGroup[];
   value: ModelChoice | null;
   onPick: (choice: ModelChoice) => void;
+  logoSize?: number;
 }) {
   return groups.map(({ kind, models }) => (
     <Command.Group
       key={kind}
       heading={
         <>
-          <ProviderLogo kind={kind} size={14} />
+          <ProviderLogo kind={kind} size={logoSize} />
           {AI_PROVIDER_NAMES[kind]}
         </>
       }

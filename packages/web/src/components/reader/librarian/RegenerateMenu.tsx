@@ -37,7 +37,7 @@ function placeAbove(trigger: HTMLElement): CSSProperties {
   const below = window.innerHeight - rect.bottom - 12;
   const above = rect.top - 12;
   const flip = below < POPOVER_HEIGHT && above > below;
-  const width = Math.min(360, window.innerWidth - 16);
+  const width = Math.min(300, window.innerWidth - 16);
   const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
   return {
     '--model-top': flip ? 'auto' : `${rect.bottom + 4}px`,
@@ -143,11 +143,11 @@ function RegeneratePopover({
           </div>
           <Command.List label="Models">
             <Command.Empty>{search ? 'No models match' : 'No models loaded yet'}</Command.Empty>
-            <ModelOptions groups={visible} value={current} onPick={onPick} />
+            <ModelOptions groups={visible} value={current} onPick={onPick} logoSize={16} />
             {unreadable.map((kind) => (
               <div key={kind} className="silo-regen-unreadable">
                 <span className="silo-regen-unreadable-name">
-                  <ProviderLogo kind={kind} size={14} />
+                  <ProviderLogo kind={kind} size={16} />
                   {AI_PROVIDER_NAMES[kind]}
                 </span>
                 <span>Key cannot be read. Add it again in Settings → AI.</span>

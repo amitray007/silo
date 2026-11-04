@@ -290,13 +290,67 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   white-space: nowrap;
 }
 /* The regenerate popover reuses the model picker's surface; these are its own rows. */
+.silo-regen-popover {
+  border: 0;
+  border-radius: 12px;
+  font-size: 13px;
+}
+.silo-regen-popover [cmdk-list] {
+  max-height: 228px;
+  padding: 4px;
+  scrollbar-width: thin;
+}
+.silo-regen-popover .silo-palette-input {
+  height: auto;
+  min-height: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.silo-regen-popover .silo-palette-input input {
+  height: auto;
+  font-size: 13px;
+}
+.silo-regen-popover [cmdk-group-heading] {
+  gap: 6px;
+  padding: 8px 8px 4px;
+  font-size: 11.5px;
+  line-height: 16px;
+}
+.silo-regen-popover .silo-palette-row.silo-model-option {
+  height: 30px;
+  min-height: 30px;
+  margin: 0;
+  width: 100%;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+.silo-regen-popover .silo-model-option-heading {
+  gap: 8px;
+}
+.silo-regen-popover .silo-model-option-label {
+  font-size: 13px;
+}
+.silo-regen-popover .silo-model-option-meta {
+  display: none;
+}
+.silo-regen-popover .silo-model-context {
+  font-size: 11.5px;
+}
+.silo-regen-popover .silo-model-check {
+  width: 16px;
+  text-align: center;
+}
 .silo-palette-row.silo-regen-again {
   flex: none;
-  gap: var(--s2);
-  height: 44px;
-  margin-top: var(--s1);
-  padding: 0 var(--s2);
-  font-size: var(--text-sm);
+  gap: 8px;
+  height: auto;
+  min-height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 0;
+  font-size: 13px;
   font-weight: 500;
 }
 .silo-regen-again[aria-selected="true"] {
@@ -313,7 +367,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   min-width: 0;
   overflow: hidden;
   color: var(--fnt);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -335,10 +389,10 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-regen-foot {
   flex: none;
   margin: 0;
-  padding: var(--s2) var(--s3);
+  padding: 7px 12px;
   border-top: 1px solid var(--line);
   color: var(--fnt);
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 16px;
 }
 :root[data-theme="dark"] .silo-regen-foot,
