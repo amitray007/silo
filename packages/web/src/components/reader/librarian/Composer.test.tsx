@@ -55,6 +55,11 @@ it('shows no chip row without quick actions', () => {
   expect(container.querySelector('.silo-composer-chips')).toBeNull();
 });
 
+it('keeps an empty chip row when its height is reserved', () => {
+  const { container } = render(composer({ quick: [], reserveChips: true }));
+  expect(container.querySelector('.silo-composer-chips')?.childElementCount).toBe(0);
+});
+
 it('swaps Send for Stop while busy', () => {
   const onStop = vi.fn();
   const { rerender } = render(composer({ value: 'hi' }));

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router';
 import type { LinkCard } from '../../../api/hooks';
 import { relativeTimeFromNow } from '../../../lib/relativeTime';
@@ -108,26 +109,28 @@ export function CitationPill({
           {content}
         </a>
       )}
-      {place && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: the card only keeps itself open under the pointer.
-        <span
-          id={cardId}
-          role="tooltip"
-          className="silo-cite-card"
-          style={place}
-          onMouseEnter={cancelClose}
-          onMouseLeave={closeSoon}
-        >
-          <span className="silo-cite-card-site">
-            <Chip domain={domain} size={FAVICON_PX} />
-            {domain}
-            {card && (
-              <time dateTime={card.createdAt}>Saved {relativeTimeFromNow(card.createdAt)}</time>
-            )}
-          </span>
-          <b>{card?.title || title}</b>
-        </span>
-      )}
+      {place &&
+        createPortal(
+          // biome-ignore lint/a11y/noStaticElementInteractions: the card only keeps itself open under the pointer.
+          <span
+            id={cardId}
+            role="tooltip"
+            className="silo-cite-card"
+            style={place}
+            onMouseEnter={cancelClose}
+            onMouseLeave={closeSoon}
+          >
+            <span className="silo-cite-card-site">
+              <Chip domain={domain} size={FAVICON_PX} />
+              {domain}
+              {card && (
+                <time dateTime={card.createdAt}>Saved {relativeTimeFromNow(card.createdAt)}</time>
+              )}
+            </span>
+            <b>{card?.title || title}</b>
+          </span>,
+          document.body,
+        )}
     </>
   );
 }

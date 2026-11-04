@@ -28,7 +28,7 @@ export function messageReasoning(message: UIMessage): MessageReasoning | null {
   };
 }
 
-const thoughtLabel = (ms: number | undefined) =>
+export const thoughtLabel = (ms: number | undefined) =>
   ms === undefined ? 'Thought' : `Thought for ${Math.max(1, Math.round(ms / 1000))}s`;
 
 /**

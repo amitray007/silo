@@ -102,6 +102,40 @@ suite('Librarian persistence', () => {
     await c.deleteChat(chat.id);
     setLibrarianRunner(undefined);
   });
+  it('stores an approval pause as a replacement with the previous answer version', async () => {
+    const c = h.mod();
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing chat');
+    const old = {
+      id: 'before',
+      role: 'assistant' as const,
+      parts: [{ type: 'text', text: 'Old' }],
+    };
+    await c.saveChatMessages(chat.id, [old]);
+    const paused = {
+      id: 'paused',
+      role: 'assistant' as const,
+      parts: [
+        {
+          type: 'tool-trash_link',
+          state: 'approval-requested',
+          toolCallId: 'call',
+          input: { id: 'link' },
+          approval: { id: 'approval' },
+        },
+      ],
+      metadata: { model: { provider: 'openai' as const, id: 'valid', label: 'Valid' } },
+    };
+    const previous = (await c.getChat(chat.id))?.messages.at(-1);
+    if (!previous) throw new Error('missing answer');
+    expect(await c.replaceLastAnswer(chat.id, previous, paused)).toBe(true);
+    const saved = (await c.getChat(chat.id))?.messages.at(-1);
+    expect(saved).toMatchObject(paused);
+    expect(c.librarianMessageSchema.parse(saved).metadata?.versions).toEqual([
+      expect.objectContaining({ id: old.id, parts: old.parts }),
+    ]);
+    await c.deleteChat(chat.id);
+  });
   it('snapshots locked metadata and skips oversized history while rejecting unsafe selection', async () => {
     const c = h.mod();
     const chat = await c.createChat();
@@ -453,11 +487,21 @@ suite('Librarian persistence', () => {
     expect(await requestLibrarianSuggestions(chat.id, 's-a')).toBe('not_ready');
     const parts = Array.from({ length: 200 }, () => ({ type: 'text', text: 'Answer' }));
     await c.saveChatMessages(chat.id, [
-      { id: 's-a', role: 'assistant', parts, metadata: { finalAnswer: true } },
+      {
+        id: 's-a',
+        role: 'assistant',
+        parts,
+        metadata: { finalAnswer: true, model: { provider: 'openai', id: 'valid', label: 'Valid' } },
+      },
     ]);
     const first = requestLibrarianSuggestions(chat.id, 's-a');
     const second = requestLibrarianSuggestions(chat.id, 's-a');
     await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(1));
+    expect(runner).toHaveBeenCalledWith('Hi', expect.any(String), {
+      provider: 'openai',
+      id: 'valid',
+      label: 'Valid',
+    });
     release();
     expect(await first).toEqual(items);
     expect(await second).toEqual(items);

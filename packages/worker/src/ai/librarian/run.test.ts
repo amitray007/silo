@@ -507,7 +507,13 @@ describe('Librarian streaming', () => {
       }),
     );
     const endRun = vi.fn();
+    const replacing = {
+      id: 'old',
+      role: 'assistant' as const,
+      parts: [{ type: 'text', text: 'Old' }],
+    };
     const response = await runLibrarian({
+      replacing,
       endRun,
       chatId: 'chat',
       messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Read' }] }],
@@ -518,7 +524,13 @@ describe('Librarian streaming', () => {
     expect(pausedBody).not.toContain('data-suggestions');
     expect(step).toBe(1);
     expect(call).not.toHaveBeenCalled();
-    const saved = structuredClone(vi.mocked(saveChatMessages).mock.calls.at(-1)?.[1]);
+    expect(replaceLastAnswer).toHaveBeenCalledWith(
+      'chat',
+      replacing,
+      expect.objectContaining({ role: 'assistant' }),
+    );
+    const answer = vi.mocked(replaceLastAnswer).mock.calls.at(-1)?.[2];
+    const saved = answer ? structuredClone([answer]) : undefined;
     if (!saved) throw new Error('missing persisted approval');
     const assistant = saved.at(-1);
     if (!assistant) throw new Error('missing assistant');
@@ -537,8 +549,12 @@ describe('Librarian streaming', () => {
         approval: { ...(part.approval as Record<string, unknown>), approved },
       };
     });
+    vi.mocked(resolveAiCredential).mockResolvedValue(credential);
+    vi.mocked(resolveAiFeatureCredential).mockClear();
     const resumed = await runLibrarian({ chatId: 'chat', messages: saved, link: null });
     await resumed.text();
+    expect(resolveAiCredential).toHaveBeenCalledWith(credential.kind, credential.model.id);
+    expect(resolveAiFeatureCredential).not.toHaveBeenCalled();
     if (approved) expect(call).toHaveBeenCalledExactlyOnceWith(name, input, undefined);
     else expect(call).not.toHaveBeenCalled();
   });

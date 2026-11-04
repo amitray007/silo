@@ -146,6 +146,17 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-messages > * + * {
   margin-top: 12px;
 }
+/* A question and its answer share one block. The newest sent turn is at least as tall as the log's
+   view (--silo-fill, set from script), so its answer streams into room that already exists. */
+.silo-chat-turn > * + * {
+  margin-top: 12px;
+}
+.silo-chat-turn:not(:first-child) {
+  margin-top: 20px;
+}
+.silo-chat-turn[data-fill] {
+  min-height: var(--silo-fill, 0px);
+}
 .silo-chat-message {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -184,9 +195,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   flex-direction: column;
   align-items: flex-end;
 }
-.silo-chat-user:not(:first-child) {
-  margin-top: 20px;
-}
 .silo-chat-bubble {
   max-width: 80%;
   padding: 8px 12px;
@@ -221,6 +229,132 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: none;
 }
 /* A whole answer that was held back arrives with the same drift as the trace. */
+/* Streamdown's headings, quotes, rules and task lists also ship only Tailwind classes. Reader
+   headings use 600, scaled down for a chat column. */
+.silo-chat-answer :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  font-weight: 600;
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-tight);
+}
+.silo-chat-answer h1 {
+  font-size: var(--text-lg);
+}
+.silo-chat-answer h2 {
+  font-size: var(--text-md);
+}
+.silo-chat-answer :is(h3, h4, h5, h6) {
+  font-size: var(--text-base);
+}
+.silo-chat-answer > div > * + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 14px;
+}
+.silo-chat-answer > div > :is(h1, h2, h3, h4, h5, h6) + * {
+  margin-top: 4px;
+}
+.silo-chat-answer blockquote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--line-2);
+  color: var(--mut);
+}
+.silo-chat-answer blockquote > * + * {
+  margin-top: 6px;
+}
+.silo-chat-answer hr {
+  height: 0;
+  margin-block: 12px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.silo-chat-answer .task-list-item {
+  list-style: none;
+}
+.silo-chat-answer .task-list-item input[type="checkbox"] {
+  margin: 0 6px 0 -18px;
+  vertical-align: -1px;
+  accent-color: var(--ink);
+}
+/* A long code line scrolls inside its panel; the fade says there is more to the right. */
+.silo-chat-answer [data-streamdown="code-block-body"] {
+  scrollbar-width: thin;
+}
+/* Streamdown tables and code: plain Oat styling, since its own classes are Tailwind. */
+.silo-chat-answer [data-streamdown="table-wrapper"] {
+  overflow-x: auto;
+  margin-block: 4px;
+}
+.silo-chat-answer [data-streamdown="table"] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  line-height: var(--lh-snug);
+}
+.silo-chat-answer :is([data-streamdown="table-header-cell"], [data-streamdown="table-cell"]) {
+  padding: 7px 12px 7px 0;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+  /* The answer allows breaks anywhere for long URLs; a table cell should break between words. */
+  overflow-wrap: normal;
+  min-width: 6em;
+}
+.silo-chat-answer [data-streamdown="table-header-cell"] {
+  color: var(--mut);
+  font-weight: 500;
+  border-bottom-color: var(--line-2);
+}
+.silo-chat-answer [data-streamdown="table-row"]:last-child [data-streamdown="table-cell"] {
+  border-bottom: 0;
+}
+.silo-chat-answer [data-streamdown="code-block"] {
+  margin-block: 4px;
+  border-radius: 8px;
+  background: var(--hov);
+  box-shadow: inset 0 0 0 0.5px var(--line);
+  overflow: hidden;
+}
+.silo-chat-answer [data-streamdown="code-block-header"] {
+  display: none;
+}
+.silo-chat-answer [data-streamdown="code-block-body"] {
+  overflow-x: auto;
+  padding: 10px 12px;
+  font: 12.5px / 1.55 var(--font-mono);
+}
+.silo-chat-answer [data-streamdown="code-block-body"] pre {
+  margin: 0;
+  background: none;
+}
+/* The global inline-code look (fill, padding) must not reach the block's own code element. */
+.silo-chat-answer [data-streamdown="code-block-body"] code {
+  display: block;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+}
+/* base.css sets Inter on every element, so each token span needs the mono face itself. */
+.silo-chat-answer [data-streamdown="code-block-body"] :is(pre, code, span) {
+  font-family: var(--font-mono);
+}
+/* One span per line, and Shiki's token colours, which Streamdown sets as variables. */
+.silo-chat-answer [data-streamdown="code-block-body"] code > span {
+  display: block;
+  min-height: 1lh;
+}
+.silo-chat-answer [data-streamdown="code-block-body"] code span span {
+  color: var(--sdm-c, inherit);
+}
+:root[data-theme="dark"] .silo-chat-answer [data-streamdown="code-block-body"] code span span {
+  color: var(--shiki-dark, var(--sdm-c, inherit));
+}
+.silo-chat-answer [data-streamdown="inline-code"] {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--hov);
+  font: 0.9em var(--font-mono);
+}
 .silo-chat-answer[data-reveal="true"] {
   animation: siloStatusIn 160ms var(--ease-out) both;
 }
@@ -228,6 +362,11 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: flex;
   gap: 2px;
   margin: 4px 0 0 -6px;
+  min-height: 28px;
+}
+/* While the answer streams the row holds its place unseen, then fades in without moving anything. */
+.silo-chat-actions[data-pending] {
+  visibility: hidden;
 }
 .silo-chat-actions .silo-reader-iconbtn {
   width: 28px;
@@ -413,11 +552,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-assistant li::marker {
   color: var(--fnt);
 }
-.silo-chat-assistant :is(h1, h2, h3, h4) {
-  margin: 12px 0 4px;
-  font-size: 14px;
-  font-weight: 600;
-}
 .silo-chat-assistant strong {
   font-weight: 500;
 }
@@ -452,7 +586,12 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   -webkit-line-clamp: 3;
   overflow: hidden;
 }
-.silo-chat-step,
+/* A step sits where it was typed, in the answer's own size and spacing: when a later tool call
+   turns streamed text into a step, only its colour changes. */
+.silo-chat-message .silo-chat-step {
+  margin-bottom: 8px;
+  color: var(--fnt);
+}
 .silo-chat-denied {
   margin: 0 0 4px;
   color: var(--fnt);
@@ -929,6 +1068,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
    optional attached passage between them. The selection surface, the dock and the page share it. */
 .silo-composer {
   --send: 32px;
+  --chip: 32px;
   --field-pad: 14px;
   display: grid;
   gap: 8px;
@@ -1033,6 +1173,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   margin: -4px;
   overflow-x: auto;
   scrollbar-width: none;
+  min-height: calc(var(--chip) + 8px);
   animation: siloQuickFade linear both;
   animation-timeline: scroll(self inline);
   mask-image: linear-gradient(to right, #000 calc(100% - var(--qfade)), transparent);
@@ -1044,6 +1185,39 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   flex: none;
   color: var(--fnt);
 }
+/* Follow-ups still loading: a soft light sweeps across each placeholder chip. */
+.silo-composer-chips .silo-composer-chip-skeleton {
+  flex: none;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  /* The light is mixed from ink so it shows on both themes; --sel alone is too close in dark. */
+  background:
+    linear-gradient(
+      90deg,
+      var(--hov) 0%,
+      color-mix(in oklch, var(--ink) 16%, var(--hov)) 45%,
+      var(--hov) 90%
+    )
+    0 0 / 250% 100%;
+  animation: siloChipShimmer 1.4s linear infinite;
+  cursor: default;
+}
+@keyframes siloChipShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-composer-chips .silo-composer-chip-skeleton {
+    animation: none;
+    background: var(--hov);
+  }
+}
 .silo-composer-chips::-webkit-scrollbar {
   display: none;
 }
@@ -1053,7 +1227,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
+  height: var(--chip);
   padding: 0 13px;
   border: 0;
   border-radius: 999px;
@@ -1300,6 +1474,37 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   to {
     background-position: -150% 0;
   }
+}
+
+/* The trace line: one 24px row above the answer. Its label changes words in place, and the live
+   reasoning tail hangs below it over the answer's empty room instead of pushing the answer. */
+.silo-trace {
+  position: relative;
+}
+.silo-trace-line {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 24px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 24px;
+  white-space: nowrap;
+}
+.silo-trace-line .silo-status {
+  margin: 0;
+}
+.silo-trace .silo-reasoning-live {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  animation: siloStatusIn 160ms var(--ease-out) both;
+}
+.silo-trace .silo-steps-list,
+.silo-trace .silo-reasoning-full {
+  margin-top: 4px;
 }
 
 /* Reasoning: live it shows the tail of the text; done it is a quiet disclosure. */
@@ -1630,6 +1835,7 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   }
   .silo-composer {
     --send: 40px;
+    --chip: 40px;
   }
   .silo-composer-chips button,
   .silo-selection-answer footer button,

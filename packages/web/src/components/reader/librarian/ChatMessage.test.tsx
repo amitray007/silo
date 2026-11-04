@@ -35,6 +35,17 @@ function search(id: string, count: number) {
 }
 
 describe('ChatMessage', () => {
+  it('gives an answer with no steps and no reasoning no line above its text', () => {
+    const { container, rerender } = render(
+      <ChatMessage message={{ id: 'q', role: 'assistant', parts: [] }} streaming fixedTrace />,
+    );
+    expect(container.querySelector('.silo-trace')?.textContent).toContain('Thinking');
+    rerender(<ChatMessage message={reply('Start with a notebook.', 'q')} streaming fixedTrace />);
+    expect(container.querySelector('.silo-trace')).toBeNull();
+    rerender(<ChatMessage message={reply('Start with a notebook.', 'q')} fixedTrace />);
+    expect(container.querySelector('.silo-trace')).toBeNull();
+  });
+
   it('merges several library searches into one step with the total count', () => {
     const message: UIMessage = {
       id: 'a1',

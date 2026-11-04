@@ -4,7 +4,6 @@ import {
   type LibrarianRequest,
   librarianApprovalSecret,
   resolveAiCredential,
-  resolveAiFeatureCredential,
 } from '@silo/core/ai-credential';
 import {
   createIdGenerator,
@@ -21,6 +20,7 @@ import { aiErrorCode, logAiFailure } from '../errors.js';
 import { chatModelSettings, chatStreamingModel } from '../generation.js';
 import { languageModelFor } from '../model.js';
 import { compactConversation } from './compaction.js';
+import { answerCredential } from './credential.js';
 import { persona, promptVersion, requestContext } from './persona.js';
 import { reasoningTiming } from './reasoning-time.js';
 import { librarianTools, toolApproval } from './tools.js';
@@ -70,7 +70,11 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
   try {
     const credential = request.model
       ? await resolveAiCredential(request.model.provider, request.model.id)
-      : await resolveAiFeatureCredential('librarian');
+      : await answerCredential(
+          request.messages.at(-1)?.role === 'assistant'
+            ? librarianMessageSchema.parse(request.messages.at(-1)).metadata?.model
+            : undefined,
+        );
     if (!credential) throw new Error('Unavailable');
     const approvalSecret = librarianApprovalSecret();
     const tools = await librarianTools(getLibrarianToolSource(), approvalSecret, request.transient);
@@ -143,7 +147,10 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
             const answer = messages.at(-1);
             if (
               answer?.role === 'assistant' &&
-              finished &&
+              (finished ||
+                answer.parts.some(
+                  (part) => 'state' in part && part.state === 'approval-requested',
+                )) &&
               !failed &&
               !isAborted &&
               outcome.status !== 'failed'

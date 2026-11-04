@@ -11,6 +11,9 @@ import { ReaderIcon } from '../ReaderIcon';
 /** The field stops growing here and scrolls: about four lines. */
 const MAX_FIELD = 124;
 
+/** Placeholder chips while follow-ups load: uneven widths read as text, not as a bar. */
+const SKELETON_WIDTHS = [148, 112, 172] as const;
+
 /** A quick action: its id travels as message metadata, its label is the message text. */
 export type QuickAction = readonly [id: string, label: string];
 
@@ -36,6 +39,7 @@ export function Composer({
   onSuggestion,
   onQuick,
   quickDisabled = false,
+  reserveChips = false,
   className,
 }: {
   value: string;
@@ -59,6 +63,8 @@ export function Composer({
   quick?: readonly QuickAction[];
   onQuick?: (id: string, label: string) => void;
   quickDisabled?: boolean;
+  /** Keep the chip row's height even when it is empty, so the field never jumps as chips come and go. */
+  reserveChips?: boolean;
   className?: string;
 }) {
   const field = useRef<HTMLTextAreaElement>(null);
@@ -84,7 +90,7 @@ export function Composer({
         if (value.trim() && !sendDisabled) onSend();
       }}
     >
-      {(quick.length > 0 || suggestions) && (
+      {(quick.length > 0 || suggestions || reserveChips) && (
         <div className="silo-composer-chips">
           {quick.map(([id, text]) => (
             <button
@@ -97,13 +103,14 @@ export function Composer({
             </button>
           ))}
           {suggestions?.status === 'pending'
-            ? [0, 1, 2].map((id) => (
+            ? SKELETON_WIDTHS.map((width, index) => (
                 <button
-                  key={`pending-${id}`}
+                  key={`pending-${width}`}
                   type="button"
                   disabled
                   aria-label="Loading follow-up"
-                  style={{ width: 100, height: 28, background: 'var(--bg2)' }}
+                  className="silo-composer-chip-skeleton"
+                  style={{ width, animationDelay: `${index * 120}ms` }}
                 />
               ))
             : suggestions?.items?.map(({ kind, text }) => (

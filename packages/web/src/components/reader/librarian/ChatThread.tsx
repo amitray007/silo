@@ -1,5 +1,13 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  type Ref,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   useChatAnswers,
   useLibrarianActions,
@@ -16,15 +24,7 @@ import type { AnswerControls } from './AnswerActions';
 import { pagerOrder } from './answerVersions';
 import { ChatMessage } from './ChatMessage';
 import { ComposerBar, type QuickAction } from './Composer';
-import { messageReasoning } from './Reasoning';
-import { StatusLine } from './StatusLine';
-import { statusLabel } from './status';
 import type { ThreadChat } from './useLibrarianChat';
-
-/** The live reasoning block says "Thinking" itself, so the status line steps aside for it. */
-function showsLiveReasoning(message: UIMessage | undefined, held: boolean): boolean {
-  return !held && message !== undefined && messageReasoning(message)?.live === true;
-}
 
 export type Passage = { quote: string; paragraph: number };
 
@@ -37,28 +37,178 @@ export function useChatComposer(initialPassage?: Passage) {
 }
 export type Composer = ReturnType<typeof useChatComposer>;
 
+/** What the log shows between a sent question and the first streamed part of its answer. */
+const PENDING_ANSWER: UIMessage = { id: 'pending-answer', role: 'assistant', parts: [] };
+
+/** Each question with the messages that follow it; messages before the first question form one group. */
+function groupTurns(messages: readonly UIMessage[]): UIMessage[][] {
+  const turns: UIMessage[][] = [];
+  for (const message of messages) {
+    if (message.role === 'user' || turns.length === 0) turns.push([message]);
+    else turns.at(-1)?.push(message);
+  }
+  return turns;
+}
+
+/** The answer right after a question keeps one key, so the pending frame becomes the answer without a remount. */
+function answerKey(turn: readonly UIMessage[], position: number): string {
+  return position === 1 && turn[0]?.role === 'user'
+    ? `answer-${turn[0].id}`
+    : (turn[position]?.id ?? '');
+}
+
+/** The conversation as turns: each question with its answer, and the pending frame until the answer's first part arrives. */
+function ChatTurns({
+  chat,
+  filled,
+  linkId,
+  held,
+  lastAssistantId,
+  controls,
+}: {
+  chat: ThreadChat;
+  /** The question whose turn keeps the log's full view. */
+  filled: string | undefined;
+  linkId: string | undefined;
+  held: boolean;
+  lastAssistantId: string | undefined;
+  controls: AnswerControls | undefined;
+}) {
+  const lastMessage = chat.messages.at(-1);
+  const turns = groupTurns(chat.messages);
+  const awaitingAnswer = chat.busy && lastMessage?.role === 'user';
+  return turns.map((turn, index) => {
+    const newest = index === turns.length - 1;
+    return (
+      <div
+        key={turn[0]?.id}
+        className="silo-chat-turn"
+        data-fill={newest && turn[0]?.id === filled ? '' : undefined}
+      >
+        {turn.map((message, position) => {
+          const live = chat.busy && message.id === lastMessage?.id;
+          return (
+            <ChatMessage
+              key={answerKey(turn, position)}
+              message={message}
+              linkId={linkId}
+              expired={message.id !== lastAssistantId}
+              streaming={live}
+              fixedTrace
+              controls={message.id === lastAssistantId ? controls : undefined}
+              held={held && live}
+              onApproval={chat.addToolApprovalResponse}
+            />
+          );
+        })}
+        {newest && awaitingAnswer && (
+          <ChatMessage
+            key={answerKey(turn, turn.length)}
+            message={PENDING_ANSWER}
+            streaming
+            fixedTrace
+            held={held}
+          />
+        )}
+      </div>
+    );
+  });
+}
+
+/** One spoken line when an answer starts and one when it ends: never one per streamed word. */
+function useTurnAnnouncement(busy: boolean): string {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    setText((now) => (busy ? 'Librarian is answering' : now && 'Answer ready'));
+  }, [busy]);
+  return text;
+}
+
 /** Within this many pixels of the end, the log counts as pinned to the bottom. */
 const PINNED_PX = 48;
 const JUMP_MS = 600;
 
+/** The height of the log's view, less its padding: what a turn fills so its answer has room below. */
+function turnFill(log: HTMLElement, panelMax: number | undefined): number {
+  const style = getComputedStyle(log);
+  const padding = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom);
+  // The dock's sheet grows with its content up to a cap, so its view is the cap less the header.
+  const header = log.closest('.silo-chat-panel')?.firstElementChild;
+  const view =
+    panelMax === undefined
+      ? log.clientHeight
+      : panelMax - (header instanceof HTMLElement ? header.offsetHeight : 0);
+  return Math.max(0, view - padding);
+}
+
+/** Scrolls so the turn's question sits at the top padding of the log. */
+function scrollTurnToTop(log: HTMLElement, turn: Element) {
+  const padding = Number.parseFloat(getComputedStyle(log).paddingTop);
+  log.scrollTop += turn.getBoundingClientRect().top - log.getBoundingClientRect().top - padding;
+}
+
+/** A growth this large (a sources row, a code block) glides to the end instead of snapping. */
+const GLIDE_PX = 40;
+
+/** Moves to the end: a line of text snaps, a big step glides, and a glide's own scroll events do not unpin the log. */
+function followEnd(log: HTMLElement, jumping: { current: number }) {
+  const distance = log.scrollHeight - log.clientHeight - log.scrollTop;
+  if (distance <= GLIDE_PX || reducedMotion() || !log.scrollTo) {
+    log.scrollTop = log.scrollHeight;
+    return;
+  }
+  jumping.current = performance.now() + JUMP_MS;
+  log.scrollTo({ top: log.scrollHeight, behavior: 'smooth' });
+}
+
 /**
  * Keeps a message log at its end while the reader is there, and lets go when they scroll up: new
- * lines then raise `away`, and `jump` brings them back. Sending a message always returns to the end.
+ * lines then raise `away`, and `jump` brings them back. Sending a message scrolls its question to
+ * the top and gives that turn the rest of the view (`filled` names its question), so the answer
+ * streams into space that is already there and nothing on screen moves until it outgrows it.
  */
-function useStickyLog(messages: readonly { role: string }[], active: boolean) {
+function useStickyLog(
+  messages: readonly { id: string; role: string }[],
+  active: boolean,
+  busy: boolean,
+  panelMax: number | undefined,
+) {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   /** A smooth jump is under way until this time, so its scroll events do not unpin the log. */
   const jumping = useRef(0);
   const [away, setAway] = useState(false);
+  const [filled, setFilled] = useState<string>();
+  const last = messages.at(-1);
+  const sentId = active && busy && last?.role === 'user' ? last.id : undefined;
+  useLayoutEffect(() => {
+    if (sentId) setFilled(sentId);
+  }, [sentId]);
+  const scrolledFor = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const turn = element?.querySelector('.silo-chat-turn[data-fill]');
+    if (!element || !turn) return;
+    const fill = () => element.style.setProperty('--silo-fill', `${turnFill(element, panelMax)}px`);
+    fill();
+    if (scrolledFor.current !== filled) {
+      scrolledFor.current = filled;
+      pinned.current = true;
+      scrollTurnToTop(element, turn);
+    }
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(fill);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [filled, panelMax]);
   useEffect(() => {
     const element = ref.current;
-    if (!active || !element || messages.length === 0) return;
-    if (pinned.current || messages.at(-1)?.role === 'user') {
+    if (!active || !element || messages.length === 0 || last?.id === filled) return;
+    if (pinned.current || last?.role === 'user') {
       pinned.current = true;
-      element.scrollTop = element.scrollHeight;
+      followEnd(element, jumping);
     } else setAway(true);
-  }, [messages, active]);
+  }, [messages, active, last, filled]);
   const onScroll = () => {
     const element = ref.current;
     if (!active || !element || performance.now() < jumping.current) return;
@@ -74,7 +224,7 @@ function useStickyLog(messages: readonly { role: string }[], active: boolean) {
       behavior: reducedMotion() ? 'auto' : 'smooth',
     });
   };
-  return { ref, onScroll, away, jump };
+  return { ref, onScroll, away, jump, filled };
 }
 
 /**
@@ -123,7 +273,8 @@ export function ChatThread({
   active?: boolean;
 }) {
   const { input, setInput, passage, setPassage, field } = composer;
-  const log = useStickyLog(chat.messages, active);
+  const log = useStickyLog(chat.messages, active, chat.busy, maxHeight);
+  const announcement = useTurnAnnouncement(chat.busy);
   const messagesRef = useRef(chat.messages);
   messagesRef.current = chat.messages;
   const owner = useLibrarianActions();
@@ -144,8 +295,6 @@ export function ChatThread({
   // Selecting a version swaps ids, so the pager order outlives each message's mount.
   const versionOrder = useRef<string[]>([]);
   const answerControls = controlsOf(chat, lastAssistant?.id, versionOrder);
-  const reasoningShown = showsLiveReasoning(lastAssistant, wholeAnswers);
-  const status = statusLabel(chat.messages);
   const send = (text: string, action?: string) => {
     const sent = chat.send(text, action, passage);
     setPassage(undefined);
@@ -161,6 +310,9 @@ export function ChatThread({
     <section ref={panelRef} className="silo-chat-panel" aria-label="Librarian conversation">
       {header}
       <div className="silo-chat-log">
+        <p aria-live="polite" className="silo-sr-only">
+          {announcement}
+        </p>
         <div
           className="silo-chat-messages"
           ref={log.ref}
@@ -169,21 +321,14 @@ export function ChatThread({
           aria-label="Messages"
           aria-busy={chat.busy}
         >
-          {chat.messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              linkId={linkId}
-              expired={message.id !== lastAssistant?.id}
-              streaming={chat.busy && message.id === lastAssistant?.id}
-              controls={message.id === lastAssistant?.id ? answerControls : undefined}
-              held={wholeAnswers && chat.busy && message.id === chat.messages.at(-1)?.id}
-              onApproval={chat.addToolApprovalResponse}
-            />
-          ))}
-          {chat.busy && !chat.pendingApproval && !reasoningShown && status && (
-            <StatusLine label={status} className="silo-chat-pending" />
-          )}
+          <ChatTurns
+            chat={chat}
+            filled={log.filled}
+            linkId={linkId}
+            held={wholeAnswers}
+            lastAssistantId={lastAssistant?.id}
+            controls={answerControls}
+          />
           {chat.messages.length === 0 &&
             (chat.loading ? (
               <div className="silo-chat-empty">
@@ -265,6 +410,7 @@ export function ChatThread({
         }
         passage={passage && { quote: passage.quote, onRemove: () => setPassage(undefined) }}
         suggestions={suggestions}
+        reserveChips={actions.length > 0 || suggestFollowups}
         onSuggestion={(text) => send(text)}
         quick={quick}
         quickDisabled={disabled}

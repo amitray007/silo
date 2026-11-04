@@ -10,6 +10,7 @@ import { citationItems } from './citationItems';
 import { messageReasoning, Reasoning } from './Reasoning';
 import { SourcesRow } from './SourcesRow';
 import { Steps } from './Steps';
+import { TurnTrace } from './TurnTrace';
 import { splitSteps, toolName } from './tools';
 
 const citationPlugins: NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']> =
@@ -73,12 +74,83 @@ function UserMessage({ message }: { message: UIMessage }) {
 const isAwaitingApproval = (message: UIMessage) =>
   message.parts.some((part) => 'state' in part && part.state === 'approval-requested');
 
+/** The approval cards and "Not done" notes for the message's tool calls. */
+function ApprovalRows({
+  message,
+  expired,
+  linkId,
+  onApproval,
+}: {
+  message: UIMessage;
+  expired: boolean;
+  linkId: string | undefined;
+  onApproval: ((response: { id: string; approved: boolean }) => void) | undefined;
+}) {
+  return message.parts.map((part) => {
+    if (!('state' in part)) return null;
+    if (part.state === 'output-denied')
+      return (
+        <p key={part.toolCallId} className="silo-chat-denied">
+          Not done.
+        </p>
+      );
+    if (part.state !== 'approval-requested') return null;
+    return (
+      <ApprovalRow
+        key={part.toolCallId}
+        name={toolName(part) ?? ''}
+        input={part.input}
+        expired={expired}
+        linkId={linkId}
+        onDecision={
+          onApproval ? (approved) => onApproval({ id: part.approval.id, approved }) : undefined
+        }
+      />
+    );
+  });
+}
+
+/** What follows a finished answer: its sources, then copy and the rest. While it streams, the actions row holds its place unseen. */
+function AnswerFoot({
+  message,
+  answer,
+  resolved,
+  streaming,
+  held,
+  approving,
+  fixedTrace,
+  controls,
+}: {
+  message: UIMessage;
+  answer: string;
+  resolved: Record<string, string>;
+  streaming: boolean;
+  held: boolean;
+  approving: boolean;
+  fixedTrace: boolean;
+  controls: AnswerControls | undefined;
+}) {
+  if (approving) return null;
+  if (streaming)
+    return fixedTrace ? (
+      <div className="silo-chat-actions" data-pending="" aria-hidden="true" />
+    ) : null;
+  if (!answer.trim()) return null;
+  return (
+    <>
+      {!held && <SourcesRow answer={answer} resolved={resolved} />}
+      <AnswerActions id={message.id} markdown={answer} controls={controls} />
+    </>
+  );
+}
+
 export const ChatMessage = memo(function ChatMessage({
   message,
   onApproval,
   expired = false,
   streaming = false,
   held = false,
+  fixedTrace = false,
   linkId,
   controls,
 }: {
@@ -88,6 +160,8 @@ export const ChatMessage = memo(function ChatMessage({
   streaming?: boolean;
   /** Keep the arriving answer unrendered until the message is whole (Settings -> AI, Show answers). */
   held?: boolean;
+  /** Hold the steps line at one fixed height for the whole turn, so nothing below it moves. */
+  fixedTrace?: boolean;
   linkId?: string | undefined;
   /** Regenerate and version paging; given only for the last answer once it is finished. */
   controls?: AnswerControls | undefined;
@@ -111,44 +185,34 @@ export const ChatMessage = memo(function ChatMessage({
         <ReaderIcon name="librarian" size={16} />
       </span>
       <div className="silo-chat-assistant-body">
-        {reasoning && <Reasoning {...reasoning} />}
+        {fixedTrace ? (
+          <TurnTrace
+            message={message}
+            reasoning={reasoning}
+            live={streaming && !approving}
+            answerStarted={!held && answer.trim() !== ''}
+          />
+        ) : (
+          reasoning && <Reasoning {...reasoning} />
+        )}
         {!held &&
           steps.map((step) => (
             <p key={step} className="silo-chat-step">
               {step}
             </p>
           ))}
-        <Steps message={message} />
-        {message.parts.map((part) => {
-          if (!('state' in part)) return null;
-          if (part.state === 'output-denied')
-            return (
-              <p key={part.toolCallId} className="silo-chat-denied">
-                Not done.
-              </p>
-            );
-          if (part.state !== 'approval-requested') return null;
-          return (
-            <ApprovalRow
-              key={part.toolCallId}
-              name={toolName(part) ?? ''}
-              input={part.input}
-              expired={expired}
-              linkId={linkId}
-              onDecision={
-                onApproval
-                  ? (approved) => onApproval({ id: part.approval.id, approved })
-                  : undefined
-              }
-            />
-          );
-        })}
+        {!fixedTrace && <Steps message={message} />}
+        <ApprovalRows message={message} expired={expired} linkId={linkId} onApproval={onApproval} />
         {!held && (
           <div className="silo-chat-answer" data-reveal={wasHeld}>
             <CitationItems value={citationItems(message)}>
               <CitationResolved value={resolve}>
                 <Streamdown
                   skipHtml
+                  // Its table and code toolbars need Tailwind; the answer has its own Copy.
+                  controls={false}
+                  tableMaxHeight={0}
+                  codeBlockMaxHeight={0}
                   animated={wordFade}
                   isAnimating={streaming}
                   rehypePlugins={citationPlugins}
@@ -160,12 +224,16 @@ export const ChatMessage = memo(function ChatMessage({
             </CitationItems>
           </div>
         )}
-        {!streaming && !held && !approving && answer.trim() && (
-          <SourcesRow answer={answer} resolved={resolved} />
-        )}
-        {!streaming && !approving && answer.trim() && (
-          <AnswerActions id={message.id} markdown={answer} controls={controls} />
-        )}
+        <AnswerFoot
+          message={message}
+          answer={answer}
+          resolved={resolved}
+          streaming={streaming}
+          held={held}
+          approving={approving}
+          fixedTrace={fixedTrace}
+          controls={controls}
+        />
       </div>
     </div>
   );
