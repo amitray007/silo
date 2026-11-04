@@ -1,3 +1,4 @@
+import type { UIMessage } from '@ai-sdk/react';
 import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState } from 'react';
 import {
   useChatAnswers,
@@ -11,9 +12,15 @@ import { stopAnswerSpeech } from '../listen/answerSpeech';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
 import { ComposerBar, type QuickAction } from './Composer';
+import { messageReasoning } from './Reasoning';
 import { StatusLine } from './StatusLine';
 import { statusLabel } from './status';
 import type { ThreadChat } from './useLibrarianChat';
+
+/** The live reasoning block says "Thinking" itself, so the status line steps aside for it. */
+function showsLiveReasoning(message: UIMessage | undefined, held: boolean): boolean {
+  return !held && message !== undefined && messageReasoning(message)?.live === true;
+}
 
 export type Passage = { quote: string; paragraph: number };
 
@@ -124,6 +131,7 @@ export function ChatThread({
   useRefreshOnRemovedAction(chat.error?.message);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
+  const reasoningShown = showsLiveReasoning(lastAssistant, wholeAnswers);
   const send = (text: string, action?: string) => {
     const sent = chat.send(text, action, passage);
     setPassage(undefined);
@@ -158,7 +166,7 @@ export function ChatThread({
               onApproval={chat.addToolApprovalResponse}
             />
           ))}
-          {chat.busy && !chat.pendingApproval && (
+          {chat.busy && !chat.pendingApproval && !reasoningShown && (
             <StatusLine label={statusLabel(chat.messages)} className="silo-chat-pending" />
           )}
           {chat.messages.length === 0 &&

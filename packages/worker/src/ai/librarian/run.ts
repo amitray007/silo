@@ -11,15 +11,17 @@ import {
   createUIMessageStreamResponse,
   isStepCount,
   type ModelMessage,
+  smoothStream,
   streamText,
   toUIMessageStream,
   validateUIMessages,
 } from 'ai';
 import { aiErrorCode, logAiFailure } from '../errors.js';
-import { chatModelSettings } from '../generation.js';
+import { chatModelSettings, chatStreamingModel } from '../generation.js';
 import { languageModelFor } from '../model.js';
 import { compactConversation } from './compaction.js';
 import { persona, promptVersion, requestContext } from './persona.js';
+import { reasoningTiming } from './reasoning-time.js';
 import { librarianTools, toolApproval } from './tools.js';
 
 /**
@@ -77,13 +79,22 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     });
     const model = languageModelFor(credential);
     const input = await compactConversation(request, originalMessages, credential, model, persona);
+    const last = originalMessages.at(-1);
+    const parsedLast = last?.role === 'assistant' ? librarianMessageSchema.parse(last) : undefined;
+    const timing = reasoningTiming(
+      typeof parsedLast?.metadata?.reasoningMs === 'number' ? parsedLast.metadata.reasoningMs : 0,
+    );
     const result = streamText({
-      model,
+      model: chatStreamingModel(model, credential),
       // The UI stream logs the fixed code; the SDK default logs raw provider errors.
       onError: () => {},
       ...input,
       messages: withRequestContext(input.messages, requestContext(request)),
-      experimental_transform: withoutProviderChunks,
+      experimental_transform: [
+        timing.transform,
+        withoutProviderChunks,
+        smoothStream({ chunking: new Intl.Segmenter(undefined, { granularity: 'word' }) }),
+      ],
       tools,
       toolApproval,
       ...(approvalSecret ? { experimental_toolApprovalSecret: approvalSecret } : {}),
@@ -91,12 +102,13 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       maxRetries: 2,
       telemetry: { isEnabled: false },
       ...(request.abortSignal ? { abortSignal: request.abortSignal } : {}),
-      ...chatModelSettings(credential, { promptCache: true }),
+      ...chatModelSettings(credential, { promptCache: true, readableReasoning: true }),
     });
     const stream = toUIMessageStream({
       stream: result.stream,
       originalMessages,
       generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
+      messageMetadata: timing.messageMetadata,
       onError: failure,
       onEnd: async ({ messages }) => {
         try {

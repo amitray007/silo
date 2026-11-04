@@ -1,5 +1,12 @@
 import type { AiCredential } from '@silo/core/ai-credential';
-import { type generateText, NoObjectGeneratedError, NoOutputGeneratedError, RetryError } from 'ai';
+import {
+  type generateText,
+  type LanguageModel,
+  NoObjectGeneratedError,
+  NoOutputGeneratedError,
+  RetryError,
+  wrapLanguageModel,
+} from 'ai';
 
 type Settings = Pick<
   Parameters<typeof generateText>[0],
@@ -86,7 +93,7 @@ const REJECTED_OPTIONS: Record<AiCredential['kind'], readonly (readonly [Option,
   ],
   openai: [
     ['format', FORMAT_PATTERN],
-    ['reasoning', /\breasoning(?:[_ .]effort)?\b/i],
+    ['reasoning', /\breasoning(?:[_ .]effort|[_ .]?summary)?\b/i],
     ['temperature', /\btemperature\b/i],
   ],
   gateway: [
@@ -124,7 +131,7 @@ function optionInMessage(message: string, kind: AiCredential['kind']): Option | 
 
 const OMIT_FIELDS: Record<Option, string[]> = {
   format: ['structuredOutputMode'],
-  reasoning: ['thinking', 'effort', 'reasoningEffort', 'reasoningBudget'],
+  reasoning: ['thinking', 'effort', 'reasoningEffort', 'reasoningBudget', 'reasoningSummary'],
   effort: ['effort', 'reasoningEffort'],
   thinking: ['thinking'],
   temperature: ['temperature'],
@@ -249,11 +256,27 @@ function rememberSettings(
   });
 }
 
+/** Ask the provider to return readable reasoning, for the chat only. Models without reasoning settings are left alone. */
+function withReadableReasoning(credential: AiCredential, base: Settings): void {
+  const { providerOptions } = base;
+  if (credential.kind === 'anthropic') {
+    const anthropic = providerOptions?.anthropic;
+    const thinking = anthropic?.thinking as { type?: string } | undefined;
+    if (anthropic && thinking?.type === 'adaptive')
+      anthropic.thinking = { ...thinking, display: 'summarized' };
+  }
+  if (credential.kind === 'openai' && providerOptions?.openai?.reasoningEffort)
+    providerOptions.openai.reasoningSummary = 'auto';
+}
+
 export function chatModelSettings(
   credential: AiCredential,
-  options: { promptCache?: boolean } = {},
+  options: { promptCache?: boolean; readableReasoning?: boolean } = {},
 ) {
   const base = settingsFor(credential);
+  if (options.readableReasoning) withReadableReasoning(credential, base);
+  for (const option of rememberedOptions(`${credential.kind}:${credential.model.id}`) ?? [])
+    omitOption(base, option);
   if (options.promptCache && (credential.kind === 'anthropic' || credential.kind === 'gateway')) {
     const provider = credential.kind;
     base.providerOptions = {
@@ -269,4 +292,79 @@ export function chatModelSettings(
   omitOption(base, 'format');
   const { structuredOutput: _structuredOutput, ...settings } = base;
   return { ...settings, maxOutputTokens: 4096 };
+}
+
+/** Retry only while the provider has emitted no content. Later stream failures pass through. */
+export function chatStreamingModel(model: LanguageModel, credential: AiCredential) {
+  if (typeof model === 'string') throw new Error('Expected provider model');
+  let started = false;
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      specificationVersion: 'v4',
+      wrapStream: async ({ model, params }) => {
+        const key = `${credential.kind}:${credential.model.id}`;
+        const previous = rememberedOptions(key);
+        const settings: Settings = {
+          ...chatModelSettings(credential, {
+            promptCache: true,
+            readableReasoning: true,
+          }),
+          structuredOutput: false,
+        };
+        const attempt = async () => {
+          const result = await model.doStream({
+            ...params,
+            providerOptions: settings.providerOptions ?? {},
+          });
+          const stream = await primeStream(result.stream);
+          started = true;
+          return { ...result, stream };
+        };
+        try {
+          return await attempt();
+        } catch (error) {
+          const option = rejectedOption(error, credential.kind);
+          if (started || !option || !omitOption(settings, option)) throw error;
+          const result = await attempt();
+          rememberSettings(key, previous, option);
+          return result;
+        }
+      },
+    },
+  });
+}
+
+function replayStream<T>(buffered: (T | undefined)[], reader: ReadableStreamDefaultReader<T>) {
+  return new ReadableStream<T>({
+    async pull(controller) {
+      const first = buffered.shift();
+      if (first !== undefined) {
+        controller.enqueue(first);
+        return;
+      }
+      const next = await reader.read();
+      if (next.done) controller.close();
+      else controller.enqueue(next.value);
+    },
+    cancel: (reason) => reader.cancel(reason),
+  });
+}
+
+async function primeStream<T extends { type: string; error?: unknown }>(stream: ReadableStream<T>) {
+  const reader = stream.getReader();
+  const buffered: T[] = [];
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      if (next.value.type === 'error') throw next.value.error;
+      buffered.push(next.value);
+      if (!['stream-start', 'response-metadata', 'raw'].includes(next.value.type)) break;
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  }
+  return replayStream(buffered, reader);
 }

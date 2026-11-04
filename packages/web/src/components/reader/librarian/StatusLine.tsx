@@ -23,10 +23,7 @@ export function StatusLine({ label, className }: { label: string; className?: st
         </span>
       )}
       <span key={label} className="silo-status-in">
-        <span className="silo-shimmer">
-          {label}
-          <span className="silo-shimmer-glint" data-label={label} aria-hidden="true" />
-        </span>
+        <span className="silo-shimmer">{label}</span>
       </span>
     </p>
   );
