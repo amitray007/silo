@@ -9,6 +9,8 @@ const fake = vi.hoisted(() => ({
   started: [] as string[],
   halted: 0,
   holdLoad: undefined as Promise<void> | undefined,
+  holds: new Map<string, Promise<void>>(),
+  disposed: [] as string[],
 }));
 
 vi.mock('./voiceModels', () => ({ useVoiceModel: vi.fn() }));
@@ -18,9 +20,11 @@ vi.mock('./engines', () => ({
     voices: () => [{ id: 'v1', label: 'One', language: 'en-us' }],
     load: async () => {
       fake.loads.push(id);
-      await fake.holdLoad;
+      await (fake.holds.get(id) ?? fake.holdLoad);
     },
-    dispose: () => {},
+    dispose: () => {
+      fake.disposed.push(id);
+    },
   }),
 }));
 vi.mock('./player', () => ({
@@ -46,6 +50,8 @@ beforeEach(() => {
   fake.loads.length = 0;
   fake.started.length = 0;
   fake.halted = 0;
+  fake.disposed.length = 0;
+  fake.holds.clear();
   vi.stubGlobal(
     'AudioContext',
     class {
@@ -159,4 +165,25 @@ it('stops an answer that is playing', async () => {
   await act(async () => view.result.current.toggle());
   act(() => stopAnswerSpeech('a'));
   expect(view.result.current.phase).toBe('idle');
+});
+
+it('keeps the newer engine when an older load finishes last, and disposes the stale one', async () => {
+  const done: Record<string, () => void> = {};
+  // Earlier tests left an engine loaded; clear it so both loads really start.
+  await speakAnswer('x', 'Warm up here.', { ...prefs, engine: 'kokoro' }).catch(() => {});
+  stopAnswerSpeech('x');
+  for (const id of ['phonon', 'kokoro'])
+    fake.holds.set(id, new Promise<void>((resolve) => (done[id] = resolve)));
+  fake.loads.length = 0;
+  fake.disposed.length = 0;
+  const older = speakAnswer('a', 'First answer here.', prefs);
+  const newer = speakAnswer('b', 'Second answer here.', { ...prefs, engine: 'kokoro' });
+  done.kokoro?.();
+  await newer;
+  expect(fake.started).toContain('Second answer here.');
+  done.phonon?.();
+  await older;
+  // The warm-up engine goes first when the older load starts; then only the stale one.
+  expect(fake.disposed).toEqual(['kokoro', 'phonon']);
+  expect(fake.started).not.toContain('First answer here.');
 });

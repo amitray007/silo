@@ -116,14 +116,22 @@ async function loadEngine(id: EngineId): Promise<TtsEngine> {
     engine.dispose();
     throw reason;
   }
-  // Another engine's overlapping load finished first: the newest load replaces it.
+  if (latest !== id) {
+    // A newer request chose another engine; this one must not replace it.
+    engine.dispose();
+    throw new Error('Superseded by a newer voice');
+  }
   loaded?.dispose();
   loaded = engine;
   return engine;
 }
 
+/** The engine the newest request wants; an older load that finishes late is stale. */
+let latest: EngineId | undefined;
+
 function engineFor(id: EngineId): Promise<TtsEngine> {
   clearTimeout(idleTimer);
+  latest = id;
   if (loaded?.id === id) return Promise.resolve(loaded);
   const pending = loading.get(id);
   if (pending) return pending;
