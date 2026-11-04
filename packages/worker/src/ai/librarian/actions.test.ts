@@ -218,7 +218,10 @@ suite('saved actions at the model boundary (real Postgres)', () => {
     expect(model.doStreamCalls[0]?.prompt).toEqual(
       expect.arrayContaining([
         { role: 'user', content: [{ type: 'text', text: 'Related' }] },
-        { role: 'assistant', content: [{ type: 'text', text: 'An old answer' }] },
+        expect.objectContaining({
+          role: 'assistant',
+          content: [{ type: 'text', text: 'An old answer' }],
+        }),
         {
           role: 'user',
           content: expect.arrayContaining([{ type: 'text', text: 'Saved this week' }]),

@@ -504,3 +504,51 @@ it('keeps system instructions stable and appends context only to the last user t
   expect(JSON.stringify(second?.prompt.at(-1))).toContain('second');
   expect(first?.providerOptions?.anthropic).toHaveProperty('cacheControl', { type: 'ephemeral' });
 });
+
+it('caches a history prefix that the next turn replays unchanged', async () => {
+  vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+  vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    }),
+  });
+  vi.mocked(languageModelFor).mockReturnValue(model);
+  const turn = (id: string, role: 'user' | 'assistant', text: string) => ({
+    id,
+    role,
+    parts: [{ type: 'text' as const, text }],
+    metadata: role === 'user' ? { selection: id } : undefined,
+  });
+  const history = [turn('u1', 'user', 'One'), turn('a1', 'assistant', 'Reply one')];
+  for (const messages of [
+    [...history, turn('u2', 'user', 'Two')],
+    [
+      ...history,
+      turn('u2', 'user', 'Two'),
+      turn('a2', 'assistant', 'Reply two'),
+      turn('u3', 'user', 'Three'),
+    ],
+  ]) {
+    const response = await runLibrarian({ chatId: '', transient: true, link: null, messages });
+    await response.text();
+  }
+  const breakpoint = (prompt: { providerOptions?: unknown }[]) =>
+    prompt.findIndex((message) =>
+      JSON.stringify(message.providerOptions ?? {}).includes('cacheControl'),
+    );
+  const withoutMarks = (prompt: object[]) =>
+    prompt.map(({ providerOptions: _, ...message }: { providerOptions?: unknown }) => message);
+  const first = model.doStreamCalls[0]?.prompt ?? [];
+  const second = model.doStreamCalls[1]?.prompt ?? [];
+  const firstMark = breakpoint(first);
+  expect(first[firstMark]).toMatchObject({ role: 'assistant' });
+  expect(breakpoint(second)).toBeGreaterThan(firstMark);
+  expect(withoutMarks(second.slice(0, firstMark + 1))).toEqual(
+    withoutMarks(first.slice(0, firstMark + 1)),
+  );
+});

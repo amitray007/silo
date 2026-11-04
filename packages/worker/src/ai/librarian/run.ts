@@ -22,9 +22,21 @@ import { compactConversation } from './compaction.js';
 import { persona, promptVersion, requestContext } from './persona.js';
 import { librarianTools, toolApproval } from './tools.js';
 
+/**
+ * The per-turn context rides on the latest user message only, so next turn's replay differs
+ * there. A breakpoint just before it caches the history prefix the next turn sends unchanged.
+ */
 function withRequestContext(messages: ModelMessage[], context: string): ModelMessage[] {
   const lastUser = messages.findLastIndex((message) => message.role === 'user');
   return messages.map((message, index) => {
+    if (index === lastUser - 1)
+      return {
+        ...message,
+        providerOptions: {
+          ...message.providerOptions,
+          anthropic: { ...message.providerOptions?.anthropic, cacheControl: { type: 'ephemeral' } },
+        },
+      } as ModelMessage;
     if (index !== lastUser || message.role !== 'user') return message;
     const content =
       typeof message.content === 'string'
