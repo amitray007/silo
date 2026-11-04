@@ -1,6 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
-  "ignore": ["docs/**", "scripts/**", "packages/web/src/dev/agentation-stub.ts"],
+  "ignore": [
+    "docs/**",
+    "scripts/**",
+    "packages/web/src/dev/agentation-stub.ts",
+    "packages/web/src/components/stickers/fun.ts",
+    "packages/web/src/components/stickers/motions.ts"
+  ],
   "ignoreWorkspaces": ["packages/tsconfig"],
   "workspaces": {
     "packages/db": {

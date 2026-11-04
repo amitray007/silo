@@ -64,3 +64,10 @@ if (!window.CSS.escape) {
   window.CSS.escape = (value: string): string =>
     value.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
 }
+
+// jsdom has no canvas: getContext logs "not implemented" and returns undefined.
+// The sticker runtime (components/stickers) checks for a context and skips the
+// paint, so a quiet null keeps test output clean. A test that wants to see the
+// paints installs its own fake context.
+HTMLCanvasElement.prototype.getContext = (() =>
+  null) as typeof HTMLCanvasElement.prototype.getContext;
