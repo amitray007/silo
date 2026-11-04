@@ -416,3 +416,34 @@ describe('chat prompt caching', () => {
     expect(chatModelSettings(gateway).providerOptions?.gateway).not.toHaveProperty('caching');
   });
 });
+
+it('forwards Gateway caching on the budget model Chat Completions body', async () => {
+  const sent: Record<string, unknown>[] = [];
+  const fetch: typeof globalThis.fetch = async (_url, init) => {
+    sent.push(JSON.parse(String(init?.body)));
+    return Response.json({ error: { message: 'test failure' } }, { status: 500 });
+  };
+  const gateway = {
+    kind: 'gateway' as const,
+    apiKey: 'fake-wire-key',
+    model: {
+      id: 'alibaba/qwen3-max-thinking',
+      label: 'Qwen',
+      structuredOutput: 'native' as const,
+      reasoning: { type: 'gateway' as const, budgetTokens: 1 },
+    },
+  };
+  for (const promptCache of [true, false])
+    await generateText({
+      model: languageModelFor(gateway, fetch),
+      prompt: 'hi',
+      maxRetries: 0,
+      ...chatModelSettings(gateway, { promptCache }),
+    }).catch(() => {});
+  expect(sent[0]).toMatchObject({
+    reasoning: { max_tokens: 1 },
+    providerOptions: { gateway: { caching: 'auto' } },
+  });
+  expect(sent[1]).toMatchObject({ reasoning: { max_tokens: 1 } });
+  expect(sent[1]).not.toHaveProperty('providerOptions');
+});
