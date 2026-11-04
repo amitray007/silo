@@ -393,7 +393,13 @@ export type { ReaderPrefs, ReaderSettings } from './settings/reader.js';
 export { readerPatchSchema } from './settings/reader.js';
 export type { SettingKey, SettingsMap, SettingValue } from './settings/schema.js';
 export { SETTINGS_DEFAULTS } from './settings/schema.js';
-export { getAllSettings, getSetting, setSetting, updateSettings } from './settings/settings.js';
+export {
+  getAllSettings,
+  getSetting,
+  setSetting,
+  settingsWriteEpoch,
+  updateSettings,
+} from './settings/settings.js';
 export type { TtsFiles, TtsLocalFile, TtsServe } from './tts/files.js';
 // Read aloud model files (reader tools, slice 4): the pinned manifest, the download-once file
 // store, and the data directory. `@silo/api` serves them at `/api/tts/files`.

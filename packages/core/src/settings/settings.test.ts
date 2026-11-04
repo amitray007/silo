@@ -81,6 +81,23 @@ describeIfPg('settings store (integration, plan 016)', () => {
     expect(await ops.getSetting('librarianThinking')).toBe('high');
   });
 
+  describe('settingsWriteEpoch', () => {
+    it('advances once a write has committed, and not on reads or rejected writes', async () => {
+      const start = ops.settingsWriteEpoch();
+      await ops.getSetting('mcpAccess');
+      await ops.getAllSettings();
+      await expect(ops.setSetting('mcpAccess', 'nope')).rejects.toThrow();
+      expect(ops.settingsWriteEpoch()).toBe(start);
+
+      await ops.setSetting('mcpAccess', false);
+      const afterSet = ops.settingsWriteEpoch();
+      expect(afterSet).toBeGreaterThan(start);
+
+      await ops.updateSettings({ mcpAccess: true });
+      expect(ops.settingsWriteEpoch()).toBeGreaterThan(afterSet);
+    });
+  });
+
   it('round-trips action order, hidden flags and trimmed custom text through Postgres', async () => {
     expect(await ops.getSetting('librarianActions')).toEqual(LIBRARIAN_ACTIONS_DEFAULTS);
     const value = structuredClone(LIBRARIAN_ACTIONS_DEFAULTS);
