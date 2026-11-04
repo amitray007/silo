@@ -113,6 +113,8 @@ it('shows a new chat in the right pane when no link is open', () => {
   expect(screen.getByRole('region', { name: 'Librarian chat' })).toBeDefined();
   expect(screen.getByTestId('chat-id').textContent).toBe('none');
   expect(screen.queryByText('Select a link to read')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Created' }));
+  expect(screen.getByTestId('where').textContent).toBe('?chat=made');
 });
 
 it('opens the chat named by ?chat=', () => {
@@ -190,6 +192,20 @@ it.each(['Open first', 'Other route'])('ignores creation after navigation: %s', 
   act(() => finish('late'));
   expect(screen.getByTestId('where').textContent).toBe(before);
 });
+
+it.each(['Back', 'Escape'])(
+  'ignores late creation after dismissing a narrow chat: %s',
+  (action) => {
+    setup({ path: '/?chat=new', narrow: true });
+    const finish = completeCreation;
+    if (action === 'Back') fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    else fireEvent.keyDown(document, { key: 'Escape' });
+    act(() => finish('late'));
+    expect(screen.getByTestId('where').textContent).toBe('');
+    expect(screen.queryByTestId('chat-id')).toBeNull();
+    expect(pane()?.getAttribute('data-reader')).toBe('false');
+  },
+);
 
 it('focuses an explicitly opened new chat', () => {
   setup({ path: '/?chat=new' });

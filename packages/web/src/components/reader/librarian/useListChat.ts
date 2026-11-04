@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useLibrarianReady } from '../../../api/librarian';
 import { layoutMedia, useMediaQuery } from '../../../lib/breakpoints';
-import { NEW_CHAT, useChatParam } from '../../../lib/useChatParam';
+import { useChatParam } from '../../../lib/useChatParam';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 
 /**
@@ -25,14 +25,7 @@ export function useListChat({ linkOpen, trashed }: { linkOpen: boolean; trashed:
   const created = (id: string) => {
     const current = currentLocation.current;
     const params = new URLSearchParams(current.search);
-    const param = params.get('chat');
-    if (
-      !mounted.current ||
-      current.pathname !== location.pathname ||
-      params.has('link') ||
-      (param !== null && param !== NEW_CHAT)
-    )
-      return;
+    if (!mounted.current || current.key !== location.key) return;
     params.set('chat', id);
     void navigate({ ...current, search: `?${params}` }, { replace: true });
   };
