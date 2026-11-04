@@ -270,18 +270,14 @@ describe('Gateway models', () => {
         'anthropic/claude-opus-5.5',
         { type: 'gateway', effort: 'low', efforts: ['low', 'medium', 'high'] },
       ],
-      ['toggle', { type: 'gateway', toggle: true, effort: 'none' }],
-      ['budget', { type: 'gateway', budgetTokens: 64, budgetMin: 64, budgetMax: 8192 }],
+      ['toggle', { type: 'gateway', effort: 'none' }],
+      ['budget', { type: 'gateway', budgetTokens: 64 }],
       [
         'combined',
         {
           type: 'gateway',
-          toggle: true,
           efforts: ['low', 'high'],
           effort: 'low',
-          budgetTokens: 0,
-          budgetMin: 0,
-          budgetMax: 100,
         },
       ],
     ]);

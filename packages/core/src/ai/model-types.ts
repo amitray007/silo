@@ -15,9 +15,6 @@ const reasoningSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('openai'), effort: effort.optional() }),
   z.object({
     type: z.literal('gateway'),
-    toggle: z.boolean().optional(),
-    budgetMin: z.number().int().nonnegative().optional(),
-    budgetMax: z.number().int().nonnegative().optional(),
     efforts: z.array(effort).optional(),
     effort: effort.optional(),
     budgetTokens: z.number().int().nonnegative().optional(),
