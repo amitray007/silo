@@ -1185,6 +1185,39 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   flex: none;
   color: var(--fnt);
 }
+/* Follow-ups still loading: a soft light sweeps across each placeholder chip. */
+.silo-composer-chips .silo-composer-chip-skeleton {
+  flex: none;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  /* The light is mixed from ink so it shows on both themes; --sel alone is too close in dark. */
+  background:
+    linear-gradient(
+      90deg,
+      var(--hov) 0%,
+      color-mix(in oklch, var(--ink) 16%, var(--hov)) 45%,
+      var(--hov) 90%
+    )
+    0 0 / 250% 100%;
+  animation: siloChipShimmer 1.4s linear infinite;
+  cursor: default;
+}
+@keyframes siloChipShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-composer-chips .silo-composer-chip-skeleton {
+    animation: none;
+    background: var(--hov);
+  }
+}
 .silo-composer-chips::-webkit-scrollbar {
   display: none;
 }

@@ -11,6 +11,9 @@ import { ReaderIcon } from '../ReaderIcon';
 /** The field stops growing here and scrolls: about four lines. */
 const MAX_FIELD = 124;
 
+/** Placeholder chips while follow-ups load: uneven widths read as text, not as a bar. */
+const SKELETON_WIDTHS = [148, 112, 172] as const;
+
 /** A quick action: its id travels as message metadata, its label is the message text. */
 export type QuickAction = readonly [id: string, label: string];
 
@@ -100,13 +103,14 @@ export function Composer({
             </button>
           ))}
           {suggestions?.status === 'pending'
-            ? [0, 1, 2].map((id) => (
+            ? SKELETON_WIDTHS.map((width, index) => (
                 <button
-                  key={`pending-${id}`}
+                  key={`pending-${width}`}
                   type="button"
                   disabled
                   aria-label="Loading follow-up"
-                  style={{ width: 100, height: 'var(--chip)', background: 'var(--bg2)' }}
+                  className="silo-composer-chip-skeleton"
+                  style={{ width, animationDelay: `${index * 120}ms` }}
                 />
               ))
             : suggestions?.items?.map(({ kind, text }) => (
