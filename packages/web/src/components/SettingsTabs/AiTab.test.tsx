@@ -1091,6 +1091,19 @@ describe('AiTab quick actions', () => {
     expect(await screen.findByRole('button', { name: 'Show Summarize' })).toBeTruthy();
   });
 
+  it('offers Show answers with Streamed by default and PATCHes the whole choice', async () => {
+    const { calls } = setup({ settings: withLibrarian(true) });
+    const trigger = await screen.findByRole('button', { name: 'Show answers' });
+    expect(trigger.textContent).toContain('Streamed');
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('option', { name: 'On completion' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0]?.body).toEqual({ chatAnswers: 'complete' });
+    expect((await screen.findByRole('button', { name: 'Show answers' })).textContent).toContain(
+      'On completion',
+    );
+  });
+
   it('rolls the change back and says so when the save fails', async () => {
     const { calls } = setup({ settings: withLibrarian(true) });
     const fetchMock = vi.mocked(fetch);

@@ -9,8 +9,7 @@ import {
   sentenceTimes,
   startTime,
 } from './schedule';
-import type { Segment } from './segments';
-import { buildUnits, type Unit } from './speechPlan';
+import { buildUnits, type Planned, type Unit } from './speechPlan';
 import { StretchProcessor } from './stretchProcessor';
 import { type Job, jobKey, jobSeconds, SynthQueue } from './synthQueue';
 
@@ -38,7 +37,7 @@ export type PlayerEvents = {
 
 export type PlayerDeps = {
   context: () => AudioContext;
-  segments: () => readonly Segment[];
+  segments: () => readonly Planned[];
   settings: () => PlayerSettings;
   events: PlayerEvents;
   now?: () => number;

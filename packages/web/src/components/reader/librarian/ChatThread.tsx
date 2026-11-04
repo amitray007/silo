@@ -1,5 +1,9 @@
 import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState } from 'react';
-import { useLibrarianActions, useRefreshOnRemovedAction } from '../../../api/librarian';
+import {
+  useChatAnswers,
+  useLibrarianActions,
+  useRefreshOnRemovedAction,
+} from '../../../api/librarian';
 import { isWord, passageChips } from '../../../lib/librarianActions';
 import { reducedMotion } from '../../../lib/motion';
 import { Spinner } from '../../Spinner';
@@ -106,6 +110,7 @@ export function ChatThread({
   const { input, setInput, passage, setPassage, field } = composer;
   const log = useStickyLog(chat.messages, active);
   const owner = useLibrarianActions();
+  const wholeAnswers = useChatAnswers() === 'complete';
   useRefreshOnRemovedAction(chat.error?.message);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
@@ -139,6 +144,7 @@ export function ChatThread({
               linkId={linkId}
               expired={message.id !== lastAssistant?.id}
               streaming={chat.busy && message.id === lastAssistant?.id}
+              held={wholeAnswers && chat.busy && message.id === chat.messages.at(-1)?.id}
               onApproval={chat.addToolApprovalResponse}
             />
           ))}

@@ -128,7 +128,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   animation: siloStatusIn 160ms var(--ease-out) both;
 }
 
-/* Conversation: a question reads as the heading of its answer, with a hairline between turns. */
+/* Conversation: the owner's turn is a right-aligned bubble; the Librarian's answer is plain text beside its tile. */
 .silo-chat-messages {
   min-height: 0;
   padding: 16px 16px 20px;
@@ -161,15 +161,71 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   }
 }
 .silo-chat-user {
-  font-weight: 500;
+  display: flex;
+  justify-content: flex-end;
 }
 .silo-chat-user:not(:first-child) {
   margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
 }
-.silo-chat-user + .silo-chat-assistant {
-  margin-top: 8px;
+.silo-chat-bubble {
+  max-width: 80%;
+  padding: 8px 12px;
+  border-radius: 18px;
+  background: var(--sel);
+  font-weight: 400;
+}
+.silo-chat-assistant {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 10px;
+}
+.silo-chat-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--mut);
+}
+.silo-chat-assistant-body {
+  min-width: 0;
+}
+/* The narrow dock and the passage card drop the tile: the bubble alone says who wrote what. */
+.silo-chat[data-variant="dock"] .silo-chat-assistant,
+.silo-selection-body .silo-chat-assistant {
+  grid-template-columns: minmax(0, 1fr);
+}
+.silo-chat[data-variant="dock"] .silo-chat-avatar,
+.silo-selection-body .silo-chat-avatar {
+  display: none;
+}
+/* A whole answer that was held back arrives with the same drift as the trace. */
+.silo-chat-answer[data-reveal="true"] {
+  animation: siloStatusIn 160ms var(--ease-out) both;
+}
+.silo-chat-actions {
+  display: flex;
+  gap: 2px;
+  margin: 4px 0 0 -6px;
+}
+.silo-chat-actions .silo-reader-iconbtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+@media (hover: hover) {
+  .silo-chat-actions .silo-reader-iconbtn:hover {
+    background: var(--hov);
+    color: var(--mut);
+  }
+}
+.silo-chat-actions .silo-reader-iconbtn[aria-pressed="true"] {
+  color: var(--ink);
+}
+.silo-chat-assistant a .silo-letter-chip {
+  margin-right: 4px;
+  vertical-align: -2px;
 }
 .silo-chat-assistant :is(p, ul, ol, pre, blockquote) + :is(p, ul, ol, pre, blockquote) {
   margin-top: 8px;
@@ -210,7 +266,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     text-decoration-color: currentColor;
   }
 }
-.silo-chat-user .silo-chat-quote {
+.silo-chat-bubble .silo-chat-quote {
   margin: 6px 0 0;
   padding-left: 10px;
   border-left: 2px solid var(--line-2);
@@ -1081,6 +1137,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   }
   .silo-chat-surface,
   .silo-chat-bar,
+  .silo-chat-answer,
   .silo-chat-trace {
     animation: none;
   }
@@ -1088,6 +1145,10 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 
 /* Touch: controls reach 40px (docs/rules/web-react.md). */
 @media (max-width: 640px), (pointer: coarse) {
+  .silo-chat-actions .silo-reader-iconbtn {
+    width: 40px;
+    height: 40px;
+  }
   .silo-composer-send,
   .silo-composer-lead {
     width: 40px;

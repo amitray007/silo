@@ -1,4 +1,5 @@
 import type { UIMessage } from '@ai-sdk/react';
+import { useChatAnswers } from '../../../api/librarian';
 import { ChatMessage } from '../librarian/ChatMessage';
 import { StatusLine } from '../librarian/StatusLine';
 import { statusLabel } from '../librarian/status';
@@ -30,6 +31,7 @@ export function SelectionAnswerCard({
   onContinue: () => void;
 }) {
   const assistant = messages.filter((message) => message.role === 'assistant');
+  const wholeAnswers = useChatAnswers() === 'complete';
   return (
     <section tabIndex={-1} className="silo-selection-answer" aria-label="Passage answer">
       <header>
@@ -50,6 +52,7 @@ export function SelectionAnswerCard({
             key={message.id}
             message={message}
             streaming={busy && index === assistant.length - 1}
+            held={wholeAnswers && busy && index === assistant.length - 1}
           />
         ))}
         {busy && <StatusLine label={statusLabel(messages)} className="silo-chat-pending" />}

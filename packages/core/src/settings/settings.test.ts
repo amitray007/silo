@@ -53,6 +53,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        chatAnswers: 'streamed',
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
@@ -296,6 +297,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        chatAnswers: 'streamed',
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
@@ -339,6 +341,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        chatAnswers: 'streamed',
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
@@ -406,6 +409,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
+        chatAnswers: 'streamed',
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {

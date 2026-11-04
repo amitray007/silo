@@ -378,3 +378,52 @@ it('ends the conversation spinner and shows the error after a detail fetch fails
     vi.unstubAllGlobals();
   }
 });
+
+function answerSettings(chatAnswers: 'streamed' | 'complete') {
+  client.clear();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ chatAnswers }))),
+  );
+}
+
+it('with Show answers on completion, the running answer stays unrendered until the turn ends', async () => {
+  answerSettings('complete');
+  const running = fakeChat({
+    busy: true,
+    messages: [text('u', 'user', 'Why?'), text('a', 'assistant', 'Half an ans')],
+  });
+  const view = mount(running);
+  await vi.waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled());
+  await vi.waitFor(() => expect(screen.queryByText(/Half an ans/)).toBeNull());
+  expect(screen.getByRole('status').textContent).toBe('Answering…');
+  view.rerender(
+    <QueryClientProvider client={client}>
+      <ChatThread
+        chat={fakeChat({
+          messages: [text('u', 'user', 'Why?'), text('a', 'assistant', 'A whole answer.')],
+        })}
+        composer={composer()}
+        actions={[]}
+        emptyText="Empty"
+        header={null}
+      />
+    </QueryClientProvider>,
+  );
+  expect(screen.getByText('A whole answer.')).toBeTruthy();
+  client.clear();
+  vi.unstubAllGlobals();
+});
+
+it('streams the running answer by default', async () => {
+  answerSettings('streamed');
+  mount(
+    fakeChat({
+      busy: true,
+      messages: [text('u', 'user', 'Why?'), text('a', 'assistant', 'Half an ans')],
+    }),
+  );
+  expect(screen.getByText(/Half an ans/)).toBeTruthy();
+  client.clear();
+  vi.unstubAllGlobals();
+});
