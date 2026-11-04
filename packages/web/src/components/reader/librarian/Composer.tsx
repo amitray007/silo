@@ -9,15 +9,14 @@ import {
 import { ReaderIcon } from '../ReaderIcon';
 
 /** The field stops growing here and scrolls: about four lines. */
-const MAX_FIELD = 96;
+const MAX_FIELD = 124;
 
 /** A quick action: its id travels as message metadata, its label is the message text. */
 export type QuickAction = readonly [id: string, label: string];
 
 /**
- * The one composer: a quiet autosizing field with the send arrow inside it, then the quick
- * actions as text under it. While an answer streams, Stop takes the arrow's place as a small ink
- * square. The selection surface, the dock and the Librarian page all use this, so a question
+ * The one composer: a row of chips above one rounded autosizing field with the send arrow
+ * inside it. While an answer streams, Stop takes the arrow's place as a small ink square. The selection surface, the dock and the Librarian page all use this, so a question
  * looks and behaves the same wherever it is typed. Enter sends; Shift+Enter adds a line.
  */
 export function Composer({
@@ -81,6 +80,20 @@ export function Composer({
         if (value.trim() && !sendDisabled) onSend();
       }}
     >
+      {quick.length > 0 && (
+        <div className="silo-composer-chips">
+          {quick.map(([id, text]) => (
+            <button
+              key={id}
+              type="button"
+              disabled={quickDisabled}
+              onClick={() => onQuick?.(id, text)}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+      )}
       {passage && (
         <div className="silo-chat-passage">
           <span>{passage.quote}</span>
@@ -126,20 +139,6 @@ export function Composer({
           </button>
         )}
       </div>
-      {quick.length > 0 && (
-        <div className="silo-composer-quick">
-          {quick.map(([id, text]) => (
-            <button
-              key={id}
-              type="button"
-              disabled={quickDisabled}
-              onClick={() => onQuick?.(id, text)}
-            >
-              {text}
-            </button>
-          ))}
-        </div>
-      )}
     </form>
   );
 }
