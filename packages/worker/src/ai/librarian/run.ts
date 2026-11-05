@@ -3,6 +3,7 @@ import {
   librarianMessageSchema,
   replaceLastAnswer,
   saveChatMessages,
+  updateInitialChatTitle,
 } from '@silo/core';
 import {
   getLibrarianToolSource,
@@ -28,6 +29,7 @@ import { compactConversation } from './compaction.js';
 import { answerCredential } from './credential.js';
 import { persona, promptVersion, requestContext } from './persona.js';
 import { reasoningTiming } from './reasoning-time.js';
+import { generateChatTitle } from './title.js';
 import { librarianTools, toolApproval } from './tools.js';
 
 /**
@@ -91,6 +93,22 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     });
     const thinking = await getSetting('librarianThinking');
     const model = languageModelFor(credential);
+    const titlePromise = request.initialTitle
+      ? generateChatTitle(credential, model, request)
+          .then(async (title) => {
+            if (!title || !request.initialTitle) return false;
+            return updateInitialChatTitle(
+              request.chatId,
+              request.initialTitle.messageId,
+              request.initialTitle.expectedTitle,
+              title,
+            );
+          })
+          .catch((error: unknown) => {
+            logAiFailure('librarian', 1, aiErrorCode(error));
+            return false;
+          })
+      : undefined;
     const input = await compactConversation(request, originalMessages, credential, model, persona);
     const last = originalMessages.at(-1);
     const parsedLast = last?.role === 'assistant' ? librarianMessageSchema.parse(last) : undefined;
@@ -143,8 +161,10 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     });
     const stream = createUIMessageStream({
       originalMessages,
-      execute: ({ writer }) => {
+      execute: async ({ writer }) => {
         writer.merge(replyStream);
+        if (await titlePromise)
+          writer.write({ type: 'data-chat-title', data: null, transient: true });
       },
       onError: failure,
       onEnd: async ({ messages, isAborted, outcome }) => {

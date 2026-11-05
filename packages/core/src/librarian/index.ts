@@ -4,7 +4,7 @@ import { isAiFeatureOn, resolveAiCredential } from '../ai/status.js';
 import { decodeListCursor, encodeListCursor } from '../links/pagination.js';
 import { resolveAction, resolveMessageAction } from './action-resolution.js';
 import { isApprovalContinuation } from './approval.js';
-import { beginLibrarianRun, getLibrarianRunner } from './ports.js';
+import { beginLibrarianRun, getLibrarianRunner, getLibrarianTitleRunner } from './ports.js';
 import {
   answerVersionSchema,
   incomingUserMessageSchema,
@@ -167,6 +167,25 @@ export async function saveChatMessages(
       .where(eq(chats.id, chatId));
   });
 }
+export async function updateInitialChatTitle(
+  chatId: string,
+  messageId: string,
+  expectedTitle: string,
+  title: string,
+): Promise<boolean> {
+  const rows = await db
+    .update(chats)
+    .set({ title })
+    .where(
+      and(
+        eq(chats.id, chatId),
+        eq(chats.title, expectedTitle),
+        sql`${messageId} = (select id from librarian_messages where chat_id = ${chatId} order by seq asc limit 1)`,
+      ),
+    )
+    .returning({ id: chats.id });
+  return rows.length > 0;
+}
 async function resolveTurn(
   stored: NonNullable<Awaited<ReturnType<typeof getChat>>>,
   incoming: LibrarianMessage | undefined,
@@ -213,6 +232,20 @@ async function replyContext(
     messageSeqs: saved.messageSeqs,
     link: link ?? null,
   };
+}
+function initialTitleCandidate(
+  stored: NonNullable<Awaited<ReturnType<typeof getChat>>>,
+  saved: NonNullable<Awaited<ReturnType<typeof getChat>>>,
+  message: LibrarianMessage,
+  regenerate: boolean,
+  continuation: boolean,
+) {
+  return !regenerate &&
+    !continuation &&
+    stored.messages.length === 0 &&
+    stored.chat.title === PLACEHOLDER
+    ? { initialTitle: { messageId: message.id, expectedTitle: saved.chat.title } }
+    : {};
 }
 export async function streamLibrarianReply({
   chatId,
@@ -266,6 +299,7 @@ export async function streamLibrarianReply({
       response: await runner({
         ...context,
         chatId,
+        ...initialTitleCandidate(stored, saved, message, Boolean(regenerate), continuation),
         endRun,
       }),
     } as const;
@@ -333,6 +367,20 @@ export async function quickLibrarianReply(input: {
     throw error;
   }
 }
+async function titleImportedChat(chatId: string) {
+  const runner = getLibrarianTitleRunner();
+  if (!runner) return;
+  try {
+    const saved = await getChat(chatId);
+    const first = saved?.messages[0];
+    if (!saved || first?.role !== 'user') return;
+    const context = await replyContext(saved, undefined, undefined);
+    const title = await runner({ ...context, chatId });
+    if (title) await updateInitialChatTitle(chatId, first.id, saved.chat.title, title);
+  } catch {
+    // The passage turn is already saved; title failure must not undo Continue.
+  }
+}
 export async function importLibrarianMessages(chatId: string, incoming: LibrarianMessage[]) {
   if (!(await isAiFeatureOn('librarian'))) return 'ai_not_ready';
   const release = beginLibrarianRun(chatId);
@@ -356,6 +404,8 @@ export async function importLibrarianMessages(chatId: string, incoming: Libraria
         id: crypto.randomUUID(),
       })),
     );
+    if (stored.messages.length === 0 && stored.chat.title === PLACEHOLDER)
+      await titleImportedChat(chatId);
     return 'ok';
   } finally {
     release();

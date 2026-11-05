@@ -112,6 +112,10 @@ function newEntry(client: QueryClient, id: string | null): Entry {
   const chatId = { current: id };
   const chat = new Chat({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onData: (part) => {
+      if (part.type === 'data-chat-title')
+        void client.invalidateQueries({ queryKey: ['librarian'] });
+    },
     onFinish: ({ message }) => {
       if (message.parts.some((part) => toolName(part) && WRITE_TRACES[toolName(part) ?? ''])) {
         for (const key of [
