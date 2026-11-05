@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useMatch } from 'react-router';
 import { layoutMedia } from '../lib/breakpoints';
+import { useChatViewport } from '../lib/useChatViewport';
 import { useCommandPalette } from '../lib/useCommandPalette';
 import { isTextEntryElement, usePasteCapture } from '../lib/usePasteCapture';
 import { ThemeSettingsSync } from '../theme/ThemeSettingsSync';
@@ -113,6 +114,8 @@ function trapDrawerTab(event: KeyboardEvent, nav: HTMLElement | null) {
 }
 
 export function AppFrame() {
+  const frameRef = useRef<HTMLDivElement>(null);
+  useChatViewport(frameRef);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const drawerWasOpen = useRef(false);
@@ -260,7 +263,7 @@ export function AppFrame() {
         <SidebarControlContext.Provider value={sidebarControl}>
           <HoverPreviewProvider>
             <RowMenuProvider>
-              <div className="silo-frame" data-collapsed={collapsed}>
+              <div ref={frameRef} className="silo-frame" data-collapsed={collapsed}>
                 <div className="silo-band">
                   <button
                     type="button"
