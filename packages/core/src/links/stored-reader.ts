@@ -28,16 +28,21 @@ const readerColumns = {
   contentHtml: links.contentHtml,
   contentImages: links.contentImages,
   readerVersion: links.readerVersion,
+  readerSource: links.readerSource,
   readerCapturedAt: links.readerCapturedAt,
 };
 
-/** The hot path reads exactly four columns by primary key, with no tag hydration. */
+/** The hot path reads only Reader columns by primary key, with no tag hydration. */
 export async function getStoredReader(id: string): Promise<StoredReader | undefined> {
   const [row] = await db
     .select(readerColumns)
     .from(links)
     .where(and(sql`${links.deletedAt} is null`, eq(links.id, id), ne(links.sourceKind, 'twitter')));
-  if (row?.readerVersion !== READER_VERSION || !row.contentHtml) return undefined;
+  if (
+    !row?.contentHtml ||
+    (row.readerSource !== 'extension' && row.readerVersion !== READER_VERSION)
+  )
+    return undefined;
   return {
     contentHtml: row.contentHtml,
     contentImages: row.contentImages ?? [],
@@ -61,10 +66,8 @@ export async function recordReader(
   }
   const reader = parsed?.data ?? null;
   const fromBrowser = result.status === 'reader' && result.readerSource === 'extension';
-  // A non-subscriber's browser sees only the teaser: it must not replace a longer feed,
-  // archive or earlier browser copy. Silo's own page read is always replaceable.
   const uploadLength = fromBrowser ? (result.text?.trim().length ?? 0) : 0;
-  const browserMayReplace = sql`(not ${fromBrowser} or ${links.readerSource} is null or ${links.readerSource} = 'page' or length(coalesce(${links.extractedText}, '')) <= ${uploadLength})`;
+  const browserMayReplace = sql`(not ${fromBrowser} or ${links.contentHtml} is null or (${links.readerSource} is distinct from 'extension' and ${links.readerVersion} is distinct from ${READER_VERSION}) or length(coalesce(${links.extractedText}, '')) <= ${uploadLength})`;
   const [row] = await db
     .update(links)
     .set({
@@ -137,7 +140,7 @@ let refresher: ReaderRefresher | undefined;
 export function setReaderRefresher(next: ReaderRefresher | undefined): void {
   refresher = next;
 }
-const pending = new Map<string, Promise<RefreshResult>>();
+const pending = new Map<string, { work: Promise<RefreshResult>; explicit: boolean }>();
 
 async function extractAndRecord(
   link: ReaderLink,
@@ -211,17 +214,18 @@ function coalesce(
   signal?: AbortSignal,
   explicitRefresh = false,
 ): Promise<RefreshResult> {
-  const key = `${id}:${explicitRefresh}`;
-  const running = pending.get(key);
-  if (running) return running;
-  const work = load()
+  const running = pending.get(id);
+  if (running && (!explicitRefresh || running.explicit)) return running.work;
+  const work = (running ? running.work.then(load) : load())
     .then((link) =>
       link
         ? extractAndRecord(link, run, signal, explicitRefresh)
         : ({ status: 'not_found' } as const),
     )
-    .finally(() => pending.delete(key));
-  pending.set(key, work);
+    .finally(() => {
+      if (pending.get(id)?.work === work) pending.delete(id);
+    });
+  pending.set(id, { work, explicit: explicitRefresh });
   return work;
 }
 
@@ -261,6 +265,7 @@ export async function runReaderBackfill(
           ),
           sql`(${links.readerCapturedAt} is null or ${links.readerCapturedAt} < now() - interval '6 hours')`,
           ne(links.captureStatus, 'enriching'),
+          sql`${links.readerSource} is distinct from 'extension'`,
           ne(links.sourceKind, 'twitter'),
         ),
       ),

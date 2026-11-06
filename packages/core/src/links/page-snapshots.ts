@@ -48,7 +48,17 @@ export async function savePageSnapshot(
 }
 
 export async function getPageSnapshot(id: string) {
-  const [page] = await db.select().from(pageSnapshots).where(eq(pageSnapshots.linkId, id));
+  const [page] = await db
+    .select({
+      linkId: pageSnapshots.linkId,
+      url: pageSnapshots.url,
+      html: pageSnapshots.html,
+      capturedAt: pageSnapshots.capturedAt,
+      readerUploadAt: links.readerUploadAt,
+    })
+    .from(pageSnapshots)
+    .innerJoin(links, eq(links.id, pageSnapshots.linkId))
+    .where(and(eq(pageSnapshots.linkId, id), sql`${links.deletedAt} is null`));
   return page;
 }
 export async function deletePageSnapshot(id: string, capturedAt: Date): Promise<void> {
@@ -74,7 +84,7 @@ export async function fillPageMetadata(
       description: sql`coalesce(nullif(${links.description}, ''), ${result.description?.slice(0, FIELD_MAX.description) ?? null})`,
       imageUrl: sql`coalesce(nullif(${links.imageUrl}, ''), ${result.imageUrl && result.imageUrl.length <= FIELD_MAX.imageUrl ? result.imageUrl : null})`,
       siteName: sql`coalesce(nullif(${links.siteName}, ''), ${result.siteName?.slice(0, FIELD_MAX.siteName) ?? null})`,
-      captureStatus: sql`case when length(coalesce(${links.extractedText}, '')) >= ${FULL_TEXT_THRESHOLD} then 'full'::capture_status when ${links.contentHtml} is not null then 'partial'::capture_status else ${links.captureStatus} end`,
+      captureStatus: sql`case when ${links.captureStatus} = 'enriching' then ${links.captureStatus} when ${links.captureStatus} = 'full' then ${links.captureStatus} when length(coalesce(${links.extractedText}, '')) >= ${FULL_TEXT_THRESHOLD} then 'full'::capture_status when ${links.contentHtml} is not null then 'partial'::capture_status else ${links.captureStatus} end`,
       updatedAt: sql`${links.updatedAt}`,
     })
     .where(and(eq(links.id, id), sql`${links.deletedAt} is null`));

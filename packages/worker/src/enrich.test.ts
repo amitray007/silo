@@ -78,6 +78,7 @@ describeIfPg('enrichLink (integration)', () => {
         },
       });
       expect(await core.getById(link.id)).toMatchObject({ deletedAt: null });
+      expect((await core.getById(link.id))?.captureStatus).not.toBe('enriching');
     }
   });
   it('keeps the page Reader and paywall label when a feed Reader is shorter', async () => {
