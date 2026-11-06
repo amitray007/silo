@@ -138,6 +138,14 @@ const settingsPatchBodySchema = z
  * `400 validation_error` (a `ZodError`) or `500` (a plain `Error` — see the
  * note below on why the edge schema is the primary defense).
  */
+function hasLargeSettingsFields(input: unknown): boolean {
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    ('linkCleaning' in input || 'librarianActions' in input)
+  );
+}
+
 export function registerSettingsRoutes(app: Hono): void {
   app.get('/settings', async (c) => {
     const settings = await getAllSettings();
@@ -146,11 +154,18 @@ export function registerSettingsRoutes(app: Hono): void {
 
   app.patch('/settings', settingsBodyLimit, async (c) => {
     const input: unknown = await c.req.json().catch(() => ({}));
-    const hasActions =
-      typeof input === 'object' &&
-      input !== null &&
-      ('librarianActions' in input || 'linkCleaning' in input);
-    if (!hasActions && (await c.req.arrayBuffer()).byteLength > READER_BODY_LIMIT_BYTES) {
+    const remainder =
+      typeof input === 'object' && input !== null
+        ? Object.fromEntries(
+            Object.entries(input).filter(
+              ([key]) => key !== 'linkCleaning' && key !== 'librarianActions',
+            ),
+          )
+        : input;
+    const readerBytes = hasLargeSettingsFields(input)
+      ? new TextEncoder().encode(JSON.stringify(remainder)).byteLength
+      : (await c.req.arrayBuffer()).byteLength;
+    if (readerBytes > READER_BODY_LIMIT_BYTES) {
       return c.json({ error: 'payload_too_large', message: 'Request body exceeds 16 KB' }, 413);
     }
     const body = settingsPatchBodySchema.parse(input);

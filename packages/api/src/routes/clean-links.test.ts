@@ -72,6 +72,9 @@ describeIfPg('clean links routes', () => {
       });
     expect((await send({ linkCleaning: config })).status).toBe(200);
     expect(
+      (await send({ linkCleaning: config, reader: { fontFamily: 'x'.repeat(17000) } })).status,
+    ).toBe(413);
+    expect(
       (await send({ linkCleaning: { ...config, everySite: ['x'.repeat(128 * 1024)] } })).status,
     ).toBe(413);
   });
