@@ -587,6 +587,25 @@ describe('ChatMessage reasoning', () => {
     expect(screen.getByText('Weighing the two sources.')).toBeTruthy();
   });
 
+  it('folds the thought and the tools into one trace disclosure that opens both', () => {
+    const message = thinking('done', { reasoningMs: 1200 });
+    render(
+      <ChatMessage
+        message={{
+          ...message,
+          parts: [...message.parts.slice(0, 1), search('s1', 2), ...message.parts.slice(1)],
+        }}
+        fixedTrace
+      />,
+    );
+    const toggle = screen.getByRole('button', { name: 'Thought for 1s · Used 1 tool' });
+    expect(screen.getAllByRole('button', { name: /Thought|Used/ })).toHaveLength(1);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Weighing the two sources.')).toBeTruthy();
+    expect(document.querySelector('.silo-steps-list')).toBeTruthy();
+  });
+
   it('says only "Thought" when no time was recorded', () => {
     render(<ChatMessage message={thinking('done')} />);
     expect(screen.getByRole('button', { name: 'Thought' })).toBeTruthy();
