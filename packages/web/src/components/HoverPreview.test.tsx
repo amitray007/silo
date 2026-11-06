@@ -102,9 +102,9 @@ describe('HoverPreview', () => {
     expect(screen.queryByText('"read this later"')).toBeNull();
   });
 
-  it('falls back to the scheme-stripped url as the title when title is null', () => {
+  it('falls back to the humanized url slug as the title when title is null', () => {
     renderPreview(makeLink({ title: null, url: 'https://example.com/some-post' }));
-    expect(screen.getByText('example.com/some-post')).toBeDefined();
+    expect(screen.getByText('Some post')).toBeDefined();
   });
 
   it.each([

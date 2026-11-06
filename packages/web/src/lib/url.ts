@@ -36,10 +36,10 @@ export function siteName(domain: string): string {
 }
 
 /**
- * The row's title fallback when `LinkJson.title` is `null`: the url with its
- * `http://`/`https://` scheme stripped (the prototype's fallback — confirmed
- * against `render-rows-*.png`). Non-http(s) schemes and scheme-less input
- * pass through unchanged.
+ * The title fallback when `LinkJson.title` is `null`. The domain already shows
+ * beside the title, so a slug-like last path segment becomes a sentence
+ * ("a-post" -> "A post"); otherwise host plus path. Query and hash never show.
+ * Unparseable input falls back to the url without its scheme.
  */
 export function deriveTitleFromUrl(url: string): string {
   try {
