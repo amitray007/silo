@@ -17,26 +17,27 @@ export function createOtherSources(
   const fetch = deps.fetch ?? ((url, signal) => safeFetch(url, { signal, timeoutMs: 15_000 }));
   const now = deps.now ?? Date.now;
   async function feed(url: URL, signal: AbortSignal): Promise<SourceReader | undefined> {
-    const cached = cache.get(url.host);
-    const known = fresh(cached, now());
-    if (known?.url === null) return undefined;
-    const candidates = known?.url
-      ? [known.url]
-      : await feedCandidates(url, deps.feeds ?? listFeeds);
-    let working: string | null = null;
+    // Followed feeds are read fresh each time, so a feed followed a minute ago counts.
+    // Only the guessed addresses are cached per host.
+    const followed = await followedFeeds(url, deps.feeds ?? listFeeds);
+    const cached = fresh(cache.get(url.host), now());
+    const candidates = feedCandidates(followed, cached, url);
+    let working: string | null = cached?.url ?? null;
     for (const candidate of candidates) {
       const parsed = await fetchFeed(candidate, signal, fetch);
       if (!parsed) continue;
-      working ??= candidate;
-      cache.set(url.host, { until: now() + 3_600_000, url: working });
+      if (!followed.includes(candidate)) working ??= candidate;
       const result = await feedEntry(parsed.entries, url.href);
       if (result) {
-        cache.set(url.host, { until: now() + 3_600_000, url: candidate });
+        rememberGuess(url.host, working);
         return result;
       }
     }
-    cache.set(url.host, { until: now() + 3_600_000, url: working });
+    rememberGuess(url.host, working);
     return undefined;
+  }
+  function rememberGuess(host: string, url: string | null) {
+    cache.set(host, { until: now() + 3_600_000, url });
   }
   async function archive(url: string, signal: AbortSignal): Promise<SourceReader | undefined> {
     const available = await fetch(
@@ -134,17 +135,21 @@ async function feedEntry(entries: FeedEntry[], url: string): Promise<SourceReade
   };
 }
 
-async function feedCandidates(url: URL, load: () => Promise<Followed[]>): Promise<string[]> {
+async function followedFeeds(url: URL, load: () => Promise<Followed[]>): Promise<string[]> {
   const followed = await load().catch(() => []);
-  return [
-    ...new Set([
-      ...followed.filter((f) => sameHost(f.siteUrl, url.host)).map((f) => f.feedUrl),
-      // Big Think answers /feed/ but blocks /feed; Substack answers only /feed.
-      `${url.origin}/feed/`,
-      `${url.origin}/feed`,
-      `${url.origin}/rss.xml`,
-    ]),
-  ].slice(0, 3);
+  return followed.filter((f) => sameHost(f.siteUrl, url.host)).map((f) => f.feedUrl);
+}
+function feedCandidates(
+  followed: string[],
+  cached: { url: string | null } | undefined,
+  url: URL,
+): string[] {
+  const guesses = cached ? (cached.url ? [cached.url] : []) : guessedFeeds(url);
+  return [...new Set([...followed, ...guesses])].slice(0, 3);
+}
+function guessedFeeds(url: URL): string[] {
+  // Big Think answers /feed/ but blocks /feed; Substack answers only /feed.
+  return [`${url.origin}/feed/`, `${url.origin}/feed`, `${url.origin}/rss.xml`];
 }
 function sameHost(siteUrl: string | null, host: string): boolean {
   try {

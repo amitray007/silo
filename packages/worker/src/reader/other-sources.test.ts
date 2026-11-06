@@ -18,7 +18,7 @@ const ok = (html: string, url = bigthink) => ({
 const failed = { ok: false, reason: 'http-error', status: 403 } as const;
 
 describe('other Reader sources (recorded responses)', () => {
-  it('matches tracking URLs, extracts a feed Reader and caches the working host URL', async () => {
+  it('matches tracking URLs and reads followed feeds fresh on every capture', async () => {
     const fetch = vi.fn(async (url: string) => ok(fixture('feed.xml'), url));
     const feeds = vi.fn(async () => [
       { siteUrl: 'https://bigthink.com', feedUrl: 'https://bigthink.com/feed/' },
@@ -32,11 +32,25 @@ describe('other Reader sources (recorded responses)', () => {
     });
     if (result.status === 'reader') expect(result.text?.length).toBeGreaterThan(14000);
     await chain(bigthink, blocked);
-    expect(feeds).toHaveBeenCalledOnce();
+    expect(feeds).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls.map((c) => c[0])).toEqual([
       'https://bigthink.com/feed/',
       'https://bigthink.com/feed/',
     ]);
+  });
+  it('finds a feed followed after an earlier capture cached "no feed" for the host', async () => {
+    const feedUrl = 'https://bigthink.com/custom/feed/';
+    const fetch = vi.fn(async (url: string) =>
+      url === feedUrl ? ok(fixture('feed.xml'), url) : failed,
+    );
+    let followed: { siteUrl: string; feedUrl: string }[] = [];
+    const chain = createOtherSources({ fetch, feeds: async () => followed });
+    expect(await chain(bigthink, blocked)).toEqual(blocked);
+    followed = [{ siteUrl: 'https://bigthink.com', feedUrl }];
+    expect(await chain(bigthink, blocked)).toMatchObject({
+      status: 'reader',
+      readerSource: 'feed',
+    });
   });
   it('uses a raw archive snapshot and preserves its timestamp', async () => {
     const fetch = vi.fn(async (url: string) =>
