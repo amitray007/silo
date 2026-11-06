@@ -159,7 +159,7 @@ describe('Live Reader', () => {
       makeLink({ readerSource: 'archive', readerSourceAt: '2026-10-16T18:10:59Z' }),
     );
     const anchor = await screen.findByRole('link', {
-      name: 'From the Internet Archive, snapshot of 16 Oct 2026.',
+      name: 'snapshot of 16 Oct 2026',
     });
     expect(anchor.getAttribute('href')).toContain('/20261016181059/https://');
   });

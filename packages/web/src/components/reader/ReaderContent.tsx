@@ -287,20 +287,21 @@ function SourceNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean 
   const stamp = date.toISOString().replace(/[-:T]/g, '').slice(0, 14);
   return (
     <p className="silo-reader-access-notice">
+      From the Internet Archive,{' '}
       <a
         href={`https://web.archive.org/web/${stamp}/${link.url}`}
         target="_blank"
         rel="noopener noreferrer"
       >
-        From the Internet Archive, snapshot of{' '}
+        snapshot of{' '}
         {date.toLocaleDateString('en-GB', {
           day: 'numeric',
           month: 'short',
           year: 'numeric',
           timeZone: 'UTC',
         })}
-        .
       </a>
+      .
     </p>
   );
 }
