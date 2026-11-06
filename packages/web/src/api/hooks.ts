@@ -38,6 +38,7 @@ import type {
   AppConfig,
   CaptureRequest,
   CaptureResponse,
+  CleanPreview,
   Counts,
   CreatedAccessTokenJson,
   EditLinkRequest,
@@ -45,6 +46,7 @@ import type {
   FeedTab,
   FrameHint,
   HighlightJson,
+  LinkCleaning,
   LinkJson,
   LinkResponse,
   LinksResponse,
@@ -914,6 +916,7 @@ function buildOptimisticLink(input: CaptureRequest): LinkJson {
   return {
     id: crypto.randomUUID(),
     url: input.url,
+    originalUrl: input.url,
     title: null,
     description: null,
     imageUrl: null,
@@ -1457,12 +1460,33 @@ export function useUpdateSettings() {
       queue.enqueue(patch);
     },
     onError: (_error, patch) => queue.settle(patch),
-    onSuccess: (settings, patch) => queue.settle(patch, settings),
+    onSuccess: (settings, patch) => {
+      queue.settle(patch, settings);
+      if ('linkCleaning' in patch) {
+        void queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] !== queryKeys.settings()[0],
+        });
+      }
+    },
     onSettled: () => {
       if (queue.isPending()) return;
       queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
       queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
     },
+  });
+}
+
+/** `POST /api/links/clean-preview`: what the saved cleaning rules do to one URL. */
+export function useCleanPreview() {
+  return useMutation({
+    mutationFn: (url: string) => apiPost<CleanPreview>('/api/links/clean-preview', { url }),
+  });
+}
+
+/** `GET /api/links/clean-defaults`: the curated rules, fetched when the owner asks to reset. */
+export function useCleanDefaults() {
+  return useMutation({
+    mutationFn: () => apiGet<LinkCleaning>('/api/links/clean-defaults'),
   });
 }
 

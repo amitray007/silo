@@ -11,6 +11,7 @@ export function makeLink(overrides: Partial<LinkJson> = {}): LinkJson {
     id: '1',
     readerPrefs: {},
     url: 'https://example.com',
+    originalUrl: overrides.url ?? 'https://example.com',
     title: 'Example',
     description: null,
     imageUrl: null,

@@ -1,5 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { LinkDetail } from '@silo/core';
+import type { LinkDetail, UrlCleaner } from '@silo/core';
 import { MAX_BULK_IDS, TooManyIdsError } from '@silo/core';
 import { z } from 'zod';
 import { baseLinkShape, toBaseLinkContent } from './link-shape.js';
@@ -31,6 +31,7 @@ export const foundLinkOutputShape = {
   batch: z.boolean().optional(),
   id: baseLinkShape.id.optional(),
   url: baseLinkShape.url.optional(),
+  originalUrl: baseLinkShape.originalUrl.optional(),
   title: baseLinkShape.title.optional(),
   titleSource: baseLinkShape.titleSource.optional(),
   description: baseLinkShape.description.optional(),
@@ -56,10 +57,10 @@ export const foundLinkOutputShape = {
  * duplicating `get_link`'s `toStructuredContent`/success-`content` pairing
  * verbatim (jscpd-flagged clone risk per the W3 build brief).
  */
-export function foundResult(link: LinkDetail, text: string): CallToolResult {
+export function foundResult(link: LinkDetail, text: string, cleaner: UrlCleaner): CallToolResult {
   return {
     content: [{ type: 'text', text }],
-    structuredContent: { found: true, ...toBaseLinkContent(link) },
+    structuredContent: { found: true, ...toBaseLinkContent(link, cleaner) },
   };
 }
 

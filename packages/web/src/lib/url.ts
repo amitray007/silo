@@ -36,13 +36,33 @@ export function siteName(domain: string): string {
 }
 
 /**
- * The row's title fallback when `LinkJson.title` is `null`: the url with its
- * `http://`/`https://` scheme stripped (the prototype's fallback — confirmed
- * against `render-rows-*.png`). Non-http(s) schemes and scheme-less input
- * pass through unchanged.
+ * The title fallback when `LinkJson.title` is `null`. The domain already shows
+ * beside the title, so a slug-like last path segment becomes a sentence
+ * ("a-post" -> "A post"); otherwise host plus path. Query and hash never show.
+ * Unparseable input falls back to the url without its scheme.
  */
 export function deriveTitleFromUrl(url: string): string {
-  return url.replace(/^https?:\/\//i, '');
+  try {
+    const parsed = new URL(url);
+    const host = parsed.host.replace(/^www\./i, '');
+    const path = parsed.pathname.replace(/\/+$/, '');
+    const segment = path.split('/').filter(Boolean).at(-1);
+    if (!segment) return host;
+    let decoded = segment;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      // Malformed escapes still have a usable raw path segment.
+    }
+    const slug = decoded.replace(/\.(html?|php|aspx)$/i, '');
+    if (/\p{L}/u.test(slug) && /[-_]/.test(slug)) {
+      const title = slug.replace(/[-_]+/g, ' ');
+      return title.charAt(0).toUpperCase() + title.slice(1);
+    }
+    return host + path;
+  } catch {
+    return url.replace(/^https?:\/\//i, '');
+  }
 }
 
 /**

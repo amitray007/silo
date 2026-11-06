@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { BulkGetResult, LinkDetail, LinkWithTextWindow } from '@silo/core';
-import { getById, getByIds } from '@silo/core';
+import type { BulkGetResult, LinkDetail, LinkWithTextWindow, UrlCleaner } from '@silo/core';
+import { getById, getByIds, loadUrlCleaner } from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, runBulkGuarded } from './found-result.js';
 import { type BaseLinkContent, toBaseLinkContent } from './link-shape.js';
@@ -83,8 +83,11 @@ type GetLinkOutputStructuredContent = GetLinkStructuredContent & { results?: Get
  * shape, `LinkWithTextWindow`), it's included in the result — see
  * `getLinkOutputShape`'s doc comment.
  */
-function toStructuredContent(link: LinkDetail | LinkWithTextWindow): GetLinkStructuredContent {
-  const base = { found: true as const, ...toBaseLinkContent(link) };
+function toStructuredContent(
+  link: LinkDetail | LinkWithTextWindow,
+  cleaner: UrlCleaner,
+): GetLinkStructuredContent {
+  const base = { found: true as const, ...toBaseLinkContent(link, cleaner) };
   return 'extractedTextLength' in link
     ? { ...base, extractedTextLength: link.extractedTextLength }
     : base;
@@ -98,9 +101,13 @@ function toStructuredContent(link: LinkDetail | LinkWithTextWindow): GetLinkStru
  * ...toBaseLinkContent(link) }`) only to avoid TS's "specified more than
  * once" duplicate-key flag on the object literal.
  */
-function toBatchResult(id: string, link: LinkDetail | null): GetLinkBatchResult {
+function toBatchResult(
+  id: string,
+  link: LinkDetail | null,
+  cleaner: UrlCleaner,
+): GetLinkBatchResult {
   if (!link) return { id, found: false };
-  return { ...toBaseLinkContent(link), found: true };
+  return { ...toBaseLinkContent(link, cleaner), found: true };
 }
 
 /**
@@ -247,13 +254,24 @@ export function registerGetLink(server: McpServer): void {
       outputSchema: getLinkOutputSchema,
     },
     async ({ id, ids, textWindow }): Promise<CallToolResult> => {
+      const cleaner = await loadUrlCleaner();
       if (ids !== undefined) {
         const outcome = await runBulkGuarded(() => getByIds(ids));
         if (!outcome.ok) return outcome.error;
-        const results = outcome.value.map((r) => toBatchResult(r.id, r.link));
+        const results = outcome.value.map((r) => toBatchResult(r.id, r.link, cleaner));
         const structuredContent: GetLinkOutputStructuredContent = { found: false, results };
         return {
-          content: [{ type: 'text', text: toBatchTextSummary(outcome.value) }],
+          content: [
+            {
+              type: 'text',
+              text: toBatchTextSummary(
+                outcome.value.map((result) => ({
+                  ...result,
+                  link: result.link ? { ...result.link, url: cleaner(result.link.url) } : null,
+                })),
+              ),
+            },
+          ],
           structuredContent,
         };
       }
@@ -284,10 +302,10 @@ export function registerGetLink(server: McpServer): void {
         content: [
           {
             type: 'text',
-            text: toTextSummary(link),
+            text: toTextSummary({ ...link, url: cleaner(link.url) }),
           },
         ],
-        structuredContent: toStructuredContent(link),
+        structuredContent: toStructuredContent(link, cleaner),
       };
     },
   );

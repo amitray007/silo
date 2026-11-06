@@ -6,6 +6,10 @@ import {
   librarianActionsSchema,
   librarianActionsStoredSchema,
 } from '../librarian/actions.js';
+import { LINK_CLEANING_DEFAULTS, linkCleaningSchema } from '../links/link-cleaning-defaults.js';
+
+export { linkCleaningSchema } from '../links/link-cleaning-defaults.js';
+
 import { type ReaderSettings, readerSchema, readerStoredSchema } from './reader.js';
 
 const registeredFeatureIds: ReadonlySet<string> = new Set(
@@ -53,7 +57,9 @@ const aiSchema = z.object({ enabled: z.boolean(), features: aiFeaturesSchema }).
  * value with zero external importers) — the fix is narrowing the surface,
  * not silencing the finding.
  */
+
 const settingsSchema = {
+  linkCleaning: linkCleaningSchema,
   theme: z.enum(['light', 'dark', 'system']),
   trashPurgeDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
   /**
@@ -154,6 +160,7 @@ export type SettingsMap = { [K in SettingKey]: SettingValue<K> };
 
 /** Sensible defaults returned when a key has never been written (plan 016 QA note). */
 export const SETTINGS_DEFAULTS: SettingsMap = {
+  linkCleaning: LINK_CLEANING_DEFAULTS,
   theme: 'system',
   trashPurgeDays: 30,
   mcpAccess: true,

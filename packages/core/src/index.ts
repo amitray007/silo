@@ -174,6 +174,8 @@ export {
 // `createLink`/`findByCanonicalUrl`.
 export type { CanonicalizeResult } from './links/canonicalize.js';
 export { canonicalize } from './links/canonicalize.js';
+export type { LinkCleaning, UrlCleaner } from './links/clean-url.js';
+export { cleanUrl, LINK_CLEANING_DEFAULTS, loadUrlCleaner } from './links/clean-url.js';
 // Source detection (source-data/rich-previews slice): pure URL -> source-kind
 // classification (HN item / GitHub repo / YouTube video / plain link). Used
 // by `createLink` to auto-derive `sourceKind`, and re-run by the worker's
@@ -393,7 +395,7 @@ export {
 export type { ReaderPrefs, ReaderSettings } from './settings/reader.js';
 export { readerPatchSchema } from './settings/reader.js';
 export type { SettingKey, SettingsMap, SettingValue } from './settings/schema.js';
-export { SETTINGS_DEFAULTS } from './settings/schema.js';
+export { linkCleaningSchema, SETTINGS_DEFAULTS } from './settings/schema.js';
 export { getAllSettings, getSetting, setSetting, updateSettings } from './settings/settings.js';
 export type { TtsFiles, TtsLocalFile, TtsServe } from './tts/files.js';
 // Read aloud model files (reader tools, slice 4): the pinned manifest, the download-once file

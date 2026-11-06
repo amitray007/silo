@@ -34,6 +34,7 @@ function jsonResponse(body: unknown, status: number): Response {
 const linkFixture: LinkJson = {
   id: '11111111-1111-1111-1111-111111111111',
   url: 'https://example.com/post',
+  originalUrl: 'https://example.com/post',
   title: 'A post',
   description: null,
   imageUrl: null,

@@ -601,7 +601,10 @@ describeIfPg('A3 write routes (integration)', () => {
     it('captures multiple urls, per-item results keyed by url', async () => {
       const { app } = harness.mod();
       const res = await postJson(app, '/api/links/batch/capture', {
-        urls: ['https://example.com/u5-batch-capture-1', 'https://example.com/u5-batch-capture-2'],
+        urls: [
+          'https://example.com/u5-batch-capture-1?utm_source=caller',
+          'https://example.com/u5-batch-capture-2',
+        ],
         tags: ['u5-batch-capture'],
       });
       expect(res.status).toBe(201);
@@ -609,6 +612,7 @@ describeIfPg('A3 write routes (integration)', () => {
         results: Array<{ url: string; ok: boolean; id?: string; deduped?: boolean }>;
       };
       expect(body.results.length).toBe(2);
+      expect(body.results[0]?.url).toBe('https://example.com/u5-batch-capture-1?utm_source=caller');
       for (const r of body.results) {
         expect(r.ok).toBe(true);
         expect(r.id).toBeDefined();

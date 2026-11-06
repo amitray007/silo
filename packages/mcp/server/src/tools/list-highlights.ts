@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { HIGHLIGHT_COLORS, listLibraryHighlights } from '@silo/core';
+import { HIGHLIGHT_COLORS, listLibraryHighlights, loadUrlCleaner } from '@silo/core';
 import { z } from 'zod';
 import { passageShape, toPassageContent } from './link-shape.js';
 import { compactLinkShape, readerListError, readerPageInputShape } from './reader-shape.js';
@@ -47,10 +47,11 @@ export function registerListHighlights(server: McpServer): void {
     },
     async (input): Promise<CallToolResult> => {
       try {
+        const cleaner = await loadUrlCleaner();
         const page = await listLibraryHighlights(input);
         const highlights = page.highlights.map((row) => ({
           ...toPassageContent(row),
-          link: row.link,
+          link: { ...row.link, url: cleaner(row.link.url), originalUrl: row.link.url },
         }));
         const lines = [
           `${highlights.length} highlight${highlights.length === 1 ? '' : 's'} (newest first):`,

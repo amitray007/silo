@@ -273,7 +273,10 @@ describeMcpTool(
       const result = await client.callTool({
         name: 'capture_link',
         arguments: {
-          urls: ['https://example.com/capture-batch-a', 'https://example.com/capture-batch-b'],
+          urls: [
+            'https://example.com/capture-batch-a?utm_source=caller',
+            'https://example.com/capture-batch-b',
+          ],
           tags: ['batchtag'],
         },
       });
@@ -288,7 +291,9 @@ describeMcpTool(
         expect(r.deduped).toBe(false);
       }
 
-      const idA = structured.results.find((r) => r.url.endsWith('capture-batch-a'))?.id;
+      const idA = structured.results.find(
+        (r) => r.url === 'https://example.com/capture-batch-a?utm_source=caller',
+      )?.id;
       const fetchedA = await core.getById(idA as string);
       expect(fetchedA?.tags).toEqual(['batchtag']);
 
