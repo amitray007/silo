@@ -33,8 +33,13 @@ export function blockedFetch(result: SafeFetchResult): boolean {
 }
 
 export function readerAccessObservation(
-  source: SafeFetchResult | { access?: ReaderAccess; challenge?: boolean },
+  source:
+    | SafeFetchResult
+    | { access?: ReaderAccess; challenge?: boolean; readerFailed?: boolean | undefined },
 ): ReaderAccess | null | undefined {
   if ('ok' in source) return blockedFetch(source) ? 'blocked' : source.ok ? null : undefined;
-  return source.challenge ? 'blocked' : (source.access ?? null);
+  if (source.challenge) return 'blocked';
+  if (source.access) return source.access;
+  // A parser failure never saw the page, so it must not clear a known restriction.
+  return source.readerFailed ? undefined : null;
 }

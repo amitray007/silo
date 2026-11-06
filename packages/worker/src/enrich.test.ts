@@ -580,6 +580,25 @@ describeIfPg('enrichLink (integration)', () => {
     await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', status: 403 }));
     expect((await core.getById(id))?.readerAccess).toBe('blocked');
   });
+  it('records blocked fetch when selected fields request only metadata', async () => {
+    const id = await newLink('https://example.com/narrow-metadata-access');
+    await core.requestEnrich(id, { fields: ['metadata'] });
+    await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', status: 403 }));
+    expect((await core.getById(id))?.readerAccess).toBe('blocked');
+  });
+  it('keeps a blocked label when a later read fails inside the parser', async () => {
+    const id = await newLink('https://example.com/parser-failure-access');
+    await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', status: 403 }));
+    const page = {
+      ok: true as const,
+      html: '<p>page</p>',
+      finalUrl: 'https://example.com/parser-failure-access',
+      contentType: 'text/html',
+      status: 200,
+    };
+    await enrichMod.enrichLink(id, stubDeps(page, { status: 'bare', readerFailed: true }));
+    expect((await core.getById(id))?.readerAccess).toBe('blocked');
+  });
   it('never stores a challenge title from a successful HTTP response', async () => {
     const id = await newLink('https://example.com/challenge-access');
     const { extract } = await import('./extract/extract.js');

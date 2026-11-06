@@ -42,11 +42,23 @@ describe('Reader refresh extraction', () => {
       status: 'fetch_failed',
       observation: undefined,
     });
-    const challenge = createReaderRefresher(invalidate, {
+    const parserFailure = createReaderRefresher(invalidate, {
       fetch: async () => page,
       extract: async () => ({ status: 'partial', readerFailed: true }),
     });
-    expect(await challenge(link, signal())).toEqual({ status: 'fetch_failed', observation: null });
+    // A parser failure never saw the page, so it leaves the stored access label alone.
+    expect(await parserFailure(link, signal())).toEqual({
+      status: 'fetch_failed',
+      observation: undefined,
+    });
+    const challenge = createReaderRefresher(invalidate, {
+      fetch: async () => page,
+      extract: async () => ({ status: 'bare', access: 'blocked', readerFailed: true }),
+    });
+    expect(await challenge(link, signal())).toEqual({
+      status: 'fetch_failed',
+      observation: 'blocked',
+    });
     expect(invalidate).not.toHaveBeenCalled();
   });
   it('does not accept a result after its deadline signal aborts', async () => {

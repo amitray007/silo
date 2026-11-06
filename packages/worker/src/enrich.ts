@@ -17,6 +17,7 @@ import type {
   EnrichJobData,
   LinkSummaryWithTags,
   ObservedReader,
+  ReaderAccess,
   ReaderExtraction,
   SettingsMap,
   SourceData,
@@ -563,7 +564,7 @@ async function enrichSelectedFields(
     plan.fetch ? deps.safeFetch(link.url) : undefined,
   ]);
   if (fetched && !fetched.ok) {
-    if (plan.reader) await recordBlockedFetch(link.id, fetched, fetchedAt);
+    await recordBlockedFetch(link.id, fetched, fetchedAt);
     await recordEnrichment(link.id, { status }, run);
     return;
   }
@@ -609,24 +610,21 @@ async function recordNarrowReader(
   fetched: Extract<SafeFetchResult, { ok: true }> | undefined,
   fetchedAt: Date,
 ): Promise<void> {
-  if (plan.reader && fetched) {
-    const youtube =
-      link.sourceKind === 'youtube'
-        ? extractYouTubeWatch(fetched.html, fetched.finalUrl)
-        : undefined;
-    const selected = await (deps.selectReader ?? selectReader)(
-      link.sourceKind,
-      extracted,
-      youtube,
-      {
-        url: fetched.finalUrl,
-        contentType: fetched.contentType,
-        signal: AbortSignal.timeout(60_000),
-      },
-    );
-    await recordReaderAccess(link.id, selectedAccess(selected, extracted), fetchedAt);
-    if (link.sourceKind !== 'twitter') await recordReader(link.id, selected, fetchedAt);
+  if (!fetched) return;
+  // Metadata-only extraction skips paywall detection, so only a challenge page is an observation.
+  if (!plan.reader) {
+    if (extracted.access === 'blocked') await recordReaderAccess(link.id, 'blocked', fetchedAt);
+    return;
   }
+  const youtube =
+    link.sourceKind === 'youtube' ? extractYouTubeWatch(fetched.html, fetched.finalUrl) : undefined;
+  const selected = await (deps.selectReader ?? selectReader)(link.sourceKind, extracted, youtube, {
+    url: fetched.finalUrl,
+    contentType: fetched.contentType,
+    signal: AbortSignal.timeout(60_000),
+  });
+  await recordObservedAccess(link.id, selectedAccess(selected, extracted), fetchedAt);
+  if (link.sourceKind !== 'twitter') await recordReader(link.id, selected, fetchedAt);
 }
 
 async function narrowAiTitle(
@@ -667,7 +665,7 @@ async function recordExtraction(
   { sourceData, holdFull, fetchedAt, aiTitle }: ExtractionRecord,
 ): Promise<void> {
   const linkId = link.id;
-  await recordReaderAccess(linkId, selectedAccess(selected, extracted), fetchedAt);
+  await recordObservedAccess(linkId, selectedAccess(selected, extracted), fetchedAt);
   updateRenderedStatus(extracted, selected);
   if (link.sourceKind === 'youtube') extracted.status = 'partial';
   // A held `full` link whose re-run comes back thin keeps everything it has:
@@ -716,12 +714,19 @@ async function recordBlockedFetch(
   result: SafeFetchResult,
   fetchedAt: Date,
 ): Promise<void> {
-  const access = readerAccessObservation(result);
-  if (access !== undefined) await recordReaderAccess(id, access, fetchedAt);
+  await recordObservedAccess(id, readerAccessObservation(result), fetchedAt);
+}
+
+async function recordObservedAccess(
+  id: string,
+  access: ReaderAccess | null | undefined,
+  observedAt: Date,
+): Promise<void> {
+  if (access !== undefined) await recordReaderAccess(id, access, observedAt);
 }
 
 function selectedAccess(selected: ObservedReader, extracted: ExtractResult) {
   return selected.observation !== undefined
     ? selected.observation
-    : (readerAccessObservation(extracted) ?? null);
+    : readerAccessObservation(extracted);
 }

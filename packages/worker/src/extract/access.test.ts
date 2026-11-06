@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
-import { blockedFetch, paywallDeclared } from './access.js';
+import { blockedFetch, paywallDeclared, readerAccessObservation } from './access.js';
 
 describe('publisher access', () => {
   it.each([
@@ -35,5 +35,14 @@ describe('publisher access', () => {
         ...(header ? { responseHeaders: { 'cf-mitigated': header } } : {}),
       }),
     ).toBe(expected);
+  });
+
+  it.each([
+    [{ challenge: true }, 'blocked'],
+    [{ access: 'paywalled' as const }, 'paywalled'],
+    [{}, null],
+    [{ readerFailed: true }, undefined],
+  ])('maps a page outcome %o to %s', (outcome, expected) => {
+    expect(readerAccessObservation(outcome)).toBe(expected);
   });
 });
