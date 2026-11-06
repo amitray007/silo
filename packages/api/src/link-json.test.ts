@@ -30,6 +30,27 @@ describeIfPg('link-json (integration)', () => {
     return (await import('@silo/core')) as typeof CoreOps;
   });
 
+  it('serializes archive provenance with the Reader snapshot time', async () => {
+    const core = harness.mod();
+    const { toLinkJson } = await import('./link-json.js');
+    const link = await core.createLink({ url: 'https://example.com/archive', sourceKind: 'link' });
+    await core.recordReader(
+      link.id,
+      {
+        status: 'reader',
+        reader: { contentHtml: '<p>Archived</p>', contentImages: [] },
+        readerSource: 'archive',
+        readerSourceAt: new Date('2026-10-16T18:10:59Z'),
+      },
+      new Date(),
+    );
+    const saved = await core.getById(link.id);
+    if (!saved) throw new Error('missing link');
+    expect(toLinkJson(saved)).toMatchObject({
+      readerSource: 'archive',
+      readerSourceAt: '2026-10-16T18:10:59.000Z',
+    });
+  });
   it('omits raw show notes from list/search but keeps them on detail', async () => {
     const core = harness.mod();
     const { toLinkJson, toSnippetLinkJson, toSnippetSearchResultJson, toSummaryLinkJson } =

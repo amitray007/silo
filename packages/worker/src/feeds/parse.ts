@@ -14,6 +14,7 @@ type EntryMedia = {
   contentBaseUrl?: string | undefined;
   enclosures: Enclosure[];
   content: string | undefined;
+  contentAlternatives?: Array<string | undefined>;
   description: string | undefined;
   image: string | undefined;
 };
@@ -83,10 +84,13 @@ function entry(
   const resolved = primary ?? enclosure;
   if (!resolved) return [];
   const isMedia = media && !primary;
+  const content = entryContent(media);
   const parsedDate = date ? new Date(date) : null;
   return [
     {
       url: resolved,
+      ...(content ? { content } : {}),
+      ...(media?.description ? { description: media.description } : {}),
       ...(!httpUrl(url, base) ? { linkFallback: true } : {}),
       ...(id ? { id: id.replaceAll('\u0000', '') } : {}),
       ...(title ? { title: cleanTitle(title) } : {}),
@@ -179,6 +183,7 @@ function parseRss(feed: Extract<AnyFeed, { format: 'rss' }>['feed'], base: strin
             ? item.guid?.value
             : undefined,
         enclosures: [...(item.enclosures ?? []), ...mediaContents(item.media)],
+        contentAlternatives: [item.content?.encoded, item.description],
         content:
           item.content?.encoded ??
           item.description ??
@@ -241,4 +246,10 @@ export function pollInterval(
     if (Number.isFinite(seconds)) hints.push(seconds);
   }
   return Math.trunc(Math.max(900, Math.min(86400, hints.length ? Math.max(...hints) : fallback)));
+}
+
+function entryContent(media: EntryMedia | undefined): string | undefined {
+  return (media?.contentAlternatives ?? [media?.content, media?.description])
+    .filter((value): value is string => Boolean(value))
+    .sort((a, b) => b.length - a.length)[0];
 }

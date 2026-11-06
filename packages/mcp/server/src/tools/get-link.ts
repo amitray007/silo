@@ -139,6 +139,8 @@ function toTextSummary(link: LinkDetail | LinkWithTextWindow): string {
     link.url,
     link.siteName ? `site: ${link.siteName}` : undefined,
     `status: ${link.captureStatus}`,
+    ...(link.readerSource ? [`readerSource: ${link.readerSource}`] : []),
+    ...(link.readerSourceAt ? [`readerSourceAt: ${link.readerSourceAt.toISOString()}`] : []),
     ...(link.readerAccess ? [`readerAccess: ${link.readerAccess}`] : []),
     link.description ? `description: ${link.description}` : undefined,
     `tags: ${link.tags.length > 0 ? link.tags.join(', ') : '(none)'}`,
@@ -205,7 +207,7 @@ export function registerGetLink(server: McpServer): void {
       description:
         "Fetch one or more saved links' full detail by id: metadata (url, " +
         'title, description, image, site name), extracted full text, tags, ' +
-        'readerAccess (paywalled: the text is only the free part; blocked: the site refused Silo, text may be from an earlier read; null: no known restriction), capture status, notes, and the reading position (`readingPosition`: ' +
+        'readerSource (page, feed, archive; null means page), readerSourceAt (archive snapshot time), readerAccess (paywalled: the text is only the free part; blocked: the site refused Silo, text may be from an earlier read; null: no known restriction), capture status, notes, and the reading position (`readingPosition`: ' +
         'a share from 0 to 1; pencil means read to, listen means listened to, ' +
         'mark means saved place (Continue here); null when absent) and the passage highlights (`highlights`: each quote with ' +
         'its note, colour and id; they may overlap). Pass `id` for ONE link, or `ids` for a ' +

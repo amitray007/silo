@@ -62,6 +62,26 @@ describeIfPg('stored Reader (Postgres)', () => {
     await core.recordReaderAccess(link.id, null, new Date(Date.now() + 2000));
     expect((await raw(link.id))?.readerAccess).toBeNull();
   });
+  it('writes provenance with content, keeps it on empty or stale reads, and resets it on a page Reader', async () => {
+    const { core } = harness.mod();
+    const link = await saved();
+    const snapshot = new Date('2026-10-16T18:10:59Z');
+    const at = new Date();
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, readerSource: 'archive', readerSourceAt: snapshot },
+      at,
+    );
+    await core.recordReader(link.id, { status: 'no_reader' }, new Date(at.getTime() + 1000));
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, readerSource: 'feed' },
+      new Date(at.getTime() - 1000),
+    );
+    expect(await raw(link.id)).toMatchObject({ readerSource: 'archive', readerSourceAt: snapshot });
+    await core.recordReader(link.id, { status: 'reader', reader }, new Date(at.getTime() + 2000));
+    expect(await raw(link.id)).toMatchObject({ readerSource: 'page', readerSourceAt: null });
+  });
   it('marks a successful empty extraction checked, clearing stale payload', async () => {
     const {
       core,

@@ -42,6 +42,8 @@ const linkFixture: LinkJson = {
   sourceKind: 'web',
   sourceData: { kind: 'link' },
   readerAccess: null,
+  readerSource: null,
+  readerSourceAt: null,
   captureStatus: 'full',
   addedBy: 'user',
   source: 'web',

@@ -317,3 +317,7 @@ it('keeps blocked access when rendering a challenge fails', async () => {
   });
   expect(result.observation).toBe('blocked');
 });
+
+vi.mock('./other-sources.js', () => ({
+  otherSources: async (_url: string, page: unknown) => page,
+}));

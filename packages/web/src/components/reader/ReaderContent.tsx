@@ -224,6 +224,7 @@ export function ReaderContent({
           )}
         </figure>
       )}
+      <SourceNotice link={link} hasReader={Boolean(prose)} />
       <AccessNotice link={link} hasReader={Boolean(prose)} />
       {source.kind !== 'twitter' &&
         (live.isLoading ? (
@@ -270,6 +271,33 @@ function AccessNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean 
       Subscriber article. Silo saved the part the site shows to everyone.{' '}
       <a href={link.url} target="_blank" rel="noopener noreferrer">
         Open original
+      </a>
+    </p>
+  );
+}
+
+function SourceNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean }) {
+  if (!(hasReader || link.extractedText)) return null;
+  if (link.readerSource === 'feed')
+    return <p className="silo-reader-access-notice">From the site's feed.</p>;
+  if (link.readerSource !== 'archive' || !link.readerSourceAt) return null;
+  const date = new Date(link.readerSourceAt);
+  const stamp = date.toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  return (
+    <p className="silo-reader-access-notice">
+      <a
+        href={`https://web.archive.org/web/${stamp}/${link.url}`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        From the Internet Archive, snapshot of{' '}
+        {date.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          timeZone: 'UTC',
+        })}
+        .
       </a>
     </p>
   );

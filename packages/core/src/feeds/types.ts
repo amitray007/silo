@@ -4,6 +4,8 @@ export type FeedEntry = {
   id?: string;
   url: string;
   title?: string;
+  content?: string;
+  description?: string;
   publishedAt?: Date | null;
   /** No usable publisher link; this entry was invisible before fallback URL support. */
   linkFallback?: boolean;

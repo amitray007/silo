@@ -383,3 +383,7 @@ describeIfPg('targeted enrichment worker (integration)', () => {
     });
   });
 });
+
+vi.mock('./reader/other-sources.js', () => ({
+  otherSources: async (_url: string, page: unknown) => page,
+}));

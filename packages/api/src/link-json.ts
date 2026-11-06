@@ -64,6 +64,8 @@ export type LinkJson = {
   extractedText: string | null;
   sourceKind: string;
   sourceData: SourceData;
+  readerSource: 'page' | 'feed' | 'archive' | null;
+  readerSourceAt: string | null;
   readerAccess: 'paywalled' | 'blocked' | null;
   captureStatus: 'enriching' | 'full' | 'partial' | 'bare';
   addedBy: 'user' | 'agent';
@@ -188,6 +190,8 @@ export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
     extractedText: link.extractedText,
     sourceKind: link.sourceKind,
     sourceData: shapeSourceData(link.sourceData),
+    readerSource: link.readerSource,
+    readerSourceAt: link.readerSourceAt?.toISOString() ?? null,
     readerAccess: link.readerAccess,
     captureStatus: link.captureStatus,
     addedBy: link.addedBy,
