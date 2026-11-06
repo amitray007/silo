@@ -1,4 +1,4 @@
-import type { Highlight, LinkDetail, LinkSummaryWithTags } from '@silo/core';
+import type { Highlight, LinkDetail, LinkSummaryWithTags, UrlCleaner } from '@silo/core';
 import { CAPTURE_SOURCES, HIGHLIGHT_COLORS, sourceDataSchema, TITLE_SOURCES } from '@silo/core';
 import { z } from 'zod';
 import { readingSourceShape } from './reader-shape.js';
@@ -203,7 +203,7 @@ function shapeSourceData(raw: unknown): BaseLinkContent['sourceData'] {
  */
 function toSummaryLinkContent(
   link: Omit<LinkSummaryWithTags, 'extractedText'>,
-  cleaner: (url: string) => string = (url) => url,
+  cleaner: UrlCleaner,
 ) {
   return {
     id: link.id,
@@ -226,10 +226,7 @@ function toSummaryLinkContent(
   };
 }
 
-export function toBaseLinkContent(
-  link: LinkDetail,
-  cleaner: (url: string) => string = (url) => url,
-): BaseLinkContent {
+export function toBaseLinkContent(link: LinkDetail, cleaner: UrlCleaner): BaseLinkContent {
   return {
     ...toSummaryLinkContent(link, cleaner),
     extractedText: link.extractedText,
@@ -256,7 +253,7 @@ type SnippetSourceRow = Omit<LinkSummaryWithTags, 'extractedText'> & { snippet: 
 /** Build discovery rows from the same summary whitelist as detail reads. */
 export function toSnippetLinkContent(
   link: SnippetSourceRow,
-  cleaner: (url: string) => string = (url) => url,
+  cleaner: UrlCleaner,
 ): SnippetLinkContent {
   const base = toSummaryLinkContent(link, cleaner);
   const sourceData = base.sourceData;

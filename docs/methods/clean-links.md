@@ -81,7 +81,7 @@ Default site rules (all `strip`, no `keep`):
 | `open.spotify.com` | `si`, `context` |
 | `x.com` | `s`, `t`, `ref_src`, `ref_url` |
 | `twitter.com` | `s`, `t`, `ref_src`, `ref_url` |
-| `instagram.com` | `igsh`, `img_index` |
+| `instagram.com` | `igsh` |
 | `linkedin.com` | `trk`, `trackingId`, `lipi`, `rcm` |
 | `reddit.com` | `share_id`, `rdt` |
 | `nytimes.com` | `smid`, `smtyp` |

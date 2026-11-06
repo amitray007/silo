@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { BulkGetResult, LinkDetail, LinkWithTextWindow } from '@silo/core';
+import type { BulkGetResult, LinkDetail, LinkWithTextWindow, UrlCleaner } from '@silo/core';
 import { getById, getByIds, loadUrlCleaner } from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, runBulkGuarded } from './found-result.js';
@@ -85,7 +85,7 @@ type GetLinkOutputStructuredContent = GetLinkStructuredContent & { results?: Get
  */
 function toStructuredContent(
   link: LinkDetail | LinkWithTextWindow,
-  cleaner: (url: string) => string = (url) => url,
+  cleaner: UrlCleaner,
 ): GetLinkStructuredContent {
   const base = { found: true as const, ...toBaseLinkContent(link, cleaner) };
   return 'extractedTextLength' in link
@@ -104,7 +104,7 @@ function toStructuredContent(
 function toBatchResult(
   id: string,
   link: LinkDetail | null,
-  cleaner: (url: string) => string = (url) => url,
+  cleaner: UrlCleaner,
 ): GetLinkBatchResult {
   if (!link) return { id, found: false };
   return { ...toBaseLinkContent(link, cleaner), found: true };

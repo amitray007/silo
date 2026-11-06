@@ -37,7 +37,6 @@ const { found: _found, ...captureLinkOutputShape } = {
 void _found;
 
 const captureLinkBatchResultShape = {
-  originalUrl: z.string(),
   url: z.string(),
   ok: z.boolean(),
   id: z.uuid().optional(),
@@ -97,7 +96,6 @@ type CaptureLinkBatchInput = {
  * branch, on top of the single-url path's own branches.
  */
 async function runBatchCapture(input: CaptureLinkBatchInput): Promise<CallToolResult> {
-  const cleaner = await loadUrlCleaner();
   // Built conditionally per-input for the same `exactOptionalPropertyTypes`
   // reason the single-URL path documents below.
   const inputs: CreateLinkInput[] = input.urls.map((oneUrl) => {
@@ -117,8 +115,8 @@ async function runBatchCapture(input: CaptureLinkBatchInput): Promise<CallToolRe
 
   const results: CaptureLinkBatchResult[] = outcome.value.map((r) =>
     r.ok
-      ? { url: cleaner(r.url), originalUrl: r.url, ok: true, id: r.id, deduped: r.deduped }
-      : { url: cleaner(r.url), originalUrl: r.url, ok: false, reason: r.reason },
+      ? { url: r.url, ok: true, id: r.id, deduped: r.deduped }
+      : { url: r.url, ok: false, reason: r.reason },
   );
   return {
     content: [{ type: 'text', text: toBatchSuccessText(results) }],

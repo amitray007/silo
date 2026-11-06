@@ -9,10 +9,8 @@ import type {
   ReaderPrefs,
   SearchResultRow,
   SourceData,
+  UrlCleaner,
 } from '@silo/core';
-
-type UrlCleaner = (url: string) => string;
-const identityUrl: UrlCleaner = (url) => url;
 
 import { sourceDataSchema } from '@silo/core';
 
@@ -173,7 +171,7 @@ export type SearchResultJson = SummaryLinkJson & { rank: number };
  * payload can never reach the response unvalidated. Dates are serialized to
  * ISO strings (`Date#toISOString`) since HTTP/JSON has no native date type.
  */
-export function toLinkJson(link: LinkSummaryWithTags, cleaner: UrlCleaner = identityUrl): LinkJson {
+export function toLinkJson(link: LinkSummaryWithTags, cleaner: UrlCleaner): LinkJson {
   /* jscpd:ignore-start — this field-by-field whitelist necessarily resembles the
      MCP adapter's `link-shape.ts`. The duplication is DELIBERATE and required by
      the architecture boundary: `@silo/api` may not import `@silo/mcp-server` (a
@@ -209,10 +207,7 @@ export function toLinkJson(link: LinkSummaryWithTags, cleaner: UrlCleaner = iden
 }
 
 /** `toLinkJson` plus the reading position and highlights, picked field by field. */
-export function toLinkDetailJson(
-  link: LinkDetail,
-  cleaner: UrlCleaner = identityUrl,
-): LinkDetailJson {
+export function toLinkDetailJson(link: LinkDetail, cleaner: UrlCleaner): LinkDetailJson {
   return {
     ...toLinkJson(link, cleaner),
     ...(link.readerTextOmitted ? { readerTextOmitted: true as const } : {}),
@@ -237,10 +232,7 @@ export function toLinkDetailJson(
  * `Date | null` (it's nullable for live links), so the null case is handled
  * explicitly rather than asserted away.
  */
-export function toTrashLinkJson(
-  link: LinkSummaryWithTags,
-  cleaner: UrlCleaner = identityUrl,
-): TrashLinkJson {
+export function toTrashLinkJson(link: LinkSummaryWithTags, cleaner: UrlCleaner): TrashLinkJson {
   return {
     ...toSummaryLinkJson(link, cleaner),
     deletedAt: link.deletedAt ? link.deletedAt.toISOString() : '',
@@ -266,10 +258,7 @@ export type SummaryLinkJson = Omit<LinkJson, 'sourceData'> & { sourceData: Summa
 export type SnippetLinkJson = Omit<SummaryLinkJson, 'extractedText'> & { snippet: string | null };
 
 /** Raw publisher notes belong only in single-link detail responses. */
-export function toSummaryLinkJson(
-  link: LinkSummaryWithTags,
-  cleaner: UrlCleaner = identityUrl,
-): SummaryLinkJson {
+export function toSummaryLinkJson(link: LinkSummaryWithTags, cleaner: UrlCleaner): SummaryLinkJson {
   const base = toLinkJson(link, cleaner);
   if (base.sourceData.kind === 'feed_media') {
     const { content: _content, ...sourceData } = base.sourceData;
@@ -294,7 +283,7 @@ export type SnippetSearchResultJson = SnippetLinkJson & { rank: number };
  */
 export function toSnippetLinkJson(
   link: ListResultRow | SearchResultRow,
-  cleaner: UrlCleaner = identityUrl,
+  cleaner: UrlCleaner,
 ): SnippetLinkJson {
   const { extractedText: _extractedText, ...base } = toSummaryLinkJson(
     {
@@ -309,7 +298,7 @@ export function toSnippetLinkJson(
 /** `toSnippetLinkJson` plus a search `rank` — used by `GET /api/links/search` and `GET /api/links/:id/related`. */
 export function toSnippetSearchResultJson(
   link: SearchResultRow,
-  cleaner: UrlCleaner = identityUrl,
+  cleaner: UrlCleaner,
 ): SnippetSearchResultJson {
   return { ...toSnippetLinkJson(link, cleaner), rank: link.rank };
 }
@@ -318,7 +307,7 @@ export function toSnippetSearchResultJson(
 export function toSearchResultJson(
   link: LinkSummaryWithTags,
   rank: number,
-  cleaner: UrlCleaner = identityUrl,
+  cleaner: UrlCleaner,
 ): SearchResultJson {
   return { ...toSummaryLinkJson(link, cleaner), rank };
 }
@@ -338,7 +327,7 @@ export type LinkWithTextWindowJson = LinkDetailJson & { extractedTextLength: num
 /** Builds the windowed-detail shape — `toLinkJson` plus `extractedTextLength`. */
 export function toLinkWithTextWindowJson(
   link: LinkWithTextWindow,
-  cleaner: UrlCleaner = identityUrl,
+  cleaner: UrlCleaner,
 ): LinkWithTextWindowJson {
   return { ...toLinkDetailJson(link, cleaner), extractedTextLength: link.extractedTextLength };
 }
@@ -357,7 +346,7 @@ export type TrashSearchResultJson = TrashLinkJson & { rank: number };
 export function toTrashSearchResultJson(
   link: LinkSummaryWithTags,
   rank: number,
-  cleaner: UrlCleaner = identityUrl,
+  cleaner: UrlCleaner,
 ): TrashSearchResultJson {
   return { ...toTrashLinkJson(link, cleaner), rank };
 }
@@ -385,7 +374,7 @@ export type TrashSnippetSearchResultJson = SnippetLinkJson & { deletedAt: string
  */
 export function toTrashSnippetSearchResultJson(
   link: SearchResultRow,
-  cleaner: UrlCleaner = identityUrl,
+  cleaner: UrlCleaner,
 ): TrashSnippetSearchResultJson {
   return {
     ...toSnippetLinkJson(link, cleaner),

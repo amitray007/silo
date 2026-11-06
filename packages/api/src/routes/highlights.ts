@@ -25,8 +25,7 @@ const idParamSchema = z.object({ id: z.uuid() });
 export function registerHighlightsRoutes(app: Hono): void {
   app.get('/highlights', async (c) => {
     const input = highlightsQuerySchema.parse(c.req.query());
-    const page = await listLibraryHighlights(input);
-    const cleaner = await loadUrlCleaner();
+    const [page, cleaner] = await Promise.all([listLibraryHighlights(input), loadUrlCleaner()]);
     const highlights = page.highlights.map((row) => ({
       id: row.id,
       quote: row.quote,

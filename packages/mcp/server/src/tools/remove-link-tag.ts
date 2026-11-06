@@ -62,7 +62,6 @@ export function registerRemoveLinkTag(server: McpServer): void {
       outputSchema: removeTagOutputSchema,
     },
     async ({ id, ids, tag }): Promise<CallToolResult> => {
-      const cleaner = await loadUrlCleaner();
       if (ids !== undefined) {
         const outcome = await runBulkGuarded(() => removeTagMany(ids, tag));
         if (!outcome.ok) return outcome.error;
@@ -113,6 +112,7 @@ export function registerRemoveLinkTag(server: McpServer): void {
         };
       }
 
+      const cleaner = await loadUrlCleaner();
       return foundResult(
         link,
         `Removed tag '${tag}' from link ${id} (or it wasn't present).`,

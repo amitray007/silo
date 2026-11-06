@@ -1,3 +1,4 @@
+import { getSetting } from '../settings/settings.js';
 import type { Executor } from './executor.js';
 
 import type { LinkCleaning } from './link-cleaning-defaults.js';
@@ -53,8 +54,9 @@ export function cleanUrl(rawUrl: string, config: LinkCleaning): { url: string; r
   }
 }
 
-export async function loadUrlCleaner(database?: Executor): Promise<(rawUrl: string) => string> {
-  const { getSetting } = await import('../settings/settings.js');
+export type UrlCleaner = (rawUrl: string) => string;
+
+export async function loadUrlCleaner(database?: Executor): Promise<UrlCleaner> {
   const config = await getSetting('linkCleaning', database);
   return (rawUrl) => cleanUrl(rawUrl, config).url;
 }

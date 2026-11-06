@@ -6,8 +6,7 @@ import { readingPositionsQuerySchema } from '../query-schemas.js';
 export function registerReadingPositionRoutes(app: Hono): void {
   app.get('/reading-positions', async (c) => {
     const input = readingPositionsQuerySchema.parse(c.req.query());
-    const page = await listReadingPositions(input);
-    const cleaner = await loadUrlCleaner();
+    const [page, cleaner] = await Promise.all([listReadingPositions(input), loadUrlCleaner()]);
     const positions = page.positions.map((row) => ({
       link: {
         id: row.link.id,

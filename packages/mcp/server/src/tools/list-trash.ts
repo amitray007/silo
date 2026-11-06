@@ -1,13 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { LinkSummaryWithTags, PageParams, SearchResultRow } from '@silo/core';
+import type { LinkSummaryWithTags, PageParams, SearchResultRow, UrlCleaner } from '@silo/core';
 import { InvalidCursorError, listTrash, loadUrlCleaner, searchTrash } from '@silo/core';
 import { z } from 'zod';
 import { snippetLinkShape, toSnippetLinkContent } from './link-shape.js';
 
-function toTrashContent(
-  link: LinkSummaryWithTags | SearchResultRow,
-  cleaner: (url: string) => string = (url) => url,
-) {
+function toTrashContent(link: LinkSummaryWithTags | SearchResultRow, cleaner: UrlCleaner) {
   return {
     ...toSnippetLinkContent('snippet' in link ? link : { ...link, snippet: null }, cleaner),
     deletedAt: link.deletedAt?.toISOString() ?? null,

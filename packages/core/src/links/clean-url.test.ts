@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { parseSettingValue } from '../settings/schema.js';
-import { cleanUrl, LINK_CLEANING_DEFAULTS } from './clean-url.js';
+import { setupPgHarness } from '../test-support/pg-harness.js';
+import { LINK_CLEANING_DEFAULTS } from './link-cleaning-defaults.js';
 
 describe('cleanUrl', () => {
+  const harness = setupPgHarness('silo_clean_url_test', () => import('./clean-url.js'));
+  const cleanUrl: typeof import('./clean-url.js').cleanUrl = (...args) =>
+    harness.mod().cleanUrl(...args);
+  it('keeps the Instagram carousel index', () => {
+    expect(
+      cleanUrl('https://instagram.com/p/a?igsh=x&img_index=2', LINK_CLEANING_DEFAULTS).url,
+    ).toBe('https://instagram.com/p/a?img_index=2');
+  });
   it('shares the import-free defaults with the settings schema', async () => {
     const { LINK_CLEANING_DEFAULTS: defaults } = await import('./link-cleaning-defaults.js');
     expect(defaults).toBe(LINK_CLEANING_DEFAULTS);

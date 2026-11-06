@@ -54,8 +54,7 @@ export function registerTrashRoutes(app: Hono): void {
    */
   app.get('/trash', async (c) => {
     const query = pageQuerySchema.parse(c.req.query());
-    const result = await listTrash(toPageParams(query));
-    const cleaner = await loadUrlCleaner();
+    const [result, cleaner] = await Promise.all([listTrash(toPageParams(query)), loadUrlCleaner()]);
     const links = result.links.map((link) => toTrashLinkJson(link, cleaner));
     return c.json(
       result.nextCursor === undefined ? { links } : { links, nextCursor: result.nextCursor },
@@ -80,8 +79,10 @@ export function registerTrashRoutes(app: Hono): void {
    */
   app.get('/trash/search', async (c) => {
     const query = trashSearchQuerySchema.parse(c.req.query());
-    const result = await searchTrash(query.q, toPageParams(query));
-    const cleaner = await loadUrlCleaner();
+    const [result, cleaner] = await Promise.all([
+      searchTrash(query.q, toPageParams(query)),
+      loadUrlCleaner(),
+    ]);
     const results = result.results.map((link) => toTrashSnippetSearchResultJson(link, cleaner));
     return c.json(
       result.nextCursor === undefined ? { results } : { results, nextCursor: result.nextCursor },
@@ -141,7 +142,7 @@ export function registerTrashRoutes(app: Hono): void {
   const trashLink: Handler = async (c) => {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
 
-    const deleted = await softDelete(id);
+    const [deleted, cleaner] = await Promise.all([softDelete(id), loadUrlCleaner()]);
     if (!deleted) {
       return c.json(
         {
@@ -156,7 +157,6 @@ export function registerTrashRoutes(app: Hono): void {
     // `tags` field at all). Built as a `LinkWithTags` with `tags: []` — same
     // honest-omission shape `trash_link`'s MCP tool returns — rather than
     // giving `toLinkJson` a wider input type just for this one caller.
-    const cleaner = await loadUrlCleaner();
     return c.json({ link: toLinkJson({ ...deleted, tags: [] }, cleaner) }, 200);
   };
   app.post('/links/:id/trash', trashLink);
@@ -197,7 +197,7 @@ export function registerTrashRoutes(app: Hono): void {
       );
     }
 
-    const link = await getById(result.link.id);
+    const [link, cleaner] = await Promise.all([getById(result.link.id), loadUrlCleaner()]);
     if (!link) {
       return c.json(
         {
@@ -208,7 +208,6 @@ export function registerTrashRoutes(app: Hono): void {
       );
     }
 
-    const cleaner = await loadUrlCleaner();
     if (result.status === 'merged') {
       return c.json(
         {

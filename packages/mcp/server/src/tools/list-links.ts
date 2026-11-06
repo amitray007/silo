@@ -203,7 +203,6 @@ export function registerListLinks(server: McpServer): void {
       limit,
       cursor,
     }): Promise<CallToolResult> => {
-      const cleaner = await loadUrlCleaner();
       const filterInput: ListLinksFilterInput = { tag, tags, status, source, since, until };
 
       if (countOnly) {
@@ -233,6 +232,7 @@ export function registerListLinks(server: McpServer): void {
         throw error;
       }
 
+      const cleaner = await loadUrlCleaner();
       const links = page.links.map((row) => toSnippetLinkContent(row, cleaner));
       const structuredContent: ListLinksStructuredContent =
         page.nextCursor === undefined

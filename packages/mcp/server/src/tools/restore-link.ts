@@ -97,7 +97,6 @@ export function registerRestoreLink(server: McpServer): void {
       outputSchema: restoreLinkOutputSchema,
     },
     async ({ id, ids }): Promise<CallToolResult> => {
-      const cleaner = await loadUrlCleaner();
       if (ids !== undefined) {
         return runBatchRestore(ids);
       }
@@ -143,6 +142,7 @@ export function registerRestoreLink(server: McpServer): void {
         };
       }
 
+      const cleaner = await loadUrlCleaner();
       if (res.status === 'merged') {
         return {
           content: [

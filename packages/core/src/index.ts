@@ -174,7 +174,7 @@ export {
 // `createLink`/`findByCanonicalUrl`.
 export type { CanonicalizeResult } from './links/canonicalize.js';
 export { canonicalize } from './links/canonicalize.js';
-export type { LinkCleaning } from './links/clean-url.js';
+export type { LinkCleaning, UrlCleaner } from './links/clean-url.js';
 export { cleanUrl, LINK_CLEANING_DEFAULTS, loadUrlCleaner } from './links/clean-url.js';
 // Source detection (source-data/rich-previews slice): pure URL -> source-kind
 // classification (HN item / GitHub repo / YouTube video / plain link). Used

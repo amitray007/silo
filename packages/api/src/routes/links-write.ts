@@ -326,17 +326,7 @@ export function registerLinksWriteRoutes(app: Hono): void {
     });
     const outcome = await runBulkGuarded(c, () => captureMany(inputs));
     if (!outcome.ok) return outcome.response;
-    const cleaner = await loadUrlCleaner();
-    return c.json(
-      {
-        results: outcome.value.map((result) => ({
-          ...result,
-          url: cleaner(result.url),
-          originalUrl: result.url,
-        })),
-      },
-      201,
-    );
+    return c.json({ results: outcome.value }, 201);
   });
 
   /**
@@ -356,9 +346,11 @@ export function registerLinksWriteRoutes(app: Hono): void {
    */
   app.post('/links/batch-get', async (c) => {
     const body = batchIdsBodySchema.parse(await c.req.json());
-    const outcome = await runBulkGuarded(c, () => getByIds(body.ids));
+    const [outcome, cleaner] = await Promise.all([
+      runBulkGuarded(c, () => getByIds(body.ids)),
+      loadUrlCleaner(),
+    ]);
     if (!outcome.ok) return outcome.response;
-    const cleaner = await loadUrlCleaner();
     const results = outcome.value.map((r) => ({
       id: r.id,
       link: r.link ? toLinkDetailJson(r.link, cleaner) : null,

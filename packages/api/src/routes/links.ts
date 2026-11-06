@@ -155,8 +155,10 @@ export function registerLinksRoutes(app: Hono): void {
       return c.json(counts);
     }
 
-    const result = await search(query.q, searchFilter, toPageParams(query));
-    const cleaner = await loadUrlCleaner();
+    const [result, cleaner] = await Promise.all([
+      search(query.q, searchFilter, toPageParams(query)),
+      loadUrlCleaner(),
+    ]);
     const results = result.results.map((link) => toSnippetSearchResultJson(link, cleaner));
     return c.json(
       result.nextCursor === undefined ? { results } : { results, nextCursor: result.nextCursor },
@@ -167,16 +169,21 @@ export function registerLinksRoutes(app: Hono): void {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
     const { textOffset, textLimit, view } = detailQuerySchema.parse(c.req.query());
 
-    const cleaner = await loadUrlCleaner();
     if (textOffset !== undefined && textLimit !== undefined) {
-      const windowed = await getById(id, { textWindow: { offset: textOffset, limit: textLimit } });
+      const [windowed, cleaner] = await Promise.all([
+        getById(id, { textWindow: { offset: textOffset, limit: textLimit } }),
+        loadUrlCleaner(),
+      ]);
       if (!windowed) {
         return c.json({ error: 'not_found', message: `No link with id ${id}` }, 404);
       }
       return c.json({ link: toLinkWithTextWindowJson(windowed, cleaner) });
     }
 
-    const link = await getById(id, { reader: view === 'reader' });
+    const [link, cleaner] = await Promise.all([
+      getById(id, { reader: view === 'reader' }),
+      loadUrlCleaner(),
+    ]);
     if (!link) {
       return c.json({ error: 'not_found', message: `No link with id ${id}` }, 404);
     }
@@ -200,8 +207,7 @@ export function registerLinksRoutes(app: Hono): void {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
     const { limit } = relatedQuerySchema.parse(c.req.query());
 
-    const rows = await findRelated(id, limit);
-    const cleaner = await loadUrlCleaner();
+    const [rows, cleaner] = await Promise.all([findRelated(id, limit), loadUrlCleaner()]);
     const results = rows.map((link) => toSnippetSearchResultJson(link, cleaner));
     return c.json({ results, count: results.length });
   });
@@ -229,8 +235,10 @@ export function registerLinksRoutes(app: Hono): void {
       return c.json(counts);
     }
 
-    const result = await list(filter, toPageParams(query));
-    const cleaner = await loadUrlCleaner();
+    const [result, cleaner] = await Promise.all([
+      list(filter, toPageParams(query)),
+      loadUrlCleaner(),
+    ]);
     const links = result.links.map((link) => toSnippetLinkJson(link, cleaner));
     return c.json(
       result.nextCursor === undefined ? { links } : { links, nextCursor: result.nextCursor },

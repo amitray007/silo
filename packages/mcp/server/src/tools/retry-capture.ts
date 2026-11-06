@@ -79,7 +79,6 @@ export function registerRetryCapture(server: McpServer): void {
       outputSchema: retryCaptureOutputSchema,
     },
     async ({ id, ids, fields }): Promise<CallToolResult> => {
-      const cleaner = await loadUrlCleaner();
       if (ids !== undefined) {
         const outcome = await runBulkGuarded(() =>
           fields === undefined ? retryCaptureMany(ids) : retryCaptureMany(ids, { fields }),
@@ -129,6 +128,7 @@ export function registerRetryCapture(server: McpServer): void {
         };
       }
 
+      const cleaner = await loadUrlCleaner();
       return foundResult(link, singleText(id, fields), cleaner);
     },
   );

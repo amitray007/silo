@@ -64,7 +64,6 @@ export function registerAddLinkTag(server: McpServer): void {
       outputSchema: addTagOutputSchema,
     },
     async ({ id, ids, tag }): Promise<CallToolResult> => {
-      const cleaner = await loadUrlCleaner();
       if (ids !== undefined) {
         const outcome = await runBulkGuarded(() => addTagMany(ids, tag));
         if (!outcome.ok) return outcome.error;
@@ -112,6 +111,7 @@ export function registerAddLinkTag(server: McpServer): void {
         };
       }
 
+      const cleaner = await loadUrlCleaner();
       return foundResult(
         link,
         `Added tag '${tag}' to link ${id} (or it was already present).`,

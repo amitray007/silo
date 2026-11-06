@@ -6,7 +6,10 @@ import {
   librarianActionsSchema,
   librarianActionsStoredSchema,
 } from '../librarian/actions.js';
-import { LINK_CLEANING_DEFAULTS } from '../links/link-cleaning-defaults.js';
+import { LINK_CLEANING_DEFAULTS, linkCleaningSchema } from '../links/link-cleaning-defaults.js';
+
+export { linkCleaningSchema } from '../links/link-cleaning-defaults.js';
+
 import { type ReaderSettings, readerSchema, readerStoredSchema } from './reader.js';
 
 const registeredFeatureIds: ReadonlySet<string> = new Set(
@@ -54,31 +57,6 @@ const aiSchema = z.object({ enabled: z.boolean(), features: aiFeaturesSchema }).
  * value with zero external importers) — the fix is narrowing the surface,
  * not silencing the finding.
  */
-export const linkCleaningSchema = z
-  .object({
-    enabled: z.boolean(),
-    everySite: z.array(z.string().regex(/^[A-Za-z0-9_.\-~[\]]{1,100}\*?$/)).max(500),
-    sites: z
-      .array(
-        z
-          .object({
-            domain: z
-              .string()
-              .max(253)
-              .regex(/^(?!www\.)[a-z0-9-]+(\.[a-z0-9-]+)+$/),
-            strip: z.array(z.string().regex(/^[A-Za-z0-9_.\-~[\]]{1,100}\*?$/)).max(100),
-            keep: z.array(z.string().regex(/^[A-Za-z0-9_.\-~[\]]{1,100}\*?$/)).max(100),
-          })
-          .strict(),
-      )
-      .max(500),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    const domains = value.sites.map((site) => site.domain);
-    if (new Set(domains).size !== domains.length)
-      ctx.addIssue({ code: 'custom', message: 'Site domains must be unique', path: ['sites'] });
-  });
 
 const settingsSchema = {
   linkCleaning: linkCleaningSchema,

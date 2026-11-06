@@ -104,8 +104,10 @@ export function registerFeedRoutes(app: Hono): void {
     const { id } = feedIdParamSchema.parse(c.req.param());
     const query = pageQuerySchema.extend({ q: z.string().min(1) }).parse(c.req.query());
     if (!(await feedExists(id))) return feedNotFound(c);
-    const page = await searchFeedPosts(id, query.q, toPageParams(query));
-    const cleaner = await loadUrlCleaner();
+    const [page, cleaner] = await Promise.all([
+      searchFeedPosts(id, query.q, toPageParams(query)),
+      loadUrlCleaner(),
+    ]);
     return c.json({
       ...page,
       results: page.results.map((link) => toSnippetSearchResultJson(link, cleaner)),
@@ -116,8 +118,7 @@ export function registerFeedRoutes(app: Hono): void {
     const query = feedPostsQuerySchema.parse(c.req.query());
     const page = { ...toPageParams(query), tab: query.tab };
     if (!(await feedExists(id))) return feedNotFound(c);
-    const result = await listFeedPosts(id, page);
-    const cleaner = await loadUrlCleaner();
+    const [result, cleaner] = await Promise.all([listFeedPosts(id, page), loadUrlCleaner()]);
     return c.json({
       ...result,
       links: result.links.map((link) => toSnippetLinkJson(link, cleaner)),
