@@ -1,27 +1,61 @@
 import type { CSSProperties } from 'react';
 import { apiUrl } from '../../api/client';
 import type { LinkJson } from '../../api/types';
+import { ReaderIcon } from './ReaderIcon';
 import { FrameLoadNotice, PageSkeleton, useFrameLoading } from './ReaderLoading';
 import { ReaderPlayer } from './ReaderPlayer';
 import type { OriginalState } from './useOriginal';
 import { originalUrl } from './useReaderActions';
 
-function fallbackReason(reason: string | undefined): string {
-  if (reason === 'blocked') return 'This site blocks automated readers. Open it in your browser.';
-  if (reason === 'needs-script') return 'This page needs its own scripts to display.';
-  if (
-    [
-      'fetch-error',
-      'dns-error',
-      'timeout',
-      'http-error',
-      'not-found',
-      'too-many-redirects',
-      'body-too-large',
-    ].includes(reason ?? '')
-  )
-    return 'Silo could not load this page.';
-  return 'This content cannot be displayed here.';
+const LOAD_ERRORS = [
+  'fetch-error',
+  'dns-error',
+  'timeout',
+  'http-error',
+  'not-found',
+  'too-many-redirects',
+  'body-too-large',
+];
+
+function fallbackCopy(reason: string | undefined): { title: string; body: string } {
+  if (reason === 'blocked')
+    return {
+      title: 'This site blocks Silo',
+      body: 'Silo cannot show it here. The Reader may still have the text, or you can open the site in your browser.',
+    };
+  if (reason === 'needs-script')
+    return {
+      title: 'This page needs its own scripts',
+      body: 'Silo cannot show it here. Open the site in your browser, or check the Reader for saved text.',
+    };
+  if (LOAD_ERRORS.includes(reason ?? ''))
+    return {
+      title: 'Silo could not load this page',
+      body: 'The site did not respond. Open it in your browser, or check the Reader for saved text.',
+    };
+  return {
+    title: 'This page cannot be shown here',
+    body: 'Open the site in your browser, or check the Reader for saved text.',
+  };
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function snapshotDate(value: string | undefined): string | undefined {
+  const date = value ? new Date(value) : undefined;
+  if (!date || Number.isNaN(date.getTime())) return undefined;
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 function pageTheme(state: OriginalState): CSSProperties {
@@ -45,13 +79,63 @@ function frameUrl(link: LinkJson, state: OriginalState): string {
   return originalUrl(link.url) ?? '';
 }
 
+function FallbackCard({
+  link,
+  reason,
+  showReader,
+}: {
+  link: LinkJson;
+  reason: string | undefined;
+  showReader: () => void;
+}) {
+  const { title, body } = fallbackCopy(reason);
+  const id = `silo-original-card-${link.id}`;
+  return (
+    <section className="silo-original-card silo-reader-empty" aria-labelledby={id}>
+      <span className="silo-reader-empty-icon">
+        <ReaderIcon name="page" />
+      </span>
+      <h3 id={id}>{title}</h3>
+      <p>{body}</p>
+      <div className="silo-reader-empty-actions">
+        <button type="button" className="silo-reader-btn" onClick={showReader}>
+          Show Reader
+        </button>
+        <a
+          className="silo-reader-btn"
+          href={originalUrl(link.url)}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <ReaderIcon name="arrowUpRight" size={16} />
+          Open site
+        </a>
+      </div>
+      <p className="silo-original-meta">{link.title?.trim() || hostOf(link.url)}</p>
+    </section>
+  );
+}
+
+function ArchiveBar({ link, snapshotAt }: { link: LinkJson; snapshotAt: string | undefined }) {
+  const date = snapshotDate(snapshotAt);
+  return (
+    <div className="silo-original-bar">
+      <span>Internet Archive copy{date ? ` from ${date}` : ''}. This site blocks Silo.</span>
+      <a href={originalUrl(link.url)} target="_blank" rel="noopener noreferrer">
+        Open live site
+      </a>
+    </div>
+  );
+}
+
 function PageSurface({ link, state, showReader }: OriginalProps) {
   const { mode, preparing, reload } = state;
   const { loading, timedOut, onLoad } = useFrameLoading(`${link.id}-${link.url}-${reload}`, 0);
   const framed = mode === 'direct' || mode === 'view' || mode === 'archive';
   const busy = loading && (preparing || framed);
   return (
-    <div className="silo-original-surface" aria-busy={busy}>
+    <div className="silo-original-surface" data-mode={mode} aria-busy={busy}>
+      {mode === 'archive' && <ArchiveBar link={link} snapshotAt={state.snapshotAt} />}
       {framed && (
         <iframe
           key={`${mode}-${reload}`}
@@ -66,24 +150,7 @@ function PageSurface({ link, state, showReader }: OriginalProps) {
       )}
       {timedOut && (preparing || framed) && <FrameLoadNotice href={link.url} />}
       {!preparing && !framed && (
-        <div className="silo-original-card">
-          <h2>{link.title || link.url}</h2>
-          {link.description && <p>{link.description}</p>}
-          <p>{fallbackReason(state.reason)}</p>
-          <div className="silo-original-actions">
-            <button type="button" className="silo-reader-btn" onClick={showReader}>
-              Show Reader
-            </button>
-            <a
-              className="silo-reader-btn"
-              href={originalUrl(link.url)}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open in new tab
-            </a>
-          </div>
-        </div>
+        <FallbackCard link={link} reason={state.reason} showReader={showReader} />
       )}
       <div className="silo-frame-loading" data-loading={busy} aria-hidden={!busy}>
         <PageSkeleton url={link.url} label="Loading page..." />

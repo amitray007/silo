@@ -44,7 +44,7 @@ function originalMode(embed: boolean, hinted: FrameHint['mode'] | undefined, app
 }
 
 function hintFields(hint: FrameHint | undefined) {
-  if (hint?.mode === 'archive') return { archiveUrl: hint.archiveUrl };
+  if (hint?.mode === 'archive') return { archiveUrl: hint.archiveUrl, snapshotAt: hint.snapshotAt };
   return { darkTheme: hint?.darkTheme, reason: hint?.reason };
 }
 

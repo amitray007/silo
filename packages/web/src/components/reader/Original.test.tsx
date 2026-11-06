@@ -28,11 +28,12 @@ function Standalone({ link, showReader = () => {} }: { link: LinkJson; showReade
 
 const link = makeLink({ id: 'link-id', url: 'https://publisher.test/article', title: 'Article' });
 function show(
-  mode: 'direct' | 'view' | 'none' | 'error' = 'direct',
+  mode: 'direct' | 'view' | 'none' | 'error' | 'archive' = 'direct',
   url = link.url,
   contentType?: string,
   reason?: string,
   darkTheme?: boolean,
+  extra: Record<string, unknown> = {},
 ) {
   const fetch = vi.fn(
     async (_url: string, init?: RequestInit) =>
@@ -42,7 +43,7 @@ function show(
           : JSON.stringify(
               mode === 'error'
                 ? { error: 'service_unavailable', message: 'Unavailable' }
-                : { mode, contentType, reason, darkTheme },
+                : { mode, contentType, reason, darkTheme, ...extra },
             ),
         { status: mode === 'error' ? 503 : 200 },
       ),
@@ -109,9 +110,53 @@ describe('Original mode order', () => {
     const { container } = show(mode);
     await waitFor(() => expect(container.querySelector('.silo-original-card')).not.toBeNull());
     expect(container.querySelector('iframe')).toBeNull();
-    expect(screen.getByRole('heading', { name: 'Article' })).toBeDefined();
+    expect(screen.getByRole('heading', { level: 3 })).toBeDefined();
+    expect(screen.getByText('Article').className).toBe('silo-original-meta');
     expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe('card');
     expect(container.querySelector('.silo-original-bar')).toBeNull();
+  });
+  it('explains a blocked site without a URL headline', async () => {
+    const { showReader } = show('none', link.url, undefined, 'blocked');
+    await screen.findByRole('heading', { name: 'This site blocks Silo' });
+    expect(screen.getByText(/The Reader may still have the text/)).toBeDefined();
+    expect(screen.queryByText('https://publisher.test/article')).toBeNull();
+    const open = screen.getByRole('link', { name: 'Open site' });
+    expect(open.getAttribute('href')).toBe(link.url);
+    expect(open.getAttribute('rel')).toBe('noopener noreferrer');
+    fireEvent.click(screen.getByRole('button', { name: 'Show Reader' }));
+    expect(showReader).toHaveBeenCalledTimes(1);
+  });
+  it('uses the host as meta when the title is empty', async () => {
+    const empty = makeLink({ id: 'link-id', url: 'https://www.publisher.test/a', title: '' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ mode: 'none', reason: 'timeout' }))),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ThemeProvider>
+          <Standalone link={empty} />
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('heading', { name: 'Silo could not load this page' });
+    expect(document.querySelector('.silo-original-meta')?.textContent).toBe('publisher.test');
+  });
+  it('frames the archive copy under a bar with the snapshot date and a live link', async () => {
+    const { container } = show('archive', link.url, undefined, undefined, undefined, {
+      archiveUrl: 'https://web.archive.org/web/20261016000000id_/https://publisher.test/article',
+      snapshotAt: '2026-10-16T23:30:00.000Z',
+    });
+    await waitFor(() => expect(container.querySelector('iframe')).not.toBeNull());
+    expect(
+      screen.getByText('Internet Archive copy from 16 Oct 2026. This site blocks Silo.'),
+    ).toBeDefined();
+    const live = screen.getByRole('link', { name: 'Open live site' });
+    expect(live.getAttribute('href')).toBe(link.url);
+    expect(live.getAttribute('target')).toBe('_blank');
+    expect(live.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(container.querySelector('.silo-original-card')).toBeNull();
   });
   it('shows the card when /frame succeeds but the real /view HTTP request returns 503', async () => {
     const requests: string[] = [];
@@ -289,15 +334,15 @@ describe('Live resilience', () => {
     );
   });
   it.each([
-    ['needs-script', 'This page needs its own scripts to display.'],
-    ['fetch-error', 'Silo could not load this page.'],
-    ['unsupported-content', 'This content cannot be displayed here.'],
+    ['needs-script', 'This page needs its own scripts'],
+    ['fetch-error', 'Silo could not load this page'],
+    ['unsupported-content', 'This page cannot be shown here'],
   ])('shows the reason and both escape actions for %s', async (reason, message) => {
     const { showReader } = show('none', link.url, 'text/html', reason);
-    await screen.findByText(message);
+    await screen.findByRole('heading', { name: message });
     fireEvent.click(screen.getByRole('button', { name: 'Show Reader' }));
     expect(showReader).toHaveBeenCalledTimes(1);
-    const action = screen.getByRole('link', { name: 'Open in new tab' });
+    const action = screen.getByRole('link', { name: 'Open site' });
     expect(action.getAttribute('href')).toBe(link.url);
     expect(action.getAttribute('target')).toBe('_blank');
     expect(action.getAttribute('rel')).toBe('noopener noreferrer');
