@@ -453,6 +453,8 @@ describe('challenge screens', () => {
     '<div id="px-captcha"></div><p>Press &amp; Hold to confirm you are a human</p>',
     '<h1>Pardon Our Interruption</h1><p>Unusual activity detected</p>',
     '<p>Please enable JS and disable any ad blocker</p>',
+    // The Atlantic's Cloudflare block page.
+    '<title>Your access has been blocked – The Atlantic</title><p>Reference ID 1a2b</p>',
   ])('discards challenge copy: %s', async (body) => {
     const result = await extract({
       url: URL_UNDER_TEST,
