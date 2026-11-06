@@ -1,3 +1,4 @@
+import type { ReaderAccess } from '@silo/core';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
 
 export function paywallDeclared(document: Document): boolean {
@@ -9,7 +10,8 @@ export function paywallDeclared(document: Document): boolean {
         if (!value || typeof value !== 'object') continue;
         if (
           'isAccessibleForFree' in value &&
-          (value.isAccessibleForFree === false || value.isAccessibleForFree === 'false')
+          (value.isAccessibleForFree === false ||
+            String(value.isAccessibleForFree).trim().toLowerCase() === 'false')
         )
           return true;
         pending.push(...Object.values(value));
@@ -31,8 +33,8 @@ export function blockedFetch(result: SafeFetchResult): boolean {
 }
 
 export function readerAccessObservation(
-  source: SafeFetchResult | { access?: 'paywalled' | 'blocked'; challenge?: boolean },
-): 'paywalled' | 'blocked' | null | undefined {
+  source: SafeFetchResult | { access?: ReaderAccess; challenge?: boolean },
+): ReaderAccess | null | undefined {
   if ('ok' in source) return blockedFetch(source) ? 'blocked' : source.ok ? null : undefined;
   return source.challenge ? 'blocked' : (source.access ?? null);
 }

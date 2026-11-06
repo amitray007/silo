@@ -8,6 +8,9 @@ describe('publisher access', () => {
     ['{"@graph":[{"isAccessibleForFree":false}]}', true],
     ['{"hasPart":[{"isAccessibleForFree":false}]}', true],
     ['{"isAccessibleForFree":"false"}', true],
+    // MIT Technology Review writes the Python-style string.
+    ['{"isAccessibleForFree":"False"}', true],
+    ['{"isAccessibleForFree":"True"}', false],
     ['{"isAccessibleForFree":true}', false],
     ['{}', false],
     ['broken', false],
