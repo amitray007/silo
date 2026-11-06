@@ -274,7 +274,7 @@ function SiteRow({
             label={`${site.domain} strip`}
             names={site.strip}
             max={SITE_PARAMS_MAX}
-            placeholder="si, feature"
+            placeholder="Add parameters"
             onChange={(strip) => update((current) => ({ ...current, strip }))}
           />
         </div>
@@ -284,7 +284,7 @@ function SiteRow({
             label={`${site.domain} keep`}
             names={site.keep}
             max={SITE_PARAMS_MAX}
-            placeholder="t"
+            placeholder="Add parameters"
             onChange={(keep) => update((current) => ({ ...current, keep }))}
           />
         </div>
