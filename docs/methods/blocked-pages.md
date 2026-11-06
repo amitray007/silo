@@ -271,6 +271,13 @@ bot-checked pages save in full.
 - Raw page HTML can include the user's name or account details from the
   site header. Silo keeps only the extracted Reader and deletes the raw HTML
   after extraction.
+- Reject a page copy that is a challenge page or gives no Reader; keep the
+  current Reader.
+- Migration `0035` adds `extension` to the `reader_source` enum and creates
+  `page_snapshots`.
+- An upload does not change `reader_access`; that label still describes what
+  Silo's own fetch saw. The web hides the paywall notice when the Reader
+  source is `extension` and shows the source line "Saved from your browser."
 
 ### Acceptance
 
