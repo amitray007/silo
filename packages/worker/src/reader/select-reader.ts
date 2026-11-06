@@ -129,7 +129,7 @@ export async function selectReader(
   ...args: Parameters<typeof selectPageReader>
 ): Promise<ObservedReader> {
   const page = await selectPageReader(...args);
-  if (STATIC_SOURCES.has(args[0])) return page;
+  if (STATIC_SOURCES.has(args[0]) || !isHtmlContentType(args[3].contentType)) return page;
   const result = await (args[3].sources ?? otherSources)(
     args[3].sourceUrl ?? args[3].url,
     page,

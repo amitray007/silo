@@ -54,19 +54,20 @@ describe('other Reader sources (recorded responses)', () => {
       observation: 'blocked',
     });
     if (result.status === 'reader') expect(result.text?.length).toBeGreaterThan(24000);
-    expect(fetch.mock.calls).toHaveLength(4);
+    // Three feed candidates, then the availability request and the snapshot.
+    expect(fetch.mock.calls).toHaveLength(5);
   });
   it('caches no feed for an hour, but retries archive, then rediscovers after expiry', async () => {
     let now = 0;
     const fetch = vi.fn(async () => failed);
     const chain = createOtherSources({ fetch, feeds: async () => [], now: () => now });
     expect(await chain(bigthink, blocked)).toEqual(blocked);
-    expect(fetch).toHaveBeenCalledTimes(3);
-    await chain(bigthink, blocked);
     expect(fetch).toHaveBeenCalledTimes(4);
+    await chain(bigthink, blocked);
+    expect(fetch).toHaveBeenCalledTimes(5);
     now = 3600001;
     await chain(bigthink, blocked);
-    expect(fetch).toHaveBeenCalledTimes(7);
+    expect(fetch).toHaveBeenCalledTimes(9);
   });
   it.each(['{}', '{"archived_snapshots":{}}', 'invalid json'])(
     'ignores missing or malformed archive snapshots: %s',
@@ -134,6 +135,15 @@ describe('other Reader sources (recorded responses)', () => {
       ['https://bigthink.com/feed1', expect.any(AbortSignal)],
       ['https://bigthink.com/feed2', expect.any(AbortSignal)],
       ['https://bigthink.com/feed3', expect.any(AbortSignal)],
+    ]);
+  });
+  it('probes /feed/, /feed and /rss.xml when the owner follows no feed for the host', async () => {
+    const fetch = vi.fn(async (_url: string, _signal: AbortSignal) => failed);
+    await createOtherSources({ fetch, feeds: async () => [] })(bigthink, blocked);
+    expect(fetch.mock.calls.slice(0, 3).map(([url]) => url)).toEqual([
+      'https://bigthink.com/feed/',
+      'https://bigthink.com/feed',
+      'https://bigthink.com/rss.xml',
     ]);
   });
   it('bounds each source to fifteen seconds even when an injected fetch hangs', async () => {

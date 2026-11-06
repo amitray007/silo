@@ -266,6 +266,8 @@ function hasNoText(link: LinkJson): boolean {
 }
 function AccessNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean }) {
   if (link.readerAccess !== 'paywalled' || !(hasReader || link.extractedText?.trim())) return null;
+  // Text from the feed or the archive is not the page's free part.
+  if (link.readerSource && link.readerSource !== 'page') return null;
   return (
     <p className="silo-reader-access-notice">
       Subscriber article. Silo saved the part the site shows to everyone.{' '}

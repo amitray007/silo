@@ -139,6 +139,8 @@ async function feedCandidates(url: URL, load: () => Promise<Followed[]>): Promis
   return [
     ...new Set([
       ...followed.filter((f) => sameHost(f.siteUrl, url.host)).map((f) => f.feedUrl),
+      // Big Think answers /feed/ but blocks /feed; Substack answers only /feed.
+      `${url.origin}/feed/`,
       `${url.origin}/feed`,
       `${url.origin}/rss.xml`,
     ]),
