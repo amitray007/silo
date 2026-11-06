@@ -2321,3 +2321,140 @@
   display: flex;
   gap: 8px;
 }
+
+/* Settings → Links: parameter chips and per-site rules reuse the quick-action rows above. */
+.silo-lc-section {
+  margin-bottom: 8px;
+}
+.silo-lc-params {
+  padding: 0 0 12px;
+}
+.silo-lc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.silo-lc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 4px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg2);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+.silo-lc-chip-static {
+  padding: 0 10px;
+  margin-left: 4px;
+}
+.silo-lc-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fnt);
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-lc-chip-x:hover {
+    background: var(--hov);
+    color: var(--ink);
+  }
+}
+.silo-lc-chip-x:focus-visible {
+  outline: 2px solid var(--fnt);
+  outline-offset: 1px;
+}
+@media (pointer: coarse) {
+  .silo-lc-chip {
+    min-height: 40px;
+  }
+  .silo-lc-chip-x {
+    width: 36px;
+    height: 36px;
+  }
+}
+.silo-lc-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.silo-lc-problem {
+  margin-top: 8px;
+}
+.silo-lc-try {
+  padding: 0 0 16px;
+}
+.silo-lc-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px 0 0;
+  border-top: 0.5px solid var(--line);
+}
+.silo-lc-kind {
+  margin-bottom: 6px;
+  color: var(--fnt);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+.silo-lc-result .silo-lc-kind {
+  margin-bottom: 0;
+}
+.silo-lc-url {
+  color: var(--ink);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.silo-lc-removed {
+  color: var(--mut);
+  font-size: var(--text-sm);
+}
+.silo-lc-site {
+  padding: 12px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+.silo-lc-site-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.silo-lc-site-head h5 {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.silo-lc-site-lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.silo-lc-site-lists .silo-lc-params {
+  padding-bottom: 0;
+}
+.silo-lc-domain-form {
+  padding: 12px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+@media (max-width: 640px) {
+  .silo-lc-site-lists {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
