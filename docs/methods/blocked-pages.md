@@ -143,42 +143,89 @@ system.
 
 ## Slice 2: other sources
 
-When the page fetch is blocked, or the Reader is missing, try these in order
-and stop at the first Reader that passes the existing quality checks:
+### Evidence (2026-11-06, after slice 1)
 
-1. **Headless browser.** `selectReader` today runs only after a successful
-   fetch. On a blocked fetch, call `renderReader(url)` when
-   `SILO_BROWSER_WS_ENDPOINT` is set. Reject a `challenge` result as today.
-   Take title, description and image from the rendered page when the fetch
-   gave none.
-2. **The site's feed.** Find the feed with the existing
-   `feeds/resolve.ts` suffix probe (the page HTML is not available). Parse it
-   with `feeds/parse.ts`. Match the entry whose link equals the saved URL
-   after canonicalization (drop `utm_*`, fragment, trailing slash). Use its
-   `content:encoded`, Atom `content`, or `description` when it holds at least
-   `FULL_TEXT_THRESHOLD` characters of text. Build the Reader by running the
-   entry HTML through the normal extraction and sanitizer, wrapped in a
-   minimal document with the entry title.
-3. **Internet Archive.** Query the availability API. Fetch the closest
-   snapshot in raw form (`https://web.archive.org/web/<timestamp>id_/<url>`),
-   extract it, and reject a challenge or paywall-empty result.
+- Silo's own headless browser does not help here. It routes every page
+  request through `safeFetch` (`browser/route.ts`), so Cloudflare blocks it
+  the same way: Big Think failed in 2.7 s. The Atlantic's block page passed
+  as a 388-character article until slice 1 learned "Your access has been
+  blocked". The browser is left out of this slice.
+- Feeds: `https://bigthink.com/feed/` answers, and its `<description>` held
+  28k characters for the Higgs article. The Atlantic answers only at
+  `/feed/all/`; `/feed`, `/rss`, `/rss.xml`, `/feed.xml`, `/atom.xml` and
+  `/index.xml` return 403 or 404. Its Atom `<content>` held 13.6k characters
+  for the hockey article, whose page shows about 2k to a visitor.
+- `feeds/resolve.ts` needs the page itself to succeed before it probes, so it
+  cannot discover a feed for a blocked page.
+- Internet Archive: the availability API returns no snapshot for these two
+  new articles. For a 2008 Atlantic article it returned a 2026-10-16
+  snapshot, and the raw `id_` copy held 38 paragraphs (24k characters).
 
-Data: migration `0034` adds `reader_source` (`page`, `browser`, `feed`,
-`archive`, nullable; `null` on old rows means `page`) plus
-`reader_source_at` for an archive snapshot date. `recordReader` writes both.
+### When to look elsewhere
 
-Web: a quiet source line under the article meta: "From the site's RSS feed"
-or "From the Internet Archive, snapshot of 3 Nov 2026" with a link to the
-snapshot. The `blocked` empty state appears only when every source failed.
+After the page read, run the sources below when the page gave no Reader
+(blocked, challenge, or `no_reader`) or the page is `paywalled`. Try them in
+order and stop at the first one that gives a Reader:
 
-Rate and cost: at most one feed probe and one archive request per capture;
-cache a host's feed URL (or its absence) in memory for an hour. Archive
-requests send Silo's user agent.
+1. **The site's feed.** Candidate feed URLs, at most three per capture:
+   feeds the owner follows in Silo whose `site_url` host equals the link's
+   host, then `<origin>/feed` and `<origin>/rss.xml`. Remember a host's
+   working feed URL, or that it has none, in memory for an hour. Parse with
+   `feeds/parse.ts`. Match the entry whose link equals the saved URL after
+   core `canonicalize` (it drops tracking parameters and fragments). Use the
+   entry's `content:encoded`, Atom `content`, or `description`, whichever is
+   longest, when its text has at least `FULL_TEXT_THRESHOLD` characters.
+   Build the Reader with the normal extraction and sanitizer, from a minimal
+   document holding the entry title and that HTML.
+2. **Internet Archive.** One availability request
+   (`https://archive.org/wayback/available?url=<url>`), then the raw
+   snapshot (`https://web.archive.org/web/<timestamp>id_/<url>`), extracted
+   like a page. Reject a challenge page or a result with no Reader.
 
-Acceptance: unit tests with recorded feed and archive fixtures (no network in
-tests); integration test that a blocked capture with a matching feed entry
-stores a `feed` Reader; QA on Big Think and The Atlantic articles on the QA
-database, recording which source won for each.
+For a `paywalled` page, a source Reader replaces the page Reader only when
+its text is at least 1.5 times as long. A source never changes
+`reader_access`: the label still describes the page itself.
+
+Refresh runs the same sources. Opening a link (`live-reader.ts`) does not.
+
+### Data
+
+Migration `0034` adds to `links`:
+
+- `reader_source reader_source` (`page`, `feed`, `archive`; `null` on old
+  rows means `page`).
+- `reader_source_at timestamptz`: the archive snapshot time; `null` for
+  other sources.
+
+`recordReader` writes both with the Reader columns, and leaves them as they
+are whenever it keeps an earlier Reader. API, MCP `get_link` and `LinkJson`
+return `readerSource` and `readerSourceAt`.
+
+### Web
+
+A quiet line under the Reader meta, in the same style as the slice 1
+notice: "From the site's feed." or "From the Internet Archive, snapshot of
+16 Oct 2026." The archive line links to
+`https://web.archive.org/web/<timestamp>/<url>`. The `blocked` and
+`paywalled` empty states appear only when every source failed.
+
+### Rules
+
+Every request goes through `safeFetch` with Silo's user agent. Each source
+has its own timeout (15 s) and failure only logs. A capture makes at most
+three feed requests and two archive requests.
+
+### Acceptance
+
+- Unit tests with recorded feed and archive fixtures (no network): entry
+  matching with tracking parameters, longest-field choice, threshold, host
+  cache, archive "no snapshot", archive challenge copy.
+- Integration (real Postgres): a blocked capture with a matching feed entry
+  stores a `feed` Reader and keeps `reader_access = 'blocked'`; a paywalled
+  capture keeps the page Reader when the feed text is shorter.
+- QA on the QA database: Big Think (expect `feed`), the 2008 Atlantic
+  article (expect `archive`), and the Atlantic hockey article if it is still
+  in `/feed/all/` (expect no Reader, since that URL is not a candidate).
 
 ## Slice 3: the page from the user's browser
 
