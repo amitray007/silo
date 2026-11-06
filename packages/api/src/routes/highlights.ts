@@ -1,4 +1,10 @@
-import { addHighlight, deleteHighlight, editHighlight, listLibraryHighlights } from '@silo/core';
+import {
+  addHighlight,
+  deleteHighlight,
+  editHighlight,
+  listLibraryHighlights,
+  loadUrlCleaner,
+} from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { toHighlightJson } from '../link-json.js';
@@ -19,7 +25,7 @@ const idParamSchema = z.object({ id: z.uuid() });
 export function registerHighlightsRoutes(app: Hono): void {
   app.get('/highlights', async (c) => {
     const input = highlightsQuerySchema.parse(c.req.query());
-    const page = await listLibraryHighlights(input);
+    const [page, cleaner] = await Promise.all([listLibraryHighlights(input), loadUrlCleaner()]);
     const highlights = page.highlights.map((row) => ({
       id: row.id,
       quote: row.quote,
@@ -27,7 +33,12 @@ export function registerHighlightsRoutes(app: Hono): void {
       color: row.color,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
-      link: { id: row.link.id, title: row.link.title, url: row.link.url },
+      link: {
+        id: row.link.id,
+        title: row.link.title,
+        url: cleaner(row.link.url),
+        originalUrl: row.link.url,
+      },
     }));
     return c.json({
       highlights,

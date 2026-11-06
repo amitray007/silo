@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { CountFilter, ListFilter, PageParams } from '@silo/core';
-import { countLinks, InvalidCursorError, list } from '@silo/core';
+import { countLinks, InvalidCursorError, list, loadUrlCleaner } from '@silo/core';
 import { z } from 'zod';
 import { type SnippetLinkContent, snippetLinkShape, toSnippetLinkContent } from './link-shape.js';
 import {
@@ -232,7 +232,8 @@ export function registerListLinks(server: McpServer): void {
         throw error;
       }
 
-      const links = page.links.map(toSnippetLinkContent);
+      const cleaner = await loadUrlCleaner();
+      const links = page.links.map((row) => toSnippetLinkContent(row, cleaner));
       const structuredContent: ListLinksStructuredContent =
         page.nextCursor === undefined
           ? { links, count: links.length }

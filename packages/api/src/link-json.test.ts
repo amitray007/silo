@@ -46,11 +46,24 @@ describeIfPg('link-json (integration)', () => {
     );
     const saved = await core.getById(link.id);
     if (!saved) throw new Error('missing link');
-    expect(toLinkJson(saved)).toMatchObject({
+    expect(toLinkJson(saved, (url) => url)).toMatchObject({
       readerSource: 'archive',
       readerSourceAt: '2026-10-16T18:10:59.000Z',
     });
   });
+  it('serves clean URLs while preserving raw URLs and the whitelist', async () => {
+    const core = harness.mod();
+    const { toLinkJson } = await import('./link-json.js');
+    const raw = 'https://example.com/clean-json?utm_source=x&q=1';
+    const created = await core.createLink({ url: raw, sourceKind: 'link' });
+    const link = await core.getById(created.id);
+    if (!link) throw new Error('missing fixture');
+    const json = toLinkJson(link, await core.loadUrlCleaner());
+    expect(json.url).toBe('https://example.com/clean-json?q=1');
+    expect(json.originalUrl).toBe(raw);
+    expectNoLeakedFields(json);
+  });
+
   it('omits raw show notes from list/search but keeps them on detail', async () => {
     const core = harness.mod();
     const { toLinkJson, toSnippetLinkJson, toSnippetSearchResultJson, toSummaryLinkJson } =
@@ -66,11 +79,11 @@ describeIfPg('link-json (integration)', () => {
     });
     const link = await core.getById(created.id);
     if (!link) throw new Error('missing link');
-    expect(toLinkJson(link).sourceData).toHaveProperty('content');
+    expect(toLinkJson(link, (url) => url).sourceData).toHaveProperty('content');
     for (const summary of [
-      toSummaryLinkJson(link),
-      toSnippetLinkJson({ ...link, snippet: 'Episode' }),
-      toSnippetSearchResultJson({ ...link, snippet: 'Episode', rank: 1 }),
+      toSummaryLinkJson(link, (url) => url),
+      toSnippetLinkJson({ ...link, snippet: 'Episode' }, (url) => url),
+      toSnippetSearchResultJson({ ...link, snippet: 'Episode', rank: 1 }, (url) => url),
     ]) {
       expect(summary.sourceData).toEqual({ kind: 'feed_media', enclosureUrl: link.url });
       expect(JSON.stringify(summary).length).toBeLessThan(2000);
@@ -95,7 +108,7 @@ describeIfPg('link-json (integration)', () => {
     expect(link).not.toBeNull();
     if (!link) return;
 
-    const json = toLinkJson(link);
+    const json = toLinkJson(link, (url) => url);
 
     // Whitelisted fields present, with the right shapes.
     expect(json.id).toBe(link.id);
@@ -136,7 +149,7 @@ describeIfPg('link-json (integration)', () => {
     const link = await core.getById(created.id);
     expect(link).toBeDefined();
     if (!link) throw new Error('Expected saved link');
-    expect(toLinkJson(link).titleSource).toBe('user');
+    expect(toLinkJson(link, (url) => url).titleSource).toBe('user');
   });
 
   it('toLinkDetailJson adds readingPosition and still leaks no internal field', async () => {
@@ -148,12 +161,12 @@ describeIfPg('link-json (integration)', () => {
     });
     const empty = await core.getById(created.id);
     if (!empty) throw new Error('missing link');
-    expect(toLinkDetailJson(empty).readingPosition).toBeNull();
+    expect(toLinkDetailJson(empty, (url) => url).readingPosition).toBeNull();
 
     await core.setReadingPosition(created.id, 0.5);
     const link = await core.getById(created.id);
     if (!link) throw new Error('missing link');
-    const json = toLinkDetailJson(link);
+    const json = toLinkDetailJson(link, (url) => url);
     expect(json.readingPosition?.position).toBe(0.5);
     expect(typeof json.readingPosition?.updatedAt).toBe('string');
     expect(Object.keys(json.readingPosition ?? {}).sort()).toEqual([
@@ -164,8 +177,18 @@ describeIfPg('link-json (integration)', () => {
     expectNoLeakedFields(json);
     expect(Object.hasOwn(json, 'deletedAt')).toBe(false);
     // List-shaped and plain shapers never carry the field.
-    expect(Object.hasOwn(toLinkJson(link), 'readingPosition')).toBe(false);
-    expect(Object.hasOwn(toSummaryLinkJson(link), 'readingPosition')).toBe(false);
+    expect(
+      Object.hasOwn(
+        toLinkJson(link, (url) => url),
+        'readingPosition',
+      ),
+    ).toBe(false);
+    expect(
+      Object.hasOwn(
+        toSummaryLinkJson(link, (url) => url),
+        'readingPosition',
+      ),
+    ).toBe(false);
   });
 
   it('toLinkDetailJson carries highlights field by field and list shapers do not', async () => {
@@ -177,12 +200,12 @@ describeIfPg('link-json (integration)', () => {
     });
     const empty = await core.getById(created.id);
     if (!empty) throw new Error('missing link');
-    expect(toLinkDetailJson(empty).highlights).toEqual([]);
+    expect(toLinkDetailJson(empty, (url) => url).highlights).toEqual([]);
 
     await core.addHighlight(created.id, { quote: 'a quote', prefix: '', suffix: '', note: 'n' });
     const link = await core.getById(created.id);
     if (!link) throw new Error('missing link');
-    const json = toLinkDetailJson(link);
+    const json = toLinkDetailJson(link, (url) => url);
     expect(json.highlights).toHaveLength(1);
     expect(Object.keys(json.highlights[0] ?? {}).sort()).toEqual([
       'color',
@@ -198,8 +221,18 @@ describeIfPg('link-json (integration)', () => {
     ]);
     expect(Object.hasOwn(json.highlights[0] ?? {}, 'linkId')).toBe(false);
     expectNoLeakedFields(json);
-    expect(Object.hasOwn(toLinkJson(link), 'highlights')).toBe(false);
-    expect(Object.hasOwn(toSummaryLinkJson(link), 'highlights')).toBe(false);
+    expect(
+      Object.hasOwn(
+        toLinkJson(link, (url) => url),
+        'highlights',
+      ),
+    ).toBe(false);
+    expect(
+      Object.hasOwn(
+        toSummaryLinkJson(link, (url) => url),
+        'highlights',
+      ),
+    ).toBe(false);
   });
 
   it('toTrashLinkJson adds deletedAt as an ISO string for a trashed link', async () => {
@@ -216,7 +249,7 @@ describeIfPg('link-json (integration)', () => {
     expect(trashedLink).toBeDefined();
     if (!trashedLink) return;
 
-    const json = toTrashLinkJson(trashedLink);
+    const json = toTrashLinkJson(trashedLink, (url) => url);
     expect(typeof json.deletedAt).toBe('string');
     expect(json.deletedAt.length).toBeGreaterThan(0);
     expect(Number.isNaN(new Date(json.deletedAt).getTime())).toBe(false);
@@ -237,7 +270,7 @@ describeIfPg('link-json (integration)', () => {
     expect(link).not.toBeNull();
     if (!link) return;
 
-    const json = toLinkJson(link);
+    const json = toLinkJson(link, (url) => url);
     expect(json.sourceKind).toBe('hacker_news');
     expect(json.sourceData).toEqual({
       kind: 'hacker_news',
@@ -267,7 +300,7 @@ describeIfPg('link-json (integration)', () => {
     expect(link).not.toBeNull();
     if (!link) return;
 
-    const json = toLinkJson(link);
+    const json = toLinkJson(link, (url) => url);
     expect(json.sourceData).toEqual({ kind: 'link' });
   });
 
@@ -283,7 +316,7 @@ describeIfPg('link-json (integration)', () => {
     expect(link).not.toBeNull();
     if (!link) return;
 
-    const json = toSearchResultJson(link, 0.42);
+    const json = toSearchResultJson(link, 0.42, (url) => url);
     expect(json.rank).toBe(0.42);
     expect(json.id).toBe(link.id);
   });
@@ -302,7 +335,7 @@ describeIfPg('link-json (integration)', () => {
     expect(trashedLink).toBeDefined();
     if (!trashedLink) return;
 
-    const json = toTrashSearchResultJson(trashedLink, 0.42);
+    const json = toTrashSearchResultJson(trashedLink, 0.42, (url) => url);
     expect(json.rank).toBe(0.42);
     expect(json.id).toBe(trashedLink.id);
     expect(typeof json.deletedAt).toBe('string');

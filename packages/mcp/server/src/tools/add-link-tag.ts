@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { addTag, addTagMany, getById } from '@silo/core';
+import { addTag, addTagMany, getById, loadUrlCleaner } from '@silo/core';
 import { z } from 'zod';
 import {
   bulkItemResultShape,
@@ -111,7 +111,12 @@ export function registerAddLinkTag(server: McpServer): void {
         };
       }
 
-      return foundResult(link, `Added tag '${tag}' to link ${id} (or it was already present).`);
+      const cleaner = await loadUrlCleaner();
+      return foundResult(
+        link,
+        `Added tag '${tag}' to link ${id} (or it was already present).`,
+        cleaner,
+      );
     },
   );
 }
