@@ -337,6 +337,7 @@ export {
   type ReaderExtraction,
   type ReaderRefresher,
   recordReader,
+  recordReaderAccess,
   refreshReader,
   runReaderBackfill,
   setReaderRefresher,

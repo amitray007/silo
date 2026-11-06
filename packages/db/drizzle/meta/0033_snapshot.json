@@ -1,5 +1,5 @@
 {
-  "id": "6e3b5a6c-4942-4c00-adaf-cc4e6b4f1a4e",
+  "id": "6522825b-6109-4e8d-b551-5f33db8e8a55",
   "prevId": "10b1dd1e-833c-462e-9858-deab18b17486",
   "version": "7",
   "dialect": "postgresql",
@@ -979,6 +979,12 @@
           "name": "reader_access",
           "type": "reader_access",
           "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reader_access_at": {
+          "name": "reader_access_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

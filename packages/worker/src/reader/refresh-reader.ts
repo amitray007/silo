@@ -1,6 +1,6 @@
 import type { ReaderRefresher } from '@silo/core';
 import { readerContentSchema } from '@silo/core/capture';
-import { withReaderAccess } from '../extract/access.js';
+import { readerAccessObservation } from '../extract/access.js';
 import { type ExtractInput, type ExtractResult, extract } from '../extract/extract.js';
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
 import { readFeedMedia } from '../feeds/media.js';
@@ -47,5 +47,8 @@ export function createReaderRefresher(
 }
 
 function failedRead(page: SafeFetchResult, signal: AbortSignal) {
-  return withReaderAccess({ status: 'fetch_failed' }, signal.aborted ? {} : page);
+  return {
+    status: 'fetch_failed' as const,
+    ...(!signal.aborted ? { observation: readerAccessObservation(page) } : {}),
+  };
 }

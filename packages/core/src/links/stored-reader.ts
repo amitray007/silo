@@ -4,22 +4,14 @@ import { READER_VERSION, type ReaderContent, readerContentSchema } from '../capt
 import { FIELD_MAX } from './enrichment.js';
 
 export type ReaderExtraction =
-  | {
-      status: 'reader';
-      reader: ReaderContent;
-      text?: string;
-      renderPending?: boolean;
-      access?: 'paywalled' | 'blocked';
-    }
-  | {
-      status: 'no_reader';
-      text?: string;
-      renderPending?: boolean;
-      access?: 'paywalled' | 'blocked';
-    }
-  | { status: 'fetch_failed'; access?: 'blocked' };
+  | { status: 'reader'; reader: ReaderContent; text?: string; renderPending?: boolean }
+  | { status: 'no_reader'; text?: string; renderPending?: boolean }
+  | { status: 'fetch_failed' };
 type ReaderLink = { id: string; url: string; sourceKind: string };
-export type ReaderRefresher = (link: ReaderLink, signal: AbortSignal) => Promise<ReaderExtraction>;
+export type ReaderRefresher = (
+  link: ReaderLink,
+  signal: AbortSignal,
+) => Promise<ReaderExtraction & { observation?: 'paywalled' | 'blocked' | null | undefined }>;
 export type StoredReader = ReaderContent & { capturedAt: string | null };
 type RefreshResult =
   | { status: 'reader'; reader: StoredReader }
@@ -52,22 +44,7 @@ export async function recordReader(
   result: ReaderExtraction,
   fetchedAt: Date,
 ): Promise<StoredReader | null> {
-  if (result.status === 'fetch_failed') {
-    if (result.access === 'blocked') {
-      await db
-        .update(links)
-        .set({ readerAccess: 'blocked', updatedAt: sql`${links.updatedAt}` })
-        .where(
-          and(
-            eq(links.id, id),
-            sql`${links.deletedAt} is null`,
-            ne(links.sourceKind, 'twitter'),
-            sql`(${links.readerCapturedAt} is null or ${links.readerCapturedAt} <= ${fetchedAt})`,
-          ),
-        );
-    }
-    return null;
-  }
+  if (result.status === 'fetch_failed') return null;
   const parsed = result.status === 'reader' ? readerContentSchema.safeParse(result.reader) : null;
   if (parsed && !parsed.success) {
     console.error('[silo/core] Invalid Reader payload for link', id, parsed.error);
@@ -104,7 +81,6 @@ function readerUpdate(
   const text = result.text?.trim();
   const keepCurrent = sql`${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null`;
   return {
-    readerAccess: result.access ?? null,
     contentHtml:
       reader?.contentHtml ?? sql`case when ${keepCurrent} then ${links.contentHtml} else null end`,
     contentImages:
@@ -157,7 +133,7 @@ async function extractAndRecord(
       resolve({ status: 'fetch_failed' });
     }, 45_000);
   });
-  let result: ReaderExtraction;
+  let result: ReaderExtraction & { observation?: 'paywalled' | 'blocked' | null | undefined };
   try {
     result = await Promise.race([run(link, controller.signal), deadline]);
   } catch {
@@ -167,10 +143,9 @@ async function extractAndRecord(
     signal?.removeEventListener('abort', stop);
   }
   if (controller.signal.aborted || signal?.aborted) return { status: 'fetch_failed' };
-  if (result.status === 'fetch_failed') {
-    await recordReader(link.id, result, fetchedAt);
-    return result;
-  }
+  if (result.observation !== undefined)
+    await recordReaderAccess(link.id, result.observation, fetchedAt);
+  if (result.status === 'fetch_failed') return result;
   if (result.status === 'reader' && !readerContentSchema.safeParse(result.reader).success) {
     return { status: 'fetch_failed' };
   }
@@ -281,4 +256,27 @@ export async function runReaderBackfill(
     }
   }
   return { found: batch.length, refreshed };
+}
+
+/** Access observations are ordered independently of stored Reader maintenance. */
+export async function recordReaderAccess(
+  id: string,
+  access: 'paywalled' | 'blocked' | null,
+  observedAt: Date,
+): Promise<void> {
+  await db
+    .update(links)
+    .set({
+      readerAccess: access,
+      readerAccessAt: observedAt,
+      updatedAt: sql`${links.updatedAt}`,
+    })
+    .where(
+      and(
+        eq(links.id, id),
+        sql`${links.deletedAt} is null`,
+        ne(links.sourceKind, 'twitter'),
+        sql`(${links.readerAccessAt} is null or ${links.readerAccessAt} <= ${observedAt})`,
+      ),
+    );
 }

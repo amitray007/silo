@@ -29,7 +29,7 @@ describe('stored Reader selection', () => {
     { reader: renderedReader, text: ' ' },
     { reader: renderedReader, text: 'x'.repeat(2_000), challenge: true },
   ])('retains static for missing, empty or challenged render', async (page) => {
-    expect(await selectReader('link', staticResult, undefined, options(page))).toEqual({
+    expect(await selectReader('link', staticResult, undefined, options(page))).toMatchObject({
       status: 'reader',
       reader,
       text: staticResult.text,
@@ -46,7 +46,7 @@ describe('stored Reader selection', () => {
       undefined,
       options({ reader: renderedReader, text: 'b'.repeat(length) }),
     );
-    expect(result).toEqual(
+    expect(result).toMatchObject(
       rendered
         ? { status: 'reader', reader: renderedReader, text: 'b'.repeat(length) }
         : { status: 'reader', reader, text: staticResult.text },
@@ -66,7 +66,7 @@ describe('stored Reader selection', () => {
           undefined,
           options({ reader: renderedReader, text: 'body' }),
         ),
-      ).toEqual({ status: 'reader', reader: renderedReader, text: 'body' });
+      ).toMatchObject({ status: 'reader', reader: renderedReader, text: 'body' });
     },
   );
   it.each([
@@ -124,19 +124,21 @@ describe('stored Reader selection', () => {
   });
   it('preserves the previous result byte for byte when the endpoint is unset', async () => {
     vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', '');
-    expect(await selectReader('link', staticResult, undefined, { url: options().url })).toEqual({
+    expect(
+      await selectReader('link', staticResult, undefined, { url: options().url }),
+    ).toMatchObject({
       status: 'reader',
       reader,
       text: staticResult.text,
     });
     expect(
       await selectReader('link', { status: 'bare' }, undefined, { url: options().url }),
-    ).toEqual({ status: 'no_reader' });
+    ).toMatchObject({ status: 'no_reader' });
     expect(
       await selectReader('link', { status: 'partial', readerFailed: true }, undefined, {
         url: options().url,
       }),
-    ).toEqual({ status: 'fetch_failed' });
+    ).toMatchObject({ status: 'fetch_failed' });
   });
   it.each(['application/pdf', 'image/png', 'text/plain'])(
     'skips rendering for %s',
@@ -169,12 +171,12 @@ describe('stored Reader selection', () => {
         return { reader: renderedReader, text: 'x'.repeat(2000) };
       },
     });
-    expect(result).toEqual({ status: 'reader', reader, text: staticResult.text });
+    expect(result).toMatchObject({ status: 'reader', reader, text: staticResult.text });
   });
   it('keeps static readable and marks infrastructure unavailability for retry', async () => {
     expect(
       await selectReader('link', staticResult, undefined, options({ renderPending: true })),
-    ).toEqual({ status: 'reader', reader, text: staticResult.text, renderPending: true });
+    ).toMatchObject({ status: 'reader', reader, text: staticResult.text, renderPending: true });
   });
   it('falls back when rendering throws', async () => {
     expect(
@@ -184,7 +186,7 @@ describe('stored Reader selection', () => {
           throw new Error('offline');
         },
       }),
-    ).toEqual({ status: 'reader', reader, text: staticResult.text, renderPending: true });
+    ).toMatchObject({ status: 'reader', reader, text: staticResult.text, renderPending: true });
   });
 });
 
@@ -199,14 +201,14 @@ it('retains static Mermaid source when the publisher replaces it before rendered
     undefined,
     options({ reader: renderedReader, text: 'b'.repeat(2_000) }),
   );
-  expect(result).toEqual({ status: 'reader', reader: rich, text: staticResult.text });
+  expect(result).toMatchObject({ status: 'reader', reader: rich, text: staticResult.text });
   const kept = await selectReader(
     'link',
     { ...staticResult, reader: rich },
     undefined,
     options({ reader: rich, text: 'b'.repeat(2_000) }),
   );
-  expect(kept).toEqual({ status: 'reader', reader: rich, text: 'b'.repeat(2_000) });
+  expect(kept).toMatchObject({ status: 'reader', reader: rich, text: 'b'.repeat(2_000) });
 });
 
 it('ignores literal Mermaid attributes in prose and code when selecting rendered Reader', async () => {
@@ -296,4 +298,22 @@ it('keeps static expanded Gist content even when rendered text and code counts p
     dom.window.close();
     vi.resetAllMocks();
   }
+});
+
+it.each(['paywalled', undefined] as const)(
+  'uses accepted rendered access after a static challenge: %s',
+  async (access) => {
+    const result = await selectReader('link', { status: 'bare', access: 'blocked' }, undefined, {
+      ...options({ reader: renderedReader, text: 'body', ...(access ? { access } : {}) }),
+      contentType: 'text/html',
+    });
+    expect(result).toMatchObject({ status: 'reader', observation: access ?? null });
+  },
+);
+it('keeps blocked access when rendering a challenge fails', async () => {
+  const result = await selectReader('link', { status: 'bare', access: 'blocked' }, undefined, {
+    ...options(undefined),
+    contentType: 'text/html',
+  });
+  expect(result.observation).toBe('blocked');
 });

@@ -544,3 +544,14 @@ describe('extract - metadata only', () => {
     }
   });
 });
+
+it('drops challenge metadata when Reader is disabled', async () => {
+  expect(
+    await extract({
+      url: 'https://example.org/',
+      html: '<title>Just a moment</title><meta name="description" content="Verify"><meta property="og:image" content="https://example.org/a.png">',
+      contentType: 'text/html',
+      reader: false,
+    }),
+  ).toEqual({ status: 'bare', access: 'blocked' });
+});

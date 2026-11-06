@@ -18,7 +18,12 @@ describe('Reader refresh extraction', () => {
     const fetch = vi.fn(async () => page);
     const extract = vi.fn(async () => ({ status: 'full' as const, reader, text: 'New text' }));
     const run = createReaderRefresher(invalidate, { fetch, extract });
-    expect(await run(link, signal())).toEqual({ status: 'reader', reader, text: 'New text' });
+    expect(await run(link, signal())).toEqual({
+      status: 'reader',
+      reader,
+      text: 'New text',
+      observation: null,
+    });
     expect(fetch).toHaveBeenCalledWith(link.url, expect.any(AbortSignal));
     expect(extract).toHaveBeenCalledOnce();
     expect(invalidate).toHaveBeenCalledWith(link.id);
@@ -29,16 +34,19 @@ describe('Reader refresh extraction', () => {
       fetch: async () => page,
       extract: async () => ({ status: 'bare' }),
     });
-    expect(await run(link, signal())).toEqual({ status: 'no_reader' });
+    expect(await run(link, signal())).toEqual({ status: 'no_reader', observation: null });
     const failed = createReaderRefresher(invalidate, {
       fetch: async () => ({ ok: false, reason: 'timeout' }),
     });
-    expect(await failed(link, signal())).toEqual({ status: 'fetch_failed' });
+    expect(await failed(link, signal())).toEqual({
+      status: 'fetch_failed',
+      observation: undefined,
+    });
     const challenge = createReaderRefresher(invalidate, {
       fetch: async () => page,
       extract: async () => ({ status: 'partial', readerFailed: true }),
     });
-    expect(await challenge(link, signal())).toEqual({ status: 'fetch_failed' });
+    expect(await challenge(link, signal())).toEqual({ status: 'fetch_failed', observation: null });
     expect(invalidate).not.toHaveBeenCalled();
   });
   it('does not accept a result after its deadline signal aborts', async () => {

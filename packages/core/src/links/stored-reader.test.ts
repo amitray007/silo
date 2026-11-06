@@ -55,9 +55,11 @@ describeIfPg('stored Reader (Postgres)', () => {
       new Date(),
     );
     const before = await raw(link.id);
-    await core.recordReader(link.id, { status: 'fetch_failed', access: 'blocked' }, new Date());
-    expect(await raw(link.id)).toEqual({ ...before, readerAccess: 'blocked' });
-    await core.recordReader(link.id, { status: 'reader', reader }, new Date());
+    const t2 = new Date(Date.now() + 1000);
+    await core.recordReaderAccess(link.id, 'blocked', t2);
+    await core.recordReaderAccess(link.id, null, new Date(t2.getTime() - 1000));
+    expect(await raw(link.id)).toEqual({ ...before, readerAccess: 'blocked', readerAccessAt: t2 });
+    await core.recordReaderAccess(link.id, null, new Date(Date.now() + 2000));
     expect((await raw(link.id))?.readerAccess).toBeNull();
   });
   it('marks a successful empty extraction checked, clearing stale payload', async () => {

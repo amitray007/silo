@@ -1,4 +1,3 @@
-import type { ReaderExtraction } from '@silo/core';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
 
 export function paywallDeclared(document: Document): boolean {
@@ -31,11 +30,9 @@ export function blockedFetch(result: SafeFetchResult): boolean {
   );
 }
 
-export function withReaderAccess(
-  result: ReaderExtraction,
-  source: SafeFetchResult | { access?: 'paywalled' | 'blocked' },
-): ReaderExtraction {
-  const access = 'ok' in source ? (blockedFetch(source) ? 'blocked' : undefined) : source.access;
-  if (access === 'blocked') return { status: 'fetch_failed', access };
-  return access && result.status !== 'fetch_failed' ? { ...result, access } : result;
+export function readerAccessObservation(
+  source: SafeFetchResult | { access?: 'paywalled' | 'blocked'; challenge?: boolean },
+): 'paywalled' | 'blocked' | null | undefined {
+  if ('ok' in source) return blockedFetch(source) ? 'blocked' : source.ok ? null : undefined;
+  return source.challenge ? 'blocked' : (source.access ?? null);
 }

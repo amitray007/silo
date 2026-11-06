@@ -1,5 +1,7 @@
 /** Static metadata and readable content, with isolated, retryable Reader extraction. */
+
 import type { ReaderContent } from '@silo/core';
+import { JSDOM } from 'jsdom';
 import metascraper from 'metascraper';
 import metascraperDescription from 'metascraper-description';
 import metascraperImage from 'metascraper-image';
@@ -7,6 +9,7 @@ import metascraperLogo from 'metascraper-logo';
 import metascraperPublisher from 'metascraper-publisher';
 import metascraperTitle from 'metascraper-title';
 import metascraperUrl from 'metascraper-url';
+import { isChallengePage } from './challenge-page.js';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
 import type { PageContent } from './reader-page.js';
 import { extractPage } from './reader-worker.js';
@@ -206,7 +209,15 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
   // A Reader failure falls back to metadata only, so a page that always fails still settles
   // (retry only counts recorded attempts). The Reader HTML is built live when a link opens.
   const fields = await runMetascraper(url, html);
-  if (input.reader === false) return buildResult(fields, undefined);
+  if (input.reader === false) {
+    const dom = new JSDOM(html);
+    try {
+      if (isChallengePage(dom.window.document)) return { status: 'bare', access: 'blocked' };
+      return buildResult(fields, undefined);
+    } finally {
+      dom.window.close();
+    }
+  }
   try {
     const page = await extractPage(
       html,

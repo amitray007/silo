@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { BrowserContextOptions } from 'playwright-core';
+import { paywallDeclared } from '../extract/access.js';
 import { prepareBoxSpacing } from '../extract/box-spacing.js';
 import { isChallengePage } from '../extract/challenge-page.js';
 import { type EditorCode, prepareCodeEditors } from '../extract/code-editors.js';
@@ -59,6 +60,7 @@ export const PAGE_PRELUDE = 'var __name = (target) => target;';
 // A string keeps this code independent of transpiler helpers in Node's TypeScript loader.
 const EXTRACT = String.raw`(() => {
   ${PAGE_PRELUDE}
+  const access = (${paywallDeclared.toString()})(document) ? 'paywalled' : null;
   const codeEditors = (${prepareCodeEditors.toString()})(document, true);
   (${prepareGists.toString()})(document);
   (${prepareCodeLanguages.toString()})(document);
@@ -132,10 +134,14 @@ const EXTRACT = String.raw`(() => {
   }).parse();
   if (typeof content !== 'string' || content.length > ${MAX_CONTENT_BYTES} ||
       new TextEncoder().encode(content).byteLength > ${MAX_CONTENT_BYTES}) return null;
-  return { content, codeEditors: [...codeEditors] };
+  return { content, codeEditors: [...codeEditors], access };
 })()`;
 
-function sanitizeResult(value: unknown, url: string, signal: AbortSignal): Promise<PageContent> {
+async function sanitizeResult(
+  value: unknown,
+  url: string,
+  signal: AbortSignal,
+): Promise<PageContent> {
   if (!value || typeof value !== 'object' || !('content' in value))
     throw new Error('browser-content-limit');
   const content = value.content;
@@ -148,7 +154,10 @@ function sanitizeResult(value: unknown, url: string, signal: AbortSignal): Promi
     Buffer.byteLength(JSON.stringify(entries)) > MAX_CONTENT_BYTES
   )
     throw new Error('browser-content-limit');
-  return sanitizeRenderedPage(content, url, signal, entries);
+  return {
+    ...(await sanitizeRenderedPage(content, url, signal, entries)),
+    ...('access' in value && value.access === 'paywalled' ? { access: 'paywalled' as const } : {}),
+  };
 }
 
 function isCodeEntry(value: unknown): value is [string, EditorCode] {

@@ -1,4 +1,3 @@
-import { blockedFetch, withReaderAccess } from './extract/access.js';
 /**
  * `enrichLink` — the `enrich-link` job's business logic: load the link,
  * `safeFetch` its url, `extract` structured metadata + text from the HTML,
@@ -27,6 +26,7 @@ import {
   getSetting,
   recordEnrichment,
   recordReader,
+  recordReaderAccess,
   SETTINGS_DEFAULTS,
   settleGiveUp,
   softDelete,
@@ -38,6 +38,7 @@ import { planEnrich } from './enrich-plan.js';
 import { enrichSource } from './enrich-source/index.js';
 import { xPostTitle } from './enrich-source/twitter-title/index.js';
 import type { XPostTitleInput } from './enrich-source/twitter-title/prompt.js';
+import { readerAccessObservation } from './extract/access.js';
 import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extract.js';
 import { extract } from './extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from './extract/extract-constants.js';
@@ -561,6 +562,7 @@ async function enrichSelectedFields(
     plan.fetch ? deps.safeFetch(link.url) : undefined,
   ]);
   if (fetched && !fetched.ok) {
+    if (plan.reader) await recordBlockedFetch(link.id, fetched, fetchedAt);
     await recordEnrichment(link.id, { status }, run);
     return;
   }
@@ -621,6 +623,7 @@ async function recordNarrowReader(
         signal: AbortSignal.timeout(60_000),
       },
     );
+    await recordReaderAccess(link.id, selectedAccess(selected, extracted), fetchedAt);
     if (link.sourceKind !== 'twitter') await recordReader(link.id, selected, fetchedAt);
   }
 }
@@ -663,6 +666,7 @@ async function recordExtraction(
   { sourceData, holdFull, fetchedAt, aiTitle }: ExtractionRecord,
 ): Promise<void> {
   const linkId = link.id;
+  await recordReaderAccess(linkId, selectedAccess(selected, extracted), fetchedAt);
   updateRenderedStatus(extracted, selected);
   if (link.sourceKind === 'youtube') extracted.status = 'partial';
   // A held `full` link whose re-run comes back thin keeps everything it has:
@@ -670,7 +674,6 @@ async function recordExtraction(
   // result (only the source data and the status, which stays `full`). A
   // successful AI title is the exception: the post text is fresh, so it is written.
   if (holdFull && extracted.status !== 'full') {
-    await recordReader(linkId, withReaderAccess({ status: 'fetch_failed' }, extracted), fetchedAt);
     await recordThenMaybeSettle(link, {
       status: 'full',
       ...aiTitleFields(aiTitle),
@@ -712,6 +715,15 @@ async function recordBlockedFetch(
   result: SafeFetchResult,
   fetchedAt: Date,
 ): Promise<void> {
-  if (blockedFetch(result))
-    await recordReader(id, withReaderAccess({ status: 'fetch_failed' }, result), fetchedAt);
+  const access = readerAccessObservation(result);
+  if (access !== undefined) await recordReaderAccess(id, access, fetchedAt);
+}
+
+function selectedAccess(
+  selected: ReaderExtraction & { observation?: 'paywalled' | 'blocked' | null | undefined },
+  extracted: ExtractResult,
+) {
+  return selected.observation !== undefined
+    ? selected.observation
+    : (readerAccessObservation(extracted) ?? null);
 }

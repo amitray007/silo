@@ -1,7 +1,7 @@
 import type { ReaderExtraction } from '@silo/core';
 import { parseHTML } from 'linkedom';
 import { type BrowserResult, renderReader } from '../browser/reader.js';
-import { withReaderAccess } from '../extract/access.js';
+import { readerAccessObservation } from '../extract/access.js';
 import { type ExtractResult, isHtmlContentType } from '../extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from '../extract/extract-constants.js';
 import type { extractYouTubeWatch } from '../extract/youtube-watch.js';
@@ -37,10 +37,12 @@ export async function selectReader(
     contentType?: string | undefined;
     render?: (url: string, signal?: AbortSignal) => Promise<BrowserResult | undefined>;
   },
-): Promise<ReaderExtraction> {
-  const fallback = withReaderAccess(staticReader(sourceKind, extracted, youtube), extracted);
+): Promise<ReaderExtraction & { observation?: 'paywalled' | 'blocked' | null | undefined }> {
+  const fallback = {
+    ...staticReader(sourceKind, extracted, youtube),
+    observation: readerAccessObservation(extracted),
+  };
   if (
-    extracted.access === 'blocked' ||
     STATIC_SOURCES.has(sourceKind) ||
     !isHtmlContentType(options.contentType) ||
     options.signal?.aborted
@@ -78,15 +80,17 @@ export async function selectReader(
     renderedImageCount,
     choice: useRendered ? 'rendered' : 'static',
   });
-  if (!useRendered || !rendered?.reader) return pendingFallback(fallback, rendered?.renderPending);
-  return withReaderAccess(
-    {
-      status: 'reader',
-      reader: rendered.reader,
-      ...(rendered.text ? { text: rendered.text } : {}),
-    },
-    extracted,
-  );
+  if (!useRendered || !rendered?.reader)
+    return {
+      ...pendingFallback(fallback, rendered?.renderPending),
+      observation: fallback.observation,
+    };
+  return {
+    observation: readerAccessObservation(rendered),
+    status: 'reader',
+    reader: rendered.reader,
+    ...(rendered.text ? { text: rendered.text } : {}),
+  };
 }
 
 /** Inspect sanitized structure, never source-code text that resembles an attribute. */
