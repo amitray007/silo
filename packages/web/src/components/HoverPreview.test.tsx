@@ -38,6 +38,7 @@ function renderPreview(link: LinkJson, plugins?: SettingsMap['plugins'], linkPre
       plugins,
       reader: null,
       ai: { enabled: false, features: {} },
+      linkCleaning: { enabled: true, everySite: [], sites: [] },
     } satisfies SettingsMap);
   }
   return render(
@@ -685,6 +686,7 @@ describe('HoverPreview', () => {
         plugins: allOn,
         reader: null,
         ai: { enabled: false, features: {} },
+        linkCleaning: { enabled: true, everySite: [], sites: [] },
       } satisfies SettingsMap);
       const { rerender } = render(
         <QueryClientProvider client={queryClient}>
@@ -740,6 +742,7 @@ describe('HoverPreview', () => {
         plugins: allOn,
         reader: null,
         ai: { enabled: false, features: {} },
+        linkCleaning: { enabled: true, everySite: [], sites: [] },
       } satisfies SettingsMap);
       const renderFor = (id: string) => (
         <QueryClientProvider client={queryClient}>
@@ -782,6 +785,7 @@ describe('HoverPreview', () => {
         plugins: allOn,
         reader: null,
         ai: { enabled: false, features: {} },
+        linkCleaning: { enabled: true, everySite: [], sites: [] },
       } satisfies SettingsMap);
       const { rerender } = render(
         <QueryClientProvider client={queryClient}>

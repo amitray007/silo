@@ -142,7 +142,10 @@ export type LinkJson = {
   /** Browser-local write version captured when this detail request started. */
   readerPrefsVersion?: number;
   id: string;
+  /** The served URL: tracking parameters removed per the owner's `linkCleaning` rules. */
   url: string;
+  /** The URL exactly as captured. */
+  originalUrl: string;
   title: string | null;
   titleSource?: 'page' | 'ai' | 'user';
   description: string | null;
@@ -337,7 +340,20 @@ export type SettingsMap = {
   };
   /** The Librarian's quick actions; absent until the owner edits them (then the defaults apply). */
   librarianActions?: LibrarianActions;
+  /** Tracking-parameter cleaning for served links; mirrors core's `settingsSchema.linkCleaning`. */
+  linkCleaning: LinkCleaning;
 };
+
+/** One per-site cleaning rule. `keep` beats every strip list. A name ending in `*` is a prefix. */
+export type LinkCleaningSite = { domain: string; strip: string[]; keep: string[] };
+export type LinkCleaning = {
+  enabled: boolean;
+  everySite: string[];
+  sites: LinkCleaningSite[];
+};
+
+/** `POST /api/links/clean-preview` */
+export type CleanPreview = { url: string; originalUrl: string; removed: string[] };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
 export type UpdateSettingsRequest = Partial<Omit<SettingsMap, 'reader'>> & {
