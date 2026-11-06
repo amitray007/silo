@@ -6,6 +6,8 @@ export { httpUrl } from './links/http-url.js';
 
 // 6: normalize in-page code editors before extraction in both Reader paths.
 export const READER_VERSION = 6;
+/** Characters of readable text that make a capture `full`. */
+export const FULL_TEXT_THRESHOLD = 200;
 
 export const READER_HTML_MAX_BYTES = 1024 * 1024;
 

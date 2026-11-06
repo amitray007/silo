@@ -7,7 +7,7 @@ export type ReaderExtraction =
   | {
       status: 'reader';
       reader: ReaderContent;
-      readerSource?: 'page' | 'feed' | 'archive';
+      readerSource?: 'page' | 'feed' | 'archive' | 'extension';
       readerSourceAt?: Date | null;
       text?: string;
       renderPending?: boolean;
@@ -28,16 +28,21 @@ const readerColumns = {
   contentHtml: links.contentHtml,
   contentImages: links.contentImages,
   readerVersion: links.readerVersion,
+  readerSource: links.readerSource,
   readerCapturedAt: links.readerCapturedAt,
 };
 
-/** The hot path reads exactly four columns by primary key, with no tag hydration. */
+/** The hot path reads only Reader columns by primary key, with no tag hydration. */
 export async function getStoredReader(id: string): Promise<StoredReader | undefined> {
   const [row] = await db
     .select(readerColumns)
     .from(links)
     .where(and(sql`${links.deletedAt} is null`, eq(links.id, id), ne(links.sourceKind, 'twitter')));
-  if (row?.readerVersion !== READER_VERSION || !row.contentHtml) return undefined;
+  if (
+    !row?.contentHtml ||
+    (row.readerSource !== 'extension' && row.readerVersion !== READER_VERSION)
+  )
+    return undefined;
   return {
     contentHtml: row.contentHtml,
     contentImages: row.contentImages ?? [],
@@ -50,6 +55,8 @@ export async function recordReader(
   id: string,
   result: ReaderExtraction,
   fetchedAt: Date,
+  explicitRefresh = false,
+  uploadAt?: Date,
 ): Promise<StoredReader | null> {
   if (result.status === 'fetch_failed') return null;
   const parsed = result.status === 'reader' ? readerContentSchema.safeParse(result.reader) : null;
@@ -58,12 +65,23 @@ export async function recordReader(
     return null;
   }
   const reader = parsed?.data ?? null;
+  const fromBrowser = result.status === 'reader' && result.readerSource === 'extension';
+  const uploadLength = fromBrowser ? (result.text?.trim().length ?? 0) : 0;
+  const browserMayReplace = sql`(not ${fromBrowser} or ${links.contentHtml} is null or (${links.readerSource} is distinct from 'extension' and ${links.readerVersion} is distinct from ${READER_VERSION}) or length(coalesce(${links.extractedText}, '')) <= ${uploadLength})`;
   const [row] = await db
     .update(links)
-    .set(readerUpdate(result, reader, fetchedAt))
+    .set({
+      ...readerUpdate(result, reader, fetchedAt),
+      ...(uploadAt ? { readerUploadAt: uploadAt } : {}),
+    })
     .where(
       and(
         sql`${links.deletedAt} is null`,
+        sql`(${links.readerSource} is distinct from 'extension' or ${explicitRefresh} or ${fromBrowser})`,
+        browserMayReplace,
+        uploadAt
+          ? sql`(${links.readerUploadAt} is null or ${links.readerUploadAt} < ${uploadAt})`
+          : undefined,
         and(
           eq(links.id, id),
           ne(links.sourceKind, 'twitter'),
@@ -122,12 +140,13 @@ let refresher: ReaderRefresher | undefined;
 export function setReaderRefresher(next: ReaderRefresher | undefined): void {
   refresher = next;
 }
-const pending = new Map<string, Promise<RefreshResult>>();
+const pending = new Map<string, { work: Promise<RefreshResult>; explicit: boolean }>();
 
 async function extractAndRecord(
   link: ReaderLink,
   run = refresher,
   signal?: AbortSignal,
+  explicitRefresh = false,
 ): Promise<RefreshResult> {
   if (link.sourceKind === 'twitter') return { status: 'no_reader' };
   if (!run) return { status: 'refresh_unavailable' };
@@ -163,15 +182,16 @@ async function extractAndRecord(
   if (result.status === 'reader' && !readerContentSchema.safeParse(result.reader).success) {
     return { status: 'fetch_failed' };
   }
-  return recordRefresh(link.id, result, fetchedAt);
+  return recordRefresh(link.id, result, fetchedAt, explicitRefresh);
 }
 
 async function recordRefresh(
   id: string,
   result: Exclude<ReaderExtraction, { status: 'fetch_failed' }>,
   fetchedAt: Date,
+  explicitRefresh: boolean,
 ): Promise<RefreshResult> {
-  const written = await recordReader(id, result, fetchedAt);
+  const written = await recordReader(id, result, fetchedAt, explicitRefresh);
   const reader = written ?? (await getStoredReader(id));
   if (
     reader &&
@@ -192,26 +212,37 @@ function coalesce(
   load: () => Promise<ReaderLink | undefined>,
   run = refresher,
   signal?: AbortSignal,
+  explicitRefresh = false,
 ): Promise<RefreshResult> {
   const running = pending.get(id);
-  if (running) return running;
-  const work = load()
+  if (running && (!explicitRefresh || running.explicit)) return running.work;
+  const work = (running ? running.work.then(load) : load())
     .then((link) =>
-      link ? extractAndRecord(link, run, signal) : ({ status: 'not_found' } as const),
+      link
+        ? extractAndRecord(link, run, signal, explicitRefresh)
+        : ({ status: 'not_found' } as const),
     )
-    .finally(() => pending.delete(id));
-  pending.set(id, work);
+    .finally(() => {
+      if (pending.get(id)?.work === work) pending.delete(id);
+    });
+  pending.set(id, { work, explicit: explicitRefresh });
   return work;
 }
 
 export function refreshReader(id: string): Promise<RefreshResult> {
-  return coalesce(id, async () => {
-    const [link] = await db
-      .select({ id: links.id, url: links.url, sourceKind: links.sourceKind })
-      .from(links)
-      .where(and(sql`${links.deletedAt} is null`, eq(links.id, id)));
-    return link;
-  });
+  return coalesce(
+    id,
+    async () => {
+      const [link] = await db
+        .select({ id: links.id, url: links.url, sourceKind: links.sourceKind })
+        .from(links)
+        .where(and(sql`${links.deletedAt} is null`, eq(links.id, id)));
+      return link;
+    },
+    refresher,
+    undefined,
+    true,
+  );
 }
 
 /** One candidate query; no per-link lookup or tag queries in the serial loop. */
@@ -234,6 +265,7 @@ export async function runReaderBackfill(
           ),
           sql`(${links.readerCapturedAt} is null or ${links.readerCapturedAt} < now() - interval '6 hours')`,
           ne(links.captureStatus, 'enriching'),
+          sql`${links.readerSource} is distinct from 'extension'`,
           ne(links.sourceKind, 'twitter'),
         ),
       ),

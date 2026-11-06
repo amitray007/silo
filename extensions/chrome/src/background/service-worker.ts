@@ -3,6 +3,7 @@ import type { EditDiff } from '../lib/types.js';
 import { applyEdit } from './apply-edit.js';
 import { captureActiveTab, captureTab } from './capture-flow.js';
 import { handleContextMenuClick, registerContextMenus } from './context-menu.js';
+import { retryPages } from './page-outbox.js';
 
 /**
  * The MV3 service worker — entry point for all THREE quiet-capture triggers
@@ -14,6 +15,7 @@ import { handleContextMenuClick, registerContextMenus } from './context-menu.js'
 
 chrome.runtime.onInstalled.addListener(() => {
   registerContextMenus();
+  void retryPages().catch(() => {});
 });
 
 // `runQuietCapture` (the shared path both handlers below funnel through) is
@@ -73,3 +75,11 @@ chrome.runtime.onMessage.addListener((message: WorkerMessage, _sender, sendRespo
   }
   return false;
 });
+
+chrome.runtime.onStartup.addListener(() => {
+  void retryPages().catch(() => {});
+});
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'silo-page-outbox') void retryPages().catch(() => {});
+});
+void retryPages().catch(() => {});

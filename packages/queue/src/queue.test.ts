@@ -70,6 +70,24 @@ describeIfPg('transactional enqueue (integration)', () => {
     return rows.rows[0]?.n ?? 0;
   }
 
+  it('exports page queue names used by producers and consumers', async () => {
+    const names = await import('./index.js');
+    const link = await core.createLink({
+      sourceKind: 'link',
+      url: 'https://example.org/page-queue',
+    });
+    await core.savePageSnapshot(link.id, {
+      url: link.url,
+      html: '<p>Page</p>',
+      capturedAt: new Date(),
+    });
+    const jobs = await inspectPool.query(
+      "select name from pgboss.job where name = $1 and data->>'linkId' = $2",
+      [names.READER_FROM_PAGE_QUEUE, link.id],
+    );
+    expect(jobs.rows).toHaveLength(1);
+    expect(names.CLEANUP_PAGE_SNAPSHOTS_QUEUE).toBe('cleanup-page-snapshots');
+  });
   it('a producer alone creates the poll queue and refresh enqueues one transactional job', async () => {
     core.setFeedResolver(async () => ({
       feedUrl: 'https://example.com/producer.rss',

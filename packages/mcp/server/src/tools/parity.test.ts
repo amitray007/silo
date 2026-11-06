@@ -81,6 +81,25 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
     });
     expect(JSON.stringify(result.content)).toContain('readerSource: archive');
   });
+  it('returns browser provenance through get_link', async () => {
+    const { core, client } = getContext();
+    const id = await seedLink(getContext, 'https://example.com/browser');
+    await core.recordReader(
+      id,
+      {
+        status: 'reader',
+        reader: { contentHtml: '<p>Browser</p>', contentImages: [] },
+        readerSource: 'extension',
+      },
+      new Date(),
+    );
+    const result = await client.callTool({ name: 'get_link', arguments: { id } });
+    expect(result.structuredContent).toMatchObject({
+      readerSource: 'extension',
+      readerSourceAt: null,
+    });
+    expect(JSON.stringify(result.content)).toContain('readerSource: extension');
+  });
   it('omits a null readerAccess from text summary', async () => {
     const { client } = getContext();
     const id = await seedLink(getContext, 'https://example.com/unrestricted');

@@ -30,12 +30,15 @@ import {
   type FeedPollEnqueuer,
   setEnrichmentEnqueuer,
   setFeedPollEnqueuer,
+  setPageEnqueuer,
 } from '@silo/core';
 import { sql } from 'drizzle-orm';
 import { fromDrizzle, PgBoss } from 'pg-boss';
 
 /** The one enrichment queue this slice uses. */
 export const ENRICH_LINK_QUEUE = 'enrich-link';
+export const READER_FROM_PAGE_QUEUE = 'reader-from-page';
+export const CLEANUP_PAGE_SNAPSHOTS_QUEUE = 'cleanup-page-snapshots';
 
 /** Where a job lands after exhausting `retryLimit` on the main queue. */
 export const ENRICH_LINK_DLQ = 'enrich-link-dlq';
@@ -93,6 +96,7 @@ export function createBoss(): PgBoss {
  * errors).
  */
 export async function ensureEnrichLinkQueue(boss: PgBoss): Promise<void> {
+  await ensureReaderFromPageQueue(boss);
   await boss.createQueue(ENRICH_LINK_DLQ);
   await boss.createQueue(ENRICH_LINK_QUEUE, ENRICH_LINK_QUEUE_OPTIONS);
 }
@@ -153,6 +157,13 @@ if (ENRICH_LINK_QUEUE !== CORE_ENRICH_LINK_QUEUE) {
  * either.
  */
 export function registerEnqueuer(boss: PgBoss): void {
+  setPageEnqueuer(async (tx, linkId) => {
+    await boss.send(
+      READER_FROM_PAGE_QUEUE,
+      { linkId },
+      { singletonKey: linkId, db: fromDrizzle(tx, sql) },
+    );
+  });
   setEnrichmentEnqueuer(async (exec, linkId, data) => {
     await boss.send(
       ENRICH_LINK_QUEUE,
@@ -217,4 +228,12 @@ export async function startEnqueuer(logPrefix: string): Promise<PgBoss | undefin
     await boss?.stop({ graceful: false }).catch(() => {});
     return undefined;
   }
+}
+
+export async function ensureReaderFromPageQueue(boss: PgBoss): Promise<void> {
+  await boss.createQueue(READER_FROM_PAGE_QUEUE, {
+    policy: 'stately',
+    retryLimit: 3,
+    retryBackoff: true,
+  });
 }

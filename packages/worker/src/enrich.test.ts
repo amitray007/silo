@@ -48,6 +48,39 @@ describeIfPg('enrichLink (integration)', () => {
     pool = new Pool({ connectionString: database.url });
   }, 60_000);
 
+  it('keeps browser Reader stored during a late 404 fetch and pending uploads live', async () => {
+    core.setPageEnqueuer(async () => {});
+    for (const pending of [false, true]) {
+      const link = await core.createLink({
+        sourceKind: 'link',
+        url: 'https://example.org/late-' + pending,
+      });
+      await enrichMod.enrichLink(link.id, {
+        ...stubDeps({ ok: false, reason: 'not-found' }),
+        safeFetch: async () => {
+          if (pending)
+            await core.savePageSnapshot(link.id, {
+              url: link.url,
+              html: '<p>Pending</p>',
+              capturedAt: new Date(),
+            });
+          else
+            await core.recordReader(
+              link.id,
+              {
+                status: 'reader',
+                readerSource: 'extension',
+                reader: { contentHtml: '<p>Browser</p>', contentImages: [] },
+              },
+              new Date(),
+            );
+          return { ok: false, reason: 'not-found' };
+        },
+      });
+      expect(await core.getById(link.id)).toMatchObject({ deletedAt: null });
+      expect((await core.getById(link.id))?.captureStatus).not.toBe('enriching');
+    }
+  });
   it('keeps the page Reader and paywall label when a feed Reader is shorter', async () => {
     const link = await core.createLink({
       url: 'https://bigthink.com/starts-with-a-bang/explain-higgs-boson-in-depth/',

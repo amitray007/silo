@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "silo capture",
   "description": "Save the current page to silo in one keystroke.",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -22,7 +22,7 @@
     "type": "module"
   },
   "options_page": "options.html",
-  "permissions": ["activeTab", "contextMenus", "storage", "scripting"],
+  "permissions": ["activeTab", "contextMenus", "storage", "scripting", "alarms"],
   "host_permissions": ["http://localhost:8787/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "commands": {

@@ -74,6 +74,7 @@ export const links = pgTable(
     contentHtml: text('content_html'),
     contentImages: jsonb('content_images').$type<string[]>(),
     readerSource: readerSource('reader_source'),
+    readerUploadAt: timestamp('reader_upload_at', { withTimezone: true }),
     readerSourceAt: timestamp('reader_source_at', { withTimezone: true }),
     readerAccess: readerAccess('reader_access'),
     readerAccessAt: timestamp('reader_access_at', { withTimezone: true }),

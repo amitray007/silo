@@ -26,6 +26,83 @@ describeIfPg('stored Reader (Postgres)', () => {
     } = harness.mod();
     return (await db.select().from(links).where(eq(links.id, id)))[0];
   }
+  it('serves old extension versions and excludes them from backfill', async () => {
+    const {
+      core,
+      database: { db, links },
+    } = harness.mod();
+    const link = await saved();
+    await db
+      .update(links)
+      .set({
+        contentHtml: reader.contentHtml,
+        readerSource: 'extension',
+        readerVersion: core.READER_VERSION - 1,
+        captureStatus: 'bare',
+      })
+      .where(eq(links.id, link.id));
+    const run = vi.fn();
+    expect(await core.runReaderBackfill(run)).toEqual({ found: 0, refreshed: 0 });
+    expect(run).not.toHaveBeenCalled();
+    expect(await core.getStoredReader(link.id)).toMatchObject({ contentHtml: reader.contentHtml });
+  });
+  it('serializes explicit refresh after automatic work and joins a second explicit request', async () => {
+    const { core } = harness.mod();
+    const link = await saved();
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const run = vi.fn(async () => {
+      started();
+      await blocked;
+      return { status: 'reader' as const, reader };
+    });
+    core.setReaderRefresher(run);
+    await core.recordEnrichment(link.id, { status: 'bare' });
+    const automatic = core.runReaderBackfill();
+    await ready;
+    const first = core.refreshReader(link.id);
+    const second = core.refreshReader(link.id);
+    expect(first).toBe(second);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    try {
+      expect(run).toHaveBeenCalledTimes(1);
+    } finally {
+      release();
+    }
+    await Promise.all([automatic, first, second]);
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    ['enriching', 5000, 'enriching'],
+    ['full', 10, 'full'],
+    ['bare', 5000, 'full'],
+    ['bare', 10, 'partial'],
+  ] as const)(
+    'metadata preserves or upgrades %s with %s text',
+    async (status, length, expected) => {
+      const {
+        core,
+        database: { db, links },
+      } = harness.mod();
+      const link = await saved();
+      await db
+        .update(links)
+        .set({
+          captureStatus: status,
+          extractedText: 'x'.repeat(length),
+          contentHtml: reader.contentHtml,
+        })
+        .where(eq(links.id, link.id));
+      await core.fillPageMetadata(link.id, {});
+      expect((await raw(link.id))?.captureStatus).toBe(expected);
+    },
+  );
   it('writes HTML, images, current version, timestamp and nonempty search text together', async () => {
     const { core } = harness.mod();
     const link = await saved();
@@ -82,6 +159,89 @@ describeIfPg('stored Reader (Postgres)', () => {
     await core.recordReader(link.id, { status: 'reader', reader }, new Date(at.getTime() + 2000));
     expect(await raw(link.id)).toMatchObject({ readerSource: 'page', readerSourceAt: null });
   });
+  it('keeps a later-started fetch when an older browser copy finishes last', async () => {
+    const { core } = harness.mod();
+    const link = await saved();
+    const at = new Date();
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader: { contentHtml: '<p>Thin</p>', contentImages: [] } },
+      new Date(+at + 1000),
+    );
+    await core.recordReader(link.id, { status: 'reader', reader, readerSource: 'extension' }, at);
+    expect(await raw(link.id)).toMatchObject({
+      readerSource: 'page',
+      contentHtml: '<p>Thin</p>',
+    });
+  });
+  it('protects browser Readers from older and newer automatic completions, but allows refresh and newer uploads', async () => {
+    const { core } = harness.mod();
+    const link = await saved();
+    const at = new Date();
+    await core.recordReader(link.id, { status: 'reader', reader, readerSource: 'extension' }, at);
+    for (const offset of [-1000, 1000]) {
+      await core.recordReader(
+        link.id,
+        { status: 'reader', reader: { contentHtml: '<p>Thin</p>', contentImages: [] } },
+        new Date(+at + offset),
+      );
+      expect(await raw(link.id)).toMatchObject({
+        readerSource: 'extension',
+        contentHtml: reader.contentHtml,
+      });
+    }
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, readerSource: 'extension', text: 'New browser text' },
+      new Date(+at + 2000),
+    );
+    expect((await raw(link.id))?.extractedText).toBe('New browser text');
+    core.setReaderRefresher(async () => ({ status: 'reader', reader }));
+    // Use a timestamp in the past so the owner's refresh starts after the stored copy.
+    await harness
+      .mod()
+      .database.db.update(harness.mod().database.links)
+      .set({ readerCapturedAt: new Date(+at - 5000) })
+      .where(eq(harness.mod().database.links.id, link.id));
+    await core.refreshReader(link.id);
+    expect((await raw(link.id))?.readerSource).toBe('page');
+  });
+  it.each(['page', 'feed', 'archive'] as const)(
+    'keeps a longer %s Reader when the browser copy is only a teaser',
+    async (source) => {
+      const { core } = harness.mod();
+      const link = await saved();
+      const at = new Date();
+      const full = 'f'.repeat(5000);
+      await core.recordReader(
+        link.id,
+        { status: 'reader', reader, readerSource: source, text: full },
+        at,
+      );
+      await core.recordReader(
+        link.id,
+        {
+          status: 'reader',
+          reader: { contentHtml: '<p>Teaser</p>', contentImages: [] },
+          readerSource: 'extension',
+          text: 't'.repeat(800),
+        },
+        new Date(+at + 1000),
+      );
+      expect(await raw(link.id)).toMatchObject({ readerSource: source, extractedText: full });
+      await core.recordReader(
+        link.id,
+        {
+          status: 'reader',
+          reader: { contentHtml: '<p>Subscriber</p>', contentImages: [] },
+          readerSource: 'extension',
+          text: 's'.repeat(9000),
+        },
+        new Date(+at + 2000),
+      );
+      expect((await raw(link.id))?.readerSource).toBe('extension');
+    },
+  );
   it('marks a successful empty extraction checked, clearing stale payload', async () => {
     const {
       core,

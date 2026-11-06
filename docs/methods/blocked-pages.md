@@ -229,6 +229,8 @@ three feed requests and two archive requests.
 
 ## Slice 3: the page from the user's browser
 
+Uploads use the server time the worker processes them for Reader ordering, because Silo's own capture of the link often reads the page after the upload arrives. The client capture time is a consumed-upload watermark that rejects replays; clocks over ten minutes ahead are rejected. Outbox entries bind to the capture server and are discarded if settings switch servers.
+
 The extension sends the page the user is looking at, so subscriber and
 bot-checked pages save in full.
 
@@ -240,9 +242,9 @@ bot-checked pages save in full.
   `{ url: location.href, html: document.documentElement.outerHTML, capturedAt }`.
   `activeTab` already covers all three triggers. Reading the page takes well
   under a second, so closing the tab right after the toast is safe.
-- Skip the page copy when the HTML is larger than 8 MB, or when the tab URL
-  no longer equals the captured URL.
-- After both finish, put `{ linkId, url, html, capturedAt, attempts }` in an
+- Skip the page copy when the serialized JSON payload is larger than 9 MB,
+  or when the tab URL no longer equals the captured URL.
+- After both finish, put `{ linkId, baseUrl, url, html, capturedAt, attempts }` in an
   IndexedDB outbox, then upload it. Remove the entry on success or on a 4xx
   answer other than 408/429.
 - Retry the outbox on service-worker start (`runtime.onStartup`,
@@ -254,7 +256,7 @@ bot-checked pages save in full.
 ### API and worker
 
 - `PUT /api/links/:id/page` with `{ url, html, capturedAt }`, behind the
-  same auth as capture, with its own 10 MB body limit. Reject when the link
+  same auth as capture, with its own 12 MB body limit. Reject when the link
   does not exist, or when `url` and the link's URL differ after
   canonicalization.
 - Store the HTML in a short-lived table `page_snapshots (link_id primary
@@ -268,13 +270,16 @@ bot-checked pages save in full.
   Reader. A newer extension upload or the owner's "Refresh reader" can. This
   stops the server fetch, which finishes after the click, from overwriting a
   full subscriber Reader with a thin paywalled one.
+- An upload replaces a stored Reader when none is usable or its text is at
+  least as long. A non-subscriber's browser sees only the teaser, which must
+  not replace a full article from any source.
 - Raw page HTML can include the user's name or account details from the
   site header. Silo keeps only the extracted Reader and deletes the raw HTML
   after extraction.
-- Reject a page copy that is a challenge page or gives no Reader; keep the
-  current Reader.
+- Reject a challenge page or a successful extraction with no Reader; keep the
+  current Reader. Retry transient parser failures and retain the snapshot.
 - Migration `0035` adds `extension` to the `reader_source` enum and creates
-  `page_snapshots`.
+  `page_snapshots`, plus `links.reader_upload_at` for the consumed-upload watermark.
 - An upload does not change `reader_access`; that label still describes what
   Silo's own fetch saw. The web hides the paywall notice when the Reader
   source is `extension` and shows the source line "Saved from your browser."

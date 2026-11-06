@@ -1,7 +1,9 @@
 import { CaptureError, captureLink } from '../lib/capture-client.js';
+import { getSettings } from '../lib/settings.js';
 import { isCapturableUrl, tabDisplayTitle } from '../lib/tab-payload.js';
 import { showToast } from '../lib/toast.js';
 import type { CaptureRequest } from '../lib/types.js';
+import { queuePage, readPage, retryPages } from './page-outbox.js';
 
 /**
  * The one quiet-capture path every entry point (toolbar click, keyboard
@@ -16,9 +18,16 @@ export async function runQuietCapture(
   request: CaptureRequest,
   displayTitle: string,
   tabId: number | undefined,
+  includePage = true,
 ): Promise<void> {
+  const page = includePage ? readPage(tabId, request.url) : Promise.resolve(undefined);
+  void retryPages().catch(() => {});
   try {
-    const { link, deduped } = await captureLink(request);
+    const settings = await getSettings();
+    const { link, deduped } = await captureLink(request, settings);
+    void page
+      .then((copy) => (copy ? queuePage(link.id, copy, settings.baseUrl) : undefined))
+      .catch(() => {});
     if (tabId !== undefined) {
       await showToast(tabId, {
         kind: deduped ? 'deduped' : 'saved',

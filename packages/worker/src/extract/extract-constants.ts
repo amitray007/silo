@@ -16,4 +16,4 @@
  * recovered field as real prose (see `BODY_KEYS` there) — a recovered string
  * shorter than what would count as "full" text isn't worth accepting either.
  */
-export const FULL_TEXT_THRESHOLD = 200;
+export { FULL_TEXT_THRESHOLD } from '@silo/core/capture';
