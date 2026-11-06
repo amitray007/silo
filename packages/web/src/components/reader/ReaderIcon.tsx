@@ -27,7 +27,7 @@ const paths = {
   copyRounded:
     'M8 5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2M5 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z',
   check: 'm5 12.5 4.5 4.5L19 7',
-  speaker: 'M3 9.5h3.5L12 5v14l-5.5-4.5H3zM16 9a4 4 0 0 1 0 6M19 6a8.5 8.5 0 0 1 0 12',
+  speaker: 'M2.5 8.5h4L12 3.5v17l-5.5-5h-4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9.5 9.5 0 0 1 0 13',
   edit: 'm16 3 5 5-12 12-6 1 1-6zM13 6l5 5',
   /** The pen from the approved mockup: one nib, no ridge, so it reads apart from `highlighter`. */
   pen: 'M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z',
