@@ -23,7 +23,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: min(580px, calc(100% - 24px));
+  width: min(var(--chat-measure, 720px), calc(100% - 24px));
   pointer-events: auto;
   color: var(--ink);
   font-size: 14px;
@@ -118,8 +118,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   padding: 0 12px 0 10px;
   border: 0;
   border-radius: 999px;
-  background: var(--bg2);
-  box-shadow: var(--elev-2);
+  background: none;
+  box-shadow: none;
   color: var(--ink);
   font: inherit;
   font-size: 12px;
@@ -172,6 +172,49 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.silo-chat-bubble,
+.silo-chat-answer {
+  font-family: var(--chat-font, "Inter Variable", Inter, sans-serif);
+  font-size: var(--chat-size, 1rem);
+  font-weight: var(--chat-weight, 400);
+  line-height: 1.65;
+}
+/* Override the global Inter reset without changing math, diagrams, or code faces. */
+:where(.silo-chat-bubble, .silo-chat-answer)
+:where(
+  div,
+  span,
+  p,
+  a,
+  ul,
+  ol,
+  li,
+  blockquote,
+  strong,
+  b,
+  em,
+  i,
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  table,
+  thead,
+  tbody,
+  tfoot,
+  tr,
+  th,
+  td
+):not(
+  :where(.katex *, .katex, [data-streamdown="code-block"] *, [data-streamdown="mermaid-block"] *)
+) {
+  font-family: inherit;
+}
+.silo-chat-answer :is(strong, b, [data-streamdown="strong"]) {
+  font-weight: 600;
+}
 .silo-chat-message p {
   margin: 0;
 }
@@ -211,7 +254,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   padding: 8px 12px;
   border-radius: 18px;
   background: var(--sel);
-  font-weight: 400;
+  font-weight: var(--chat-weight, 400);
 }
 .silo-chat-assistant {
   display: grid;
@@ -249,13 +292,13 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   letter-spacing: var(--tracking-tight);
 }
 .silo-chat-answer h1 {
-  font-size: var(--text-lg);
+  font-size: 1.25em;
 }
 .silo-chat-answer h2 {
-  font-size: var(--text-md);
+  font-size: 1.125em;
 }
 .silo-chat-answer :is(h3, h4, h5, h6) {
-  font-size: var(--text-base);
+  font-size: 1em;
 }
 .silo-chat-answer > div > * + :is(h1, h2, h3, h4, h5, h6) {
   margin-top: 14px;
@@ -298,7 +341,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-answer [data-streamdown="table"] {
   width: 100%;
   border-collapse: collapse;
-  font-size: var(--text-sm);
+  font-size: 0.875em;
   line-height: var(--lh-snug);
 }
 .silo-chat-answer :is([data-streamdown="table-header-cell"], [data-streamdown="table-cell"]) {
@@ -412,27 +455,33 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: flex;
   gap: 2px;
   margin: 4px 0 0 -6px;
-  min-height: 28px;
+  min-height: 32px;
 }
 /* While the answer streams the row holds its place unseen, then fades in without moving anything. */
 .silo-chat-actions[data-pending] {
   visibility: hidden;
 }
 .silo-chat-actions .silo-reader-iconbtn {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 8px;
+  color: var(--mut);
+}
+.silo-chat-actions .silo-reader-icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75;
 }
 @media (hover: hover) {
-  .silo-chat-actions .silo-reader-iconbtn:hover {
+  .silo-chat-actions .silo-reader-iconbtn:hover:not(:disabled) {
     background: var(--hov);
-    color: var(--mut);
+    color: var(--ink);
   }
 }
 .silo-chat-actions .silo-reader-iconbtn[aria-pressed="true"] {
   color: var(--ink);
 }
-/* With a pointer, the actions show while the answer is hovered or focused, or while one runs. */
+/* Pointer users reveal actions on hover or focus; active playback keeps its controls visible. */
 @media (hover: hover) {
   .silo-chat-actions {
     opacity: 0;
@@ -457,10 +506,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   color: var(--mut);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-}
-.silo-chat-actions .silo-chat-pager .silo-reader-iconbtn {
-  width: 24px;
-  height: 24px;
 }
 .silo-chat-actions .silo-reader-iconbtn:disabled {
   opacity: 0.35;
@@ -1041,7 +1086,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 
 /* The chat on the page: the dock's messages and bar, at reading width in a full-height pane. */
 .silo-chat[data-variant="page"] {
-  --silo-measure: 680px;
+  --silo-measure: var(--chat-measure, 720px);
   flex: 1;
   gap: 0;
   width: 100%;
@@ -1371,7 +1416,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 
 @media (hover: hover) and (pointer: fine) {
   .silo-chat-jump:hover {
-    background: var(--menu-highlight);
+    color: var(--mut);
   }
 }
 
@@ -1399,14 +1444,14 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   min-height: 44px;
   padding: 6px 8px 6px 16px;
 }
-.silo-selection-answer h3 {
+.silo-selection-answer > header h3 {
   flex: 1;
   margin: 0;
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
 }
-.silo-selection-answer blockquote {
+.silo-selection-answer > blockquote {
   flex: none;
   margin: 0 16px 4px;
   padding-left: 10px;
@@ -1415,7 +1460,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   font-size: 13px;
   line-height: 20px;
 }
-.silo-selection-answer blockquote,
+.silo-selection-answer > blockquote,
 .silo-chat-passage > span {
   display: block;
   overflow: hidden;
@@ -1888,8 +1933,10 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
 
 /* Touch: controls reach 40px (docs/rules/web-react.md). */
 @media (max-width: 640px), (pointer: coarse) {
-  .silo-chat-actions .silo-reader-iconbtn,
-  .silo-chat-actions .silo-chat-pager .silo-reader-iconbtn {
+  .silo-chat-actions {
+    min-height: 40px;
+  }
+  .silo-chat-actions .silo-reader-iconbtn {
     width: 40px;
     height: 40px;
   }

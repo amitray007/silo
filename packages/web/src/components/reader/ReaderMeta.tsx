@@ -22,7 +22,7 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
         >
           <Chip domain={deriveDomain(link.url)} size={16} />
           <span title={relativeTimeFromNow(link.createdAt)}>{deriveDomain(link.url)}</span>
-          {link.addedBy === 'agent' && <span className="silo-reader-agent">◆ Added by Claude</span>}
+          {link.addedBy === 'agent' && <span className="silo-reader-agent">Saved by an agent</span>}
           {link.captureStatus === 'enriching' && <span className="silo-sr-only">Capturing</span>}
         </div>
         <div className="silo-meta-strip">

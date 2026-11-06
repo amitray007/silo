@@ -2,6 +2,7 @@ import { useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
 import { useCompactLinks } from '../../lib/useCompactLinks';
 import { ThemeToggle } from '../../theme/ThemeToggle';
+import { ChatAppearanceSettings } from './ChatAppearanceSettings';
 import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
 import { SettingsSelect } from './SettingsSelect';
 import { ToggleSwitch } from './ToggleSwitch';
@@ -77,6 +78,7 @@ export function PreferencesTab() {
         </div>
         <TrashPurgeDropdown value={purgeDays} onChange={setPurgeDays} />
       </div>
+      <ChatAppearanceSettings />
     </>
   );
 }

@@ -178,6 +178,39 @@ describe('SettingsModal', () => {
   });
 
   describe('Preferences tab', () => {
+    it('keeps one chat appearance setup across settings visits and resets it', async () => {
+      renderPage();
+      fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
+      expect(await screen.findByRole('region', { name: 'Chat appearance' })).toBeDefined();
+      fireEvent.click(screen.getByRole('radio', { name: 'Wide' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'Literata' }));
+      fireEvent.click(screen.getByRole('radio', { name: 'Medium' }));
+      fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Chat text size' }), {
+        key: 'End',
+      });
+      expect(JSON.parse(localStorage.getItem('silo.chatAppearance') ?? '{}')).toEqual({
+        width: 'wide',
+        size: 22,
+        font: 'serif',
+        weight: 'medium',
+      });
+      expect(
+        screen.getByRole('button', { name: 'Increase chat text size' }).hasAttribute('disabled'),
+      ).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      fireEvent.click(screen.getByText('trigger'));
+      expect(
+        (await screen.findByRole('radio', { name: 'Literata' })).getAttribute('aria-checked'),
+      ).toBe('true');
+      fireEvent.click(screen.getByRole('button', { name: 'Reset chat appearance' }));
+      expect(JSON.parse(localStorage.getItem('silo.chatAppearance') ?? '{}')).toEqual({
+        width: 'standard',
+        size: 16,
+        font: 'inter',
+        weight: 'regular',
+      });
+    });
+
     it('the real theme toggle changes the theme (data-theme flips)', async () => {
       renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));

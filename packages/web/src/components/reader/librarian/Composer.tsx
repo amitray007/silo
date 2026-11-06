@@ -39,7 +39,6 @@ export function Composer({
   onSuggestion,
   onQuick,
   quickDisabled = false,
-  reserveChips = false,
   className,
 }: {
   value: string;
@@ -63,8 +62,6 @@ export function Composer({
   quick?: readonly QuickAction[];
   onQuick?: (id: string, label: string) => void;
   quickDisabled?: boolean;
-  /** Keep the chip row's height even when it is empty, so the field never jumps as chips come and go. */
-  reserveChips?: boolean;
   className?: string;
 }) {
   const field = useRef<HTMLTextAreaElement>(null);
@@ -81,6 +78,8 @@ export function Composer({
     event.preventDefault();
     if (value.trim() && !sendDisabled) onSend();
   };
+  const showChips =
+    quick.length > 0 || suggestions?.status === 'pending' || (suggestions?.items?.length ?? 0) > 0;
   return (
     <form
       className={`silo-composer ${className ?? ''}`.trim()}
@@ -90,7 +89,7 @@ export function Composer({
         if (value.trim() && !sendDisabled) onSend();
       }}
     >
-      {(quick.length > 0 || suggestions || reserveChips) && (
+      {showChips && (
         <div className="silo-composer-chips">
           {quick.map(([id, text]) => (
             <button

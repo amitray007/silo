@@ -1316,6 +1316,26 @@
   border: 0;
 }
 
+.silo-chat-settings {
+  margin-top: 20px;
+}
+.silo-chat-settings .silo-reader-settings-row {
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--line);
+  font-size: var(--text-base);
+}
+.silo-chat-settings .silo-reader-settings-row > span {
+  font-weight: 500;
+}
+.silo-chat-settings :is(.silo-stepper-btn, [role="radio"]) {
+  min-width: 40px;
+  min-height: 40px;
+}
+.silo-chat-settings > .silo-settings-btn {
+  margin-top: 16px;
+}
 /* Plugins: compact source disclosures. */
 .silo-settings-panel .silo-plugin-section-label {
   margin: 20px 0 6px;

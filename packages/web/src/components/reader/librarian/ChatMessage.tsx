@@ -1,6 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { memo, type SyntheticEvent, useCallback, useState } from 'react';
+import { type CSSProperties, memo, type SyntheticEvent, useCallback, useState } from 'react';
 import { type AnimateOptions, defaultRehypePlugins, Streamdown } from 'streamdown';
+import { useChatAppearance } from '../../../lib/chatAppearance';
 import { copyLabel, useCopyFlash } from '../../SettingsTabs/copyFlash';
 import { ReaderIcon } from '../ReaderIcon';
 import { AnswerActions, type AnswerControls } from './AnswerActions';
@@ -46,7 +47,7 @@ function nativeDiagramScroll(event: SyntheticEvent) {
   }
 }
 
-function UserMessage({ message }: { message: UIMessage }) {
+function UserMessage({ message, style }: { message: UIMessage; style: CSSProperties }) {
   const { copied, copyText } = useCopyFlash();
   const label = copyLabel(copied, 'Copy message');
   const text = message.parts
@@ -59,7 +60,7 @@ function UserMessage({ message }: { message: UIMessage }) {
       ? meta.quote.trim()
       : '';
   return (
-    <div className="silo-chat-message silo-chat-user">
+    <div className="silo-chat-message silo-chat-user" style={style}>
       <div className="silo-chat-bubble">
         <p>{text}</p>
         {quote && <blockquote className="silo-chat-quote">{quote}</blockquote>}
@@ -72,7 +73,7 @@ function UserMessage({ message }: { message: UIMessage }) {
           title={label}
           onClick={() => copyText(text)}
         >
-          <ReaderIcon name={copied === true ? 'check' : 'copy'} size={16} />
+          <ReaderIcon name={copied === true ? 'check' : 'copyRounded'} size={20} />
         </button>
       </div>
     </div>
@@ -175,6 +176,7 @@ export const ChatMessage = memo(function ChatMessage({
   controls?: AnswerControls | undefined;
   onApproval?: (response: { id: string; approved: boolean }) => void;
 }) {
+  const { style } = useChatAppearance();
   const [wasHeld, setWasHeld] = useState(false);
   const [resolved, setResolved] = useState<Record<string, string>>({});
   const resolve = useCallback(
@@ -185,11 +187,11 @@ export const ChatMessage = memo(function ChatMessage({
   const { steps, answer } = splitSteps(message);
   const plugins = useRichBlocks(message.role === 'user' ? '' : answer);
   if (held && !wasHeld) setWasHeld(true);
-  if (message.role === 'user') return <UserMessage message={message} />;
+  if (message.role === 'user') return <UserMessage message={message} style={style} />;
   const approving = isAwaitingApproval(message);
   const reasoning = held ? null : messageReasoning(message);
   return (
-    <div className="silo-chat-message silo-chat-assistant" data-streaming={streaming}>
+    <div className="silo-chat-message silo-chat-assistant" data-streaming={streaming} style={style}>
       <span className="silo-chat-avatar" aria-hidden="true">
         <ReaderIcon name="librarian" size={16} />
       </span>

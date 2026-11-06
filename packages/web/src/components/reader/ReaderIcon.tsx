@@ -24,6 +24,8 @@ const paths = {
   clipboard: 'M9 5H5v16h14V5h-4M9 3h6v4H9z',
   terminal: 'M3 4h18v16H3zM7 9l3 3-3 3M13 15h4',
   copy: 'M9 7V3h12v12h-4M3 9h12v12H3z',
+  copyRounded:
+    'M8 5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2M5 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z',
   check: 'm5 12.5 4.5 4.5L19 7',
   speaker: 'M4 9.5v5h3.5l5 4v-13l-5 4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
   edit: 'm16 3 5 5-12 12-6 1 1-6zM13 6l5 5',
