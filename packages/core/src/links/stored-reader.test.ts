@@ -129,6 +129,39 @@ describeIfPg('stored Reader (Postgres)', () => {
     await core.refreshReader(link.id);
     expect((await raw(link.id))?.readerSource).toBe('page');
   });
+  it('keeps a longer feed or archive Reader when the browser copy is only a teaser', async () => {
+    const { core } = harness.mod();
+    const link = await saved();
+    const at = new Date();
+    const full = 'f'.repeat(5000);
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, readerSource: 'feed', text: full },
+      at,
+    );
+    await core.recordReader(
+      link.id,
+      {
+        status: 'reader',
+        reader: { contentHtml: '<p>Teaser</p>', contentImages: [] },
+        readerSource: 'extension',
+        text: 't'.repeat(800),
+      },
+      new Date(+at + 1000),
+    );
+    expect(await raw(link.id)).toMatchObject({ readerSource: 'feed', extractedText: full });
+    await core.recordReader(
+      link.id,
+      {
+        status: 'reader',
+        reader: { contentHtml: '<p>Subscriber</p>', contentImages: [] },
+        readerSource: 'extension',
+        text: 's'.repeat(9000),
+      },
+      new Date(+at + 2000),
+    );
+    expect((await raw(link.id))?.readerSource).toBe('extension');
+  });
   it('marks a successful empty extraction checked, clearing stale payload', async () => {
     const {
       core,

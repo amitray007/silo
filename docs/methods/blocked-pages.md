@@ -268,6 +268,9 @@ bot-checked pages save in full.
   Reader. A newer extension upload or the owner's "Refresh reader" can. This
   stops the server fetch, which finishes after the click, from overwriting a
   full subscriber Reader with a thin paywalled one.
+- An upload replaces a `feed`, `archive` or earlier `extension` Reader only
+  when its text is at least as long. A non-subscriber's browser sees only the
+  teaser, which must not replace a full article from the feed.
 - Raw page HTML can include the user's name or account details from the
   site header. Silo keeps only the extracted Reader and deletes the raw HTML
   after extraction.

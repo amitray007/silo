@@ -60,6 +60,10 @@ export async function recordReader(
   }
   const reader = parsed?.data ?? null;
   const fromBrowser = result.status === 'reader' && result.readerSource === 'extension';
+  // A non-subscriber's browser sees only the teaser: it must not replace a longer feed,
+  // archive or earlier browser copy. Silo's own page read is always replaceable.
+  const uploadLength = fromBrowser ? (result.text?.trim().length ?? 0) : 0;
+  const browserMayReplace = sql`(not ${fromBrowser} or ${links.readerSource} is null or ${links.readerSource} = 'page' or length(coalesce(${links.extractedText}, '')) <= ${uploadLength})`;
   const [row] = await db
     .update(links)
     .set(readerUpdate(result, reader, fetchedAt))
@@ -67,6 +71,7 @@ export async function recordReader(
       and(
         sql`${links.deletedAt} is null`,
         sql`(${links.readerSource} is distinct from 'extension' or ${explicitRefresh} or ${fromBrowser})`,
+        browserMayReplace,
         and(
           eq(links.id, id),
           ne(links.sourceKind, 'twitter'),
