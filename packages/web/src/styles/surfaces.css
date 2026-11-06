@@ -1259,6 +1259,7 @@
   border: 0;
   border-radius: 12px;
   background: var(--bg2);
+  color: var(--ink);
   box-shadow: var(--toast-shadow);
 }
 @media (prefers-reduced-motion: no-preference) {
