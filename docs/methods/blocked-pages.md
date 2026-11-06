@@ -11,7 +11,7 @@ sources when the page itself refuses Silo. Amit approved the three slices on
 - `curl` with Silo's user agent and with a Chrome user agent: both sites
   return HTTP 403 from Cloudflare. Big Think serves "Just a moment..."
   (`cf-mitigated: challenge`). The Atlantic serves "Your access has been
-  blocked". So the main failure is a **bot check**, not a paywall.
+  blocked". So the main failure is a bot check, not a paywall.
 - Capture: `enrichFullLink` (`packages/worker/src/enrich.ts`) stops at the
   failed fetch. It maps `http-error` to `bare` and never calls
   `recordReader` or the headless browser. The Reader says "No text to read".
