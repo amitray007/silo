@@ -17,6 +17,25 @@ describe('runQuietCapture', () => {
     vi.restoreAllMocks();
   });
 
+  it('starts the page read while capture is still pending', async () => {
+    let finish:
+      | ((value: Awaited<ReturnType<typeof captureClient.captureLink>>) => void)
+      | undefined;
+    vi.spyOn(captureClient, 'captureLink').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    vi.spyOn(toast, 'showToast').mockResolvedValue(undefined);
+    const capture = runQuietCapture({ url: 'https://example.com' }, 'Example', 7);
+    expect(chrome.scripting.executeScript).toHaveBeenCalled();
+    finish?.({
+      link: { id: 'id', url: 'https://example.com', title: null, notes: null, tags: [] },
+      deduped: false,
+    });
+    await capture;
+  });
   it('captures and shows a "saved" toast — never rendering enrichment state', async () => {
     vi.spyOn(captureClient, 'captureLink').mockResolvedValue({
       link: {

@@ -35,7 +35,13 @@ export function installChromeMock(): typeof chrome {
     action: {
       onClicked: { addListener: vi.fn() },
     },
+    alarms: {
+      create: vi.fn(async () => {}),
+      clear: vi.fn(async () => true),
+      onAlarm: { addListener: vi.fn() },
+    },
     runtime: {
+      onStartup: { addListener: vi.fn() },
       onInstalled: { addListener: vi.fn() },
       onMessage: { addListener: vi.fn() },
     },

@@ -26,7 +26,7 @@ export async function handleContextMenuClick(
   tab: chrome.tabs.Tab | undefined,
 ): Promise<void> {
   if (info.menuItemId === MENU_ID_LINK && isCapturableUrl(info.linkUrl)) {
-    await runQuietCapture({ url: info.linkUrl }, info.linkUrl, tab?.id);
+    await runQuietCapture({ url: info.linkUrl }, info.linkUrl, tab?.id, info.linkUrl === tab?.url);
     return;
   }
   if (info.menuItemId === MENU_ID_PAGE && tab && isCapturableUrl(tab.url)) {

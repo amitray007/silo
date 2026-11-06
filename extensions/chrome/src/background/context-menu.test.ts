@@ -34,6 +34,7 @@ describe('context-menu', () => {
       { url: 'https://example.com/article' },
       'https://example.com/article',
       1,
+      false,
     );
   });
 
