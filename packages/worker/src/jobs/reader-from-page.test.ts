@@ -60,7 +60,7 @@ describeIfPg('browser snapshot Reader (Postgres)', () => {
       captureStatus: 'full',
     });
   });
-  it('uses server receipt ordering and rejects replay after explicit refresh', async () => {
+  it('orders uploads by processing time and rejects replay after explicit refresh', async () => {
     const link = await core.createLink({ sourceKind: 'link', url: 'https://example.org/clock' });
     const capturedAt = new Date(Date.now() + 5 * 60_000);
     const html =
@@ -84,14 +84,15 @@ describeIfPg('browser snapshot Reader (Postgres)', () => {
       url: 'https://example.org/inflight',
     });
     await core.savePageSnapshot(second.id, { url: second.url, html, capturedAt });
+    // Silo's own capture reads the page after the upload arrived, before the job runs.
     await core.recordReader(
       second.id,
-      { status: 'reader', reader: { contentHtml: '<p>Later refresh</p>', contentImages: [] } },
+      { status: 'reader', reader: { contentHtml: '<p>Server teaser</p>', contentImages: [] } },
       new Date(),
-      true,
     );
     await worker.readerFromPage(second.id);
-    expect((await core.getStoredReader(second.id))?.contentHtml).toBe('<p>Later refresh</p>');
+    expect((await core.getStoredReader(second.id))?.contentHtml).not.toBe('<p>Server teaser</p>');
+    expect((await core.getById(second.id))?.readerSource).toBe('extension');
   });
   it('retains transient parser failures but deletes blocked failures', async () => {
     const extractor = await import('../extract/extract.js');

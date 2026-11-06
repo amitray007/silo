@@ -12,6 +12,9 @@ import { z } from 'zod';
 import { extract } from '../extract/extract.js';
 
 export async function readerFromPage(id: string): Promise<void> {
+  // Order by processing time: Silo's own capture of the link often reads the page
+  // after the upload arrives, and must not make the browser copy look stale.
+  const processedAt = new Date();
   const page = await getPageSnapshot(id);
   if (!page) return;
   const link = await getById(id);
@@ -36,7 +39,7 @@ export async function readerFromPage(id: string): Promise<void> {
         readerSource: 'extension',
         ...(result.text ? { text: result.text } : {}),
       },
-      page.createdAt,
+      processedAt,
       false,
       page.capturedAt,
     );

@@ -229,7 +229,7 @@ three feed requests and two archive requests.
 
 ## Slice 3: the page from the user's browser
 
-Uploads use the snapshot's server receipt time for Reader ordering. The client capture time is a consumed-upload watermark that rejects replays; clocks over ten minutes ahead are rejected. Outbox entries bind to the capture server and are discarded if settings switch servers.
+Uploads use the server time the worker processes them for Reader ordering, because Silo's own capture of the link often reads the page after the upload arrives. The client capture time is a consumed-upload watermark that rejects replays; clocks over ten minutes ahead are rejected. Outbox entries bind to the capture server and are discarded if settings switch servers.
 
 The extension sends the page the user is looking at, so subscriber and
 bot-checked pages save in full.
