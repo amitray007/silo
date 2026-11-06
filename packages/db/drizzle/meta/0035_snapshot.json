@@ -1,5 +1,5 @@
 {
-  "id": "8b57aa86-8cac-48fa-ab1e-47ca675df51d",
+  "id": "0db7ce88-7488-4bd7-903c-c4e67dad4cf2",
   "prevId": "393e035b-0c2f-4145-9d68-eabb2b35a9e0",
   "version": "7",
   "dialect": "postgresql",
@@ -979,6 +979,12 @@
           "name": "reader_source",
           "type": "reader_source",
           "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reader_upload_at": {
+          "name": "reader_upload_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

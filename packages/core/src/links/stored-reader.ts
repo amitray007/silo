@@ -51,6 +51,7 @@ export async function recordReader(
   result: ReaderExtraction,
   fetchedAt: Date,
   explicitRefresh = false,
+  uploadAt?: Date,
 ): Promise<StoredReader | null> {
   if (result.status === 'fetch_failed') return null;
   const parsed = result.status === 'reader' ? readerContentSchema.safeParse(result.reader) : null;
@@ -66,16 +67,22 @@ export async function recordReader(
   const browserMayReplace = sql`(not ${fromBrowser} or ${links.readerSource} is null or ${links.readerSource} = 'page' or length(coalesce(${links.extractedText}, '')) <= ${uploadLength})`;
   const [row] = await db
     .update(links)
-    .set(readerUpdate(result, reader, fetchedAt))
+    .set({
+      ...readerUpdate(result, reader, fetchedAt),
+      ...(uploadAt ? { readerUploadAt: uploadAt } : {}),
+    })
     .where(
       and(
         sql`${links.deletedAt} is null`,
         sql`(${links.readerSource} is distinct from 'extension' or ${explicitRefresh} or ${fromBrowser})`,
         browserMayReplace,
+        uploadAt
+          ? sql`(${links.readerUploadAt} is null or ${links.readerUploadAt} < ${uploadAt})`
+          : undefined,
         and(
           eq(links.id, id),
           ne(links.sourceKind, 'twitter'),
-          sql`((${fromBrowser} and ${links.readerSource} is distinct from 'extension') or ${links.readerCapturedAt} is null or ${links.readerCapturedAt} <= ${fetchedAt})`,
+          sql`(${links.readerCapturedAt} is null or ${links.readerCapturedAt} <= ${fetchedAt})`,
         ),
       ),
     )

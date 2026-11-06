@@ -82,7 +82,7 @@ describeIfPg('stored Reader (Postgres)', () => {
     await core.recordReader(link.id, { status: 'reader', reader }, new Date(at.getTime() + 2000));
     expect(await raw(link.id)).toMatchObject({ readerSource: 'page', readerSourceAt: null });
   });
-  it('accepts a browser copy even when a later-started automatic fetch finished first', async () => {
+  it('keeps a later-started fetch when an older browser copy finishes last', async () => {
     const { core } = harness.mod();
     const link = await saved();
     const at = new Date();
@@ -93,8 +93,8 @@ describeIfPg('stored Reader (Postgres)', () => {
     );
     await core.recordReader(link.id, { status: 'reader', reader, readerSource: 'extension' }, at);
     expect(await raw(link.id)).toMatchObject({
-      readerSource: 'extension',
-      contentHtml: reader.contentHtml,
+      readerSource: 'page',
+      contentHtml: '<p>Thin</p>',
     });
   });
   it('protects browser Readers from older and newer automatic completions, but allows refresh and newer uploads', async () => {

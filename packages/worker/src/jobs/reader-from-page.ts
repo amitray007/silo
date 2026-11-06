@@ -2,6 +2,7 @@ import {
   cleanupPageSnapshots,
   deletePageSnapshot,
   fillPageMetadata,
+  getById,
   getPageSnapshot,
   recordReader,
 } from '@silo/core';
@@ -13,11 +14,19 @@ import { extract } from '../extract/extract.js';
 export async function readerFromPage(id: string): Promise<void> {
   const page = await getPageSnapshot(id);
   if (!page) return;
+  const link = await getById(id);
+  if (!link || (link.readerUploadAt && +link.readerUploadAt >= +page.capturedAt)) {
+    await deletePageSnapshot(id, page.capturedAt);
+    return;
+  }
   const result = await extract({ url: page.url, html: page.html, contentType: 'text/html' }).catch(
     () => {
       throw new Error('Browser page extraction failed');
     },
   );
+  if (result.readerFailed && result.access !== 'blocked') {
+    throw new Error('Browser page extraction failed');
+  }
   if (result.reader && !result.readerFailed && result.access !== 'blocked') {
     const written = await recordReader(
       id,
@@ -27,6 +36,8 @@ export async function readerFromPage(id: string): Promise<void> {
         readerSource: 'extension',
         ...(result.text ? { text: result.text } : {}),
       },
+      page.createdAt,
+      false,
       page.capturedAt,
     );
     if (written) await fillPageMetadata(id, result);

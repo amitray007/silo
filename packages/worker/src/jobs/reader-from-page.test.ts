@@ -5,7 +5,7 @@ import {
 } from '@silo/db/test-support/disposable-database';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 describeIfPg('browser snapshot Reader (Postgres)', () => {
@@ -59,6 +59,61 @@ describeIfPg('browser snapshot Reader (Postgres)', () => {
       readerSource: 'extension',
       captureStatus: 'full',
     });
+  });
+  it('uses server receipt ordering and rejects replay after explicit refresh', async () => {
+    const link = await core.createLink({ sourceKind: 'link', url: 'https://example.org/clock' });
+    const capturedAt = new Date(Date.now() + 5 * 60_000);
+    const html =
+      '<article><h1>Research</h1><p>' +
+      'Evidence and detailed analysis. '.repeat(100) +
+      '</p></article>';
+    await core.savePageSnapshot(link.id, { url: link.url, html, capturedAt });
+    await worker.readerFromPage(link.id);
+    const refresh = new Date();
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader: { contentHtml: '<p>Refresh wins</p>', contentImages: [] } },
+      refresh,
+      true,
+    );
+    await core.savePageSnapshot(link.id, { url: link.url, html, capturedAt });
+    await worker.readerFromPage(link.id);
+    expect((await core.getStoredReader(link.id))?.contentHtml).toBe('<p>Refresh wins</p>');
+    const second = await core.createLink({
+      sourceKind: 'link',
+      url: 'https://example.org/inflight',
+    });
+    await core.savePageSnapshot(second.id, { url: second.url, html, capturedAt });
+    await core.recordReader(
+      second.id,
+      { status: 'reader', reader: { contentHtml: '<p>Later refresh</p>', contentImages: [] } },
+      new Date(),
+      true,
+    );
+    await worker.readerFromPage(second.id);
+    expect((await core.getStoredReader(second.id))?.contentHtml).toBe('<p>Later refresh</p>');
+  });
+  it('retains transient parser failures but deletes blocked failures', async () => {
+    const extractor = await import('../extract/extract.js');
+    const spy = vi.spyOn(extractor, 'extract');
+    const link = await core.createLink({ sourceKind: 'link', url: 'https://example.org/parser' });
+    try {
+      await core.savePageSnapshot(link.id, {
+        url: link.url,
+        html: '<p>Private</p>',
+        capturedAt: new Date(),
+      });
+      spy.mockResolvedValue({ status: 'bare', readerFailed: true });
+      await expect(worker.readerFromPage(link.id)).rejects.toThrow(
+        'Browser page extraction failed',
+      );
+      expect(await core.getPageSnapshot(link.id)).toBeDefined();
+      spy.mockResolvedValue({ status: 'bare', readerFailed: true, access: 'blocked' });
+      await worker.readerFromPage(link.id);
+      expect(await core.getPageSnapshot(link.id)).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
   it('cleans old raw copies and does not delete a newer upload on an older completion', async () => {
     const { db, pageSnapshots } = await import('@silo/db');

@@ -1,5 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { db, linkReaderPrefs, links, linkTags, readingPositions, tags } from '@silo/db';
+import {
+  db,
+  linkReaderPrefs,
+  links,
+  linkTags,
+  pageSnapshots,
+  readingPositions,
+  tags,
+} from '@silo/db';
 import { and, asc, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import { READER_VERSION } from '../capture.js';
 import type { FeedEntry } from '../feeds/types.js';
@@ -1344,12 +1352,23 @@ export async function removeTag(linkId: string, tagName: string): Promise<void> 
 }
 
 /** Soft-delete: move a live link to trash by setting `deleted_at`. */
-export async function softDelete(id: string, feedId?: string | null): Promise<Link | null> {
+export async function softDelete(
+  id: string,
+  feedId?: string | null,
+  automatic = false,
+): Promise<Link | null> {
   if (!feedId) await assertLibraryWrite(id);
   const [updated] = await db
     .update(links)
     .set({ deletedAt: new Date() })
-    .where(feedId ? whereFeed(feedId, eq(links.id, id)) : whereLibrary(eq(links.id, id)))
+    .where(
+      and(
+        feedId ? whereFeed(feedId, eq(links.id, id)) : whereLibrary(eq(links.id, id)),
+        automatic
+          ? sql`(${links.readerSource} is distinct from 'extension' and not exists (select 1 from ${pageSnapshots} where ${pageSnapshots.linkId} = ${links.id}))`
+          : undefined,
+      ),
+    )
     .returning();
   return updated ?? null;
 }

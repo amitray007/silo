@@ -53,6 +53,10 @@ export async function getPageSnapshot(id: string) {
 }
 export async function deletePageSnapshot(id: string, capturedAt: Date): Promise<void> {
   await db
+    .update(links)
+    .set({ readerUploadAt: sql`greatest(${links.readerUploadAt}, ${capturedAt})` })
+    .where(eq(links.id, id));
+  await db
     .delete(pageSnapshots)
     .where(and(eq(pageSnapshots.linkId, id), eq(pageSnapshots.capturedAt, capturedAt)));
 }
