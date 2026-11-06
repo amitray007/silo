@@ -7,7 +7,7 @@ export type ReaderExtraction =
   | {
       status: 'reader';
       reader: ReaderContent;
-      readerSource?: 'page' | 'feed' | 'archive';
+      readerSource?: 'page' | 'feed' | 'archive' | 'extension';
       readerSourceAt?: Date | null;
       text?: string;
       renderPending?: boolean;
@@ -50,6 +50,7 @@ export async function recordReader(
   id: string,
   result: ReaderExtraction,
   fetchedAt: Date,
+  explicitRefresh = false,
 ): Promise<StoredReader | null> {
   if (result.status === 'fetch_failed') return null;
   const parsed = result.status === 'reader' ? readerContentSchema.safeParse(result.reader) : null;
@@ -58,16 +59,18 @@ export async function recordReader(
     return null;
   }
   const reader = parsed?.data ?? null;
+  const fromBrowser = result.status === 'reader' && result.readerSource === 'extension';
   const [row] = await db
     .update(links)
     .set(readerUpdate(result, reader, fetchedAt))
     .where(
       and(
         sql`${links.deletedAt} is null`,
+        sql`(${links.readerSource} is distinct from 'extension' or ${explicitRefresh} or ${fromBrowser})`,
         and(
           eq(links.id, id),
           ne(links.sourceKind, 'twitter'),
-          sql`(${links.readerCapturedAt} is null or ${links.readerCapturedAt} <= ${fetchedAt})`,
+          sql`((${fromBrowser} and ${links.readerSource} is distinct from 'extension') or ${links.readerCapturedAt} is null or ${links.readerCapturedAt} <= ${fetchedAt})`,
         ),
       ),
     )
@@ -128,6 +131,7 @@ async function extractAndRecord(
   link: ReaderLink,
   run = refresher,
   signal?: AbortSignal,
+  explicitRefresh = false,
 ): Promise<RefreshResult> {
   if (link.sourceKind === 'twitter') return { status: 'no_reader' };
   if (!run) return { status: 'refresh_unavailable' };
@@ -163,15 +167,16 @@ async function extractAndRecord(
   if (result.status === 'reader' && !readerContentSchema.safeParse(result.reader).success) {
     return { status: 'fetch_failed' };
   }
-  return recordRefresh(link.id, result, fetchedAt);
+  return recordRefresh(link.id, result, fetchedAt, explicitRefresh);
 }
 
 async function recordRefresh(
   id: string,
   result: Exclude<ReaderExtraction, { status: 'fetch_failed' }>,
   fetchedAt: Date,
+  explicitRefresh: boolean,
 ): Promise<RefreshResult> {
-  const written = await recordReader(id, result, fetchedAt);
+  const written = await recordReader(id, result, fetchedAt, explicitRefresh);
   const reader = written ?? (await getStoredReader(id));
   if (
     reader &&
@@ -192,26 +197,36 @@ function coalesce(
   load: () => Promise<ReaderLink | undefined>,
   run = refresher,
   signal?: AbortSignal,
+  explicitRefresh = false,
 ): Promise<RefreshResult> {
-  const running = pending.get(id);
+  const key = `${id}:${explicitRefresh}`;
+  const running = pending.get(key);
   if (running) return running;
   const work = load()
     .then((link) =>
-      link ? extractAndRecord(link, run, signal) : ({ status: 'not_found' } as const),
+      link
+        ? extractAndRecord(link, run, signal, explicitRefresh)
+        : ({ status: 'not_found' } as const),
     )
-    .finally(() => pending.delete(id));
-  pending.set(id, work);
+    .finally(() => pending.delete(key));
+  pending.set(key, work);
   return work;
 }
 
 export function refreshReader(id: string): Promise<RefreshResult> {
-  return coalesce(id, async () => {
-    const [link] = await db
-      .select({ id: links.id, url: links.url, sourceKind: links.sourceKind })
-      .from(links)
-      .where(and(sql`${links.deletedAt} is null`, eq(links.id, id)));
-    return link;
-  });
+  return coalesce(
+    id,
+    async () => {
+      const [link] = await db
+        .select({ id: links.id, url: links.url, sourceKind: links.sourceKind })
+        .from(links)
+        .where(and(sql`${links.deletedAt} is null`, eq(links.id, id)));
+      return link;
+    },
+    refresher,
+    undefined,
+    true,
+  );
 }
 
 /** One candidate query; no per-link lookup or tag queries in the serial loop. */

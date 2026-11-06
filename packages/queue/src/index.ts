@@ -18,6 +18,7 @@ export {
   ENRICH_LINK_QUEUE,
   ENRICH_LINK_QUEUE_OPTIONS,
   ensureEnrichLinkQueue,
+  ensureReaderFromPageQueue,
   logDlqDepth,
   registerEnqueuer,
   registerFeedPollEnqueuer,

@@ -39,6 +39,7 @@ import { oauthCorsMiddleware } from './routes/oauth/oauth-cors.js';
 import { registerOAuthRegisterRoutes } from './routes/oauth/register.js';
 import { registerOAuthTokenRoutes } from './routes/oauth/token.js';
 import { registerOAuthWellKnownRoutes } from './routes/oauth/well-known.js';
+import { pageBodyLimit, registerPageSnapshotRoutes } from './routes/page-snapshot.js';
 import { registerPageViewHeaders, registerPageViewRoutes } from './routes/page-view.js';
 import { registerPreviewImageRoutes } from './routes/preview-image.js';
 import { registerReaderRoutes } from './routes/reader.js';
@@ -258,6 +259,8 @@ export function createApp(): Hono {
   api.post('/ingest', ingestTokenAuth);
   api.use('*', (c, next) => {
     if (c.req.method === 'GET' || c.req.method === 'HEAD' || !c.req.raw.body) return next();
+    if (c.req.method === 'PUT' && /^\/api\/links\/[^/]+\/page$/.test(c.req.path))
+      return pageBodyLimit(c, next);
     const limit =
       c.req.method === 'POST' && c.req.path === '/api/import' ? importBodyLimit : defaultBodyLimit;
     return limit(c, next);
@@ -276,6 +279,7 @@ export function createApp(): Hono {
   registerFaviconRoutes(api);
   registerPreviewImageRoutes(api);
   registerReaderRoutes(api);
+  registerPageSnapshotRoutes(api);
   registerContentImageRoutes(api);
   registerSourceMediaRoutes(api);
   registerPageViewRoutes(api);

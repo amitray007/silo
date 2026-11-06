@@ -19,4 +19,5 @@ export {
   tags,
 } from './schema/index.js';
 export { librarianChats, librarianMessages } from './schema/librarian.js';
+export { pageSnapshots } from './schema/page-snapshots.js';
 export { tsvector } from './types.js';

@@ -82,6 +82,53 @@ describeIfPg('stored Reader (Postgres)', () => {
     await core.recordReader(link.id, { status: 'reader', reader }, new Date(at.getTime() + 2000));
     expect(await raw(link.id)).toMatchObject({ readerSource: 'page', readerSourceAt: null });
   });
+  it('accepts a browser copy even when a later-started automatic fetch finished first', async () => {
+    const { core } = harness.mod();
+    const link = await saved();
+    const at = new Date();
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader: { contentHtml: '<p>Thin</p>', contentImages: [] } },
+      new Date(+at + 1000),
+    );
+    await core.recordReader(link.id, { status: 'reader', reader, readerSource: 'extension' }, at);
+    expect(await raw(link.id)).toMatchObject({
+      readerSource: 'extension',
+      contentHtml: reader.contentHtml,
+    });
+  });
+  it('protects browser Readers from older and newer automatic completions, but allows refresh and newer uploads', async () => {
+    const { core } = harness.mod();
+    const link = await saved();
+    const at = new Date();
+    await core.recordReader(link.id, { status: 'reader', reader, readerSource: 'extension' }, at);
+    for (const offset of [-1000, 1000]) {
+      await core.recordReader(
+        link.id,
+        { status: 'reader', reader: { contentHtml: '<p>Thin</p>', contentImages: [] } },
+        new Date(+at + offset),
+      );
+      expect(await raw(link.id)).toMatchObject({
+        readerSource: 'extension',
+        contentHtml: reader.contentHtml,
+      });
+    }
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, readerSource: 'extension', text: 'New browser text' },
+      new Date(+at + 2000),
+    );
+    expect((await raw(link.id))?.extractedText).toBe('New browser text');
+    core.setReaderRefresher(async () => ({ status: 'reader', reader }));
+    // Use a timestamp in the past so the owner's refresh starts after the stored copy.
+    await harness
+      .mod()
+      .database.db.update(harness.mod().database.links)
+      .set({ readerCapturedAt: new Date(+at - 5000) })
+      .where(eq(harness.mod().database.links.id, link.id));
+    await core.refreshReader(link.id);
+    expect((await raw(link.id))?.readerSource).toBe('page');
+  });
   it('marks a successful empty extraction checked, clearing stale payload', async () => {
     const {
       core,

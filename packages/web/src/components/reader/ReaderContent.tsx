@@ -280,6 +280,8 @@ function AccessNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean 
 
 function SourceNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean }) {
   if (!(hasReader || link.extractedText)) return null;
+  if (link.readerSource === 'extension')
+    return <p className="silo-reader-access-notice">Saved from your browser.</p>;
   if (link.readerSource === 'feed')
     return <p className="silo-reader-access-notice">From the site's feed.</p>;
   if (link.readerSource !== 'archive' || !link.readerSourceAt) return null;

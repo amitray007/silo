@@ -64,7 +64,7 @@ export type LinkJson = {
   extractedText: string | null;
   sourceKind: string;
   sourceData: SourceData;
-  readerSource: 'page' | 'feed' | 'archive' | null;
+  readerSource: 'page' | 'feed' | 'archive' | 'extension' | null;
   readerSourceAt: string | null;
   readerAccess: 'paywalled' | 'blocked' | null;
   captureStatus: 'enriching' | 'full' | 'partial' | 'bare';

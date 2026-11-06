@@ -1,7 +1,7 @@
 import { db, links } from '@silo/db';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { READER_VERSION } from '../capture.js';
+import { FULL_TEXT_THRESHOLD, READER_VERSION } from '../capture.js';
 import { type EnrichTrigger, enqueueEnrichment } from './enqueue.js';
 import type { Link } from './links.js';
 
@@ -258,6 +258,7 @@ export async function recordEnrichment(
         then ${links.extractedText} else coalesce(${parsed.text ?? null}, ${links.extractedText}) end`,
       // A newer request keeps its fields and floor until its successor records.
       captureStatus: sql`case when not (${completedRequest}) then 'enriching'::capture_status
+        when ${links.readerSource} = 'extension' and length(coalesce(${links.extractedText}, '')) >= ${FULL_TEXT_THRESHOLD} then 'full'::capture_status
         when ${links.enrichFloorStatus} = 'full' then 'full'::capture_status else ${parsed.status}::capture_status end`,
       enrichFloorStatus: sql`case when ${completedRequest} then null else ${links.enrichFloorStatus} end`,
       enrichFields: sql`case when ${completedRequest} then null else ${links.enrichFields} end`,

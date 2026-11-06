@@ -109,7 +109,7 @@ export const baseLinkShape = {
   extractedText: z.string().nullable(),
   sourceKind: z.string(),
   sourceData: sourceDataSchema,
-  readerSource: z.enum(['page', 'feed', 'archive']).nullable(),
+  readerSource: z.enum(['page', 'feed', 'archive', 'extension']).nullable(),
   readerSourceAt: z.string().nullable(),
   readerAccess: z.enum(['paywalled', 'blocked']).nullable(),
   captureStatus: z.enum(['enriching', 'full', 'partial', 'bare']),

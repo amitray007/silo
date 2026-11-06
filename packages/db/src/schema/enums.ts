@@ -68,4 +68,4 @@ export const readerAccess = pgEnum('reader_access', ['paywalled', 'blocked']);
 export const feedFormat = pgEnum('feed_format', ['rss', 'atom', 'rdf', 'json']);
 export const feedStatus = pgEnum('feed_status', ['active', 'failing', 'gone']);
 
-export const readerSource = pgEnum('reader_source', ['page', 'feed', 'archive']);
+export const readerSource = pgEnum('reader_source', ['page', 'feed', 'archive', 'extension']);

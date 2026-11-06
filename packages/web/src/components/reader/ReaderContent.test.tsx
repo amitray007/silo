@@ -153,6 +153,11 @@ describe('Live Reader', () => {
     expect(await screen.findByText("From the site's feed.")).toBeTruthy();
     expect(screen.queryByText(/Subscriber article/)).toBeNull();
   });
+  it('labels a browser Reader and hides the paywall notice', async () => {
+    show(() => json(reader), makeLink({ readerSource: 'extension', readerAccess: 'paywalled' }));
+    expect(await screen.findByText('Saved from your browser.')).toBeTruthy();
+    expect(screen.queryByText(/Subscriber article/)).toBeNull();
+  });
   it('links an archive Reader to its dated snapshot', async () => {
     show(
       () => json(reader),

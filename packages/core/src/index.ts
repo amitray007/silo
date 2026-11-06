@@ -295,6 +295,14 @@ export {
   willDedupCapture,
 } from './links/links.js';
 export { type LiveReader, readLive, setLiveReader } from './links/live-reader.js';
+export {
+  cleanupPageSnapshots,
+  deletePageSnapshot,
+  fillPageMetadata,
+  getPageSnapshot,
+  savePageSnapshot,
+  setPageEnqueuer,
+} from './links/page-snapshots.js';
 export { getPreviewImageFields } from './links/preview-image.js';
 // Trash purge (U5): bounded, batched, unscheduled — see purgeTrash's doc
 // comment for the batching/termination argument. Scheduling (pg-boss) is a

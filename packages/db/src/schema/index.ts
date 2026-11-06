@@ -19,6 +19,7 @@ export { linkTags } from './link-tags.js';
 export { links } from './links.js';
 export { oauthClients } from './oauth-clients.js';
 export { oauthCodes } from './oauth-codes.js';
+export { pageSnapshots } from './page-snapshots.js';
 export { readingPositions } from './reading-positions.js';
 export { settings } from './settings.js';
 export { tags } from './tags.js';
