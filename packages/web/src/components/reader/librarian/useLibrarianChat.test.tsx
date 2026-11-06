@@ -168,3 +168,63 @@ it('shows the mapped selection error from the API code', async () => {
     'This answer changed. Reload the conversation and try again.',
   );
 });
+
+it('refreshes the title from a late title event without replacing the streamed answer', async () => {
+  let title = 'First question';
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+  const stream = new ReadableStream<Uint8Array>({
+    start(value) {
+      controller = value;
+    },
+  });
+  const emit = (part: unknown) => {
+    if (!controller) throw new Error('missing stream');
+    controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(part)}\n\n`));
+  };
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/messages'))
+        return new Response(stream, {
+          headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+        });
+      const chat = { id: 'title-event-chat', title };
+      return json(url.includes('?') ? { chats: [chat], nextCursor: null } : { chat, messages: [] });
+    }),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const { result } = renderHook(() => useLibrarianChat('title-event-article'), {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  let sending: Promise<unknown> | undefined;
+  act(() => {
+    sending = result.current.send('First question');
+  });
+  await waitFor(() => expect(result.current.status).toBe('submitted'));
+  await act(async () => {
+    emit({ type: 'start', messageId: 'title-event-answer' });
+    emit({ type: 'text-start', id: 'text' });
+    emit({ type: 'text-delta', id: 'text', delta: 'The answer' });
+    emit({ type: 'text-end', id: 'text' });
+    emit({ type: 'finish' });
+  });
+  await waitFor(() =>
+    expect(result.current.messages.at(-1)?.parts).toContainEqual({
+      type: 'text',
+      text: 'The answer',
+      state: 'done',
+    }),
+  );
+  title = 'Understanding the article';
+  await act(async () => emit({ type: 'data-chat-title', data: null, transient: true }));
+  await waitFor(() => expect(result.current.title).toBe('Understanding the article'));
+  expect(result.current.messages.at(-1)?.id).toBe('title-event-answer');
+  await act(async () => {
+    controller?.close();
+    await sending;
+  });
+});

@@ -143,6 +143,7 @@ export {
   saveChatMessages,
   selectLibrarianVersion,
   streamLibrarianReply,
+  updateInitialChatTitle,
 } from './librarian/index.js';
 export { librarianMcpPersona, librarianPersona, promptVersion } from './librarian/persona.js';
 export {

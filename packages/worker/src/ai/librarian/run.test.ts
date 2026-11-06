@@ -5,6 +5,7 @@ import { credential } from '../test-helpers.js';
 
 vi.mock('@silo/core', () => ({
   saveChatMessages: vi.fn(),
+  updateInitialChatTitle: vi.fn(),
   replaceLastAnswer: vi.fn(),
   getSetting: vi.fn(() => false),
   librarianPersona: 'Librarian persona',
@@ -19,11 +20,18 @@ vi.mock('@silo/core/ai-credential', () => ({
 }));
 vi.mock('../model.js', () => ({ languageModelFor: vi.fn() }));
 
+vi.mock('./title.js', () => ({ generateChatTitle: vi.fn() }));
+
 vi.mock('./suggestions.js', () => ({
   suggestFollowups: vi.fn(async () => [{ kind: 'ask', text: 'What next?' }]),
 }));
 
-import { getSetting, replaceLastAnswer, saveChatMessages } from '@silo/core';
+import {
+  getSetting,
+  replaceLastAnswer,
+  saveChatMessages,
+  updateInitialChatTitle,
+} from '@silo/core';
 import {
   getLibrarianToolSource,
   resolveAiCredential,
@@ -32,6 +40,7 @@ import {
 import { languageModelFor } from '../model.js';
 import { runLibrarian } from './run.js';
 import { suggestFollowups } from './suggestions.js';
+import { generateChatTitle } from './title.js';
 
 afterEach(() => vi.clearAllMocks());
 describe('Librarian streaming', () => {
@@ -97,6 +106,7 @@ describe('Librarian streaming', () => {
         expect(resolveAiCredential).toHaveBeenCalledWith(credential.kind, credential.model.id);
       expect(body).not.toContain('data-suggestions');
       expect(suggestFollowups).not.toHaveBeenCalled();
+      expect(generateChatTitle).not.toHaveBeenCalled();
       expect(endRun).toHaveBeenCalled();
       if (transient) {
         expect(saveChatMessages).not.toHaveBeenCalled();
@@ -799,4 +809,91 @@ it('does not retry a rejected option after text has streamed', async () => {
   });
   expect(await response.text()).toContain('Already');
   expect(model.doStreamCalls).toHaveLength(1);
+});
+
+it.each([true, false])(
+  'title persistence preserves the answer (write succeeds=%s)',
+  async (success) => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    vi.mocked(generateChatTitle).mockResolvedValue('Generated title');
+    if (success) vi.mocked(updateInitialChatTitle).mockResolvedValueOnce(true);
+    else vi.mocked(updateInitialChatTitle).mockRejectedValueOnce(new Error('write failed'));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(languageModelFor).mockReturnValue(
+      new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(c) {
+              c.enqueue({ type: 'text-start', id: 't' });
+              c.enqueue({ type: 'text-delta', id: 't', delta: 'Answer' });
+              c.enqueue({ type: 'text-end', id: 't' });
+              c.close();
+            },
+          }),
+        }),
+      }),
+    );
+    const endRun = vi.fn();
+    const response = await runLibrarian({
+      chatId: 'chat',
+      initialTitle: { messageId: 'u', expectedTitle: 'Hi' },
+      endRun,
+      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+      link: null,
+    });
+    const body = await response.text();
+    expect(body).toContain('Answer');
+    expect(body.includes('data-chat-title')).toBe(success);
+    expect(saveChatMessages).toHaveBeenCalled();
+    expect(endRun).toHaveBeenCalled();
+    vi.restoreAllMocks();
+  },
+);
+
+it('streams the answer while title generation is pending', async () => {
+  vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+  let finishTitle: (value: string | null) => void = () => {};
+  vi.mocked(generateChatTitle).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finishTitle = resolve;
+      }),
+  );
+  vi.mocked(updateInitialChatTitle).mockResolvedValueOnce(true);
+  vi.mocked(languageModelFor).mockReturnValue(
+    new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(c) {
+            c.enqueue({ type: 'text-start', id: 't' });
+            c.enqueue({ type: 'text-delta', id: 't', delta: 'Answer' });
+            c.enqueue({ type: 'text-end', id: 't' });
+            c.close();
+          },
+        }),
+      }),
+    }),
+  );
+  const response = await runLibrarian({
+    chatId: 'chat',
+    initialTitle: { messageId: 'u', expectedTitle: 'Hi' },
+    messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+    link: null,
+  });
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('missing stream');
+  const decoder = new TextDecoder();
+  let body = '';
+  while (!body.includes('Answer')) {
+    const chunk = await reader.read();
+    if (chunk.done) throw new Error('answer missing');
+    body += decoder.decode(chunk.value);
+  }
+  finishTitle('Generated');
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    body += decoder.decode(chunk.value);
+  }
+  expect(body).toContain('data-chat-title');
 });

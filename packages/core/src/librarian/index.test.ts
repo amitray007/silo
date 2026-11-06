@@ -13,6 +13,40 @@ vi.mock('../ai/status.js', () => ({
 const suite = postgresReachable() ? describe : describe.skip;
 suite('Librarian persistence', () => {
   const h = setupPgHarness('silo_librarian', () => import('./index.js'));
+  it('claims only the first message and conditionally updates its fallback title', async () => {
+    const c = h.mod();
+    const { setLibrarianRunner } = await import('./ports.js');
+    const runner = vi.fn(async (_request: import('./ports.js').LibrarianRequest) => new Response());
+    setLibrarianRunner(runner);
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing');
+    const message = {
+      id: 'title-user',
+      role: 'user' as const,
+      parts: [{ type: 'text', text: 'First question' }],
+    };
+    await c.streamLibrarianReply({ chatId: chat.id, message });
+    expect(runner.mock.calls[0]?.[0].initialTitle).toEqual({
+      messageId: message.id,
+      expectedTitle: 'First question',
+    });
+    expect(await c.updateInitialChatTitle(chat.id, 'wrong', 'First question', 'Generated')).toBe(
+      false,
+    );
+    expect(await c.updateInitialChatTitle(chat.id, message.id, 'First question', 'Generated')).toBe(
+      true,
+    );
+    expect(await c.updateInitialChatTitle(chat.id, message.id, 'First question', 'Late')).toBe(
+      false,
+    );
+    runner.mock.calls[0]?.[0].endRun?.();
+    await c.streamLibrarianReply({ chatId: chat.id, message: { ...message, id: 'second-user' } });
+    expect(runner.mock.calls[1]?.[0].initialTitle).toBeUndefined();
+    runner.mock.calls[1]?.[0].endRun?.();
+    expect((await c.getChat(chat.id))?.chat.title).toBe('Generated');
+    await c.deleteChat(chat.id);
+    expect(await c.updateInitialChatTitle(chat.id, message.id, 'Generated', 'Revived')).toBe(false);
+  });
   it('regenerates only the last answer, validates overrides, guards runs and swaps persisted versions', async () => {
     const c = h.mod();
     const { setLibrarianRunner } = await import('./ports.js');
@@ -403,6 +437,44 @@ suite('Librarian persistence', () => {
       setLibrarianRunner(undefined);
     }
   });
+  it.each(['Passage title', null, new Error('title unavailable')])(
+    'titles a new imported turn once and retains it when title generation fails (%s)',
+    async (generated) => {
+      const c = h.mod();
+      const { setLibrarianTitleRunner } = await import('./ports.js');
+      const runner = vi.fn(async () => {
+        if (generated instanceof Error) throw generated;
+        return generated;
+      });
+      setLibrarianTitleRunner(runner);
+      try {
+        const chat = await c.createChat();
+        if (!chat) throw new Error('missing chat');
+        const turn = [
+          {
+            id: 'u',
+            role: 'user' as const,
+            parts: [{ type: 'text', text: 'Explain these ideas' }],
+          },
+          {
+            id: 'a',
+            role: 'assistant' as const,
+            parts: [{ type: 'text', text: 'An explanation' }],
+          },
+        ];
+        expect(await c.importLibrarianMessages(chat.id, turn)).toBe('ok');
+        const saved = await c.getChat(chat.id);
+        expect(saved?.chat.title).toBe(
+          typeof generated === 'string' ? generated : 'Explain these ideas',
+        );
+        expect(saved?.messages).toHaveLength(2);
+        expect(await c.importLibrarianMessages(chat.id, turn)).toBe('ok');
+        expect(runner).toHaveBeenCalledTimes(1);
+      } finally {
+        setLibrarianTitleRunner(undefined);
+      }
+    },
+  );
   it('blocks imports while AI is off without storing messages', async () => {
     const c = h.mod();
     const { isAiFeatureOn } = await import('../ai/status.js');

@@ -18,6 +18,7 @@ export type LibrarianRequest = {
   summarizedCount?: number;
   messageSeqs?: number[];
   transient?: boolean;
+  initialTitle?: { messageId: string; expectedTitle: string };
   ownerAction?: OwnerAction;
   endRun?: () => void;
   messages: LibrarianMessage[];
@@ -25,7 +26,14 @@ export type LibrarianRequest = {
 };
 export type LibrarianRunner = (request: LibrarianRequest) => Promise<Response>;
 let runner: LibrarianRunner | undefined;
+let titleRunner: ((request: LibrarianRequest) => Promise<string | null>) | undefined;
 let source: LibrarianToolSource | undefined;
+export function setLibrarianTitleRunner(value: typeof titleRunner): void {
+  titleRunner = value;
+}
+export function getLibrarianTitleRunner() {
+  return titleRunner;
+}
 export function setLibrarianRunner(value: LibrarianRunner | undefined): void {
   runner = value;
 }

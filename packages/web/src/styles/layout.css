@@ -1,6 +1,8 @@
 /* Unit 2: prototype shell, list, reader, and width modes. */
 .silo-frame {
-  height: 100dvh;
+  height: var(--silo-chat-viewport-height, 100dvh);
+  position: relative;
+  top: var(--silo-chat-viewport-top, 0px);
   background: var(--bg);
   color: var(--ink);
   font-size: 16px;
@@ -1321,7 +1323,8 @@
   }
   .silo-three-pane[data-reader="true"] .silo-readerpane {
     position: fixed;
-    inset: 0;
+    inset: var(--silo-chat-viewport-top, 0px) 0 auto;
+    height: var(--silo-chat-viewport-height, 100%);
     z-index: 25;
     background: var(--bg);
   }
