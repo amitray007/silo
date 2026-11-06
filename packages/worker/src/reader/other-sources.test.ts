@@ -52,6 +52,43 @@ describe('other Reader sources (recorded responses)', () => {
       readerSource: 'feed',
     });
   });
+  it('skips a feed copy too short to beat the paywalled page and tries the next feed', async () => {
+    const short = 'https://bigthink.com/short/feed/';
+    const long = 'https://bigthink.com/long/feed/';
+    const body = (text: string) =>
+      `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title><link>https://bigthink.com/</link><item><title>Higgs</title><link>${bigthink}</link><description><![CDATA[<p>${text}</p>]]></description></item></channel></rss>`;
+    const fetch = vi.fn(async (url: string) =>
+      url === short
+        ? ok(body('word '.repeat(120)), url)
+        : url === long
+          ? ok(body('word '.repeat(700)), url)
+          : failed,
+    );
+    const feeds = async () => [
+      { siteUrl: 'https://bigthink.com', feedUrl: short },
+      { siteUrl: 'https://bigthink.com', feedUrl: long },
+    ];
+    const page = {
+      status: 'reader' as const,
+      reader: { contentHtml: '<p>teaser</p>', contentImages: [] },
+      text: 'x'.repeat(1000),
+      observation: 'paywalled' as const,
+    };
+    const result = await createOtherSources({ fetch, feeds })(bigthink, page);
+    expect(result).toMatchObject({ status: 'reader', readerSource: 'feed' });
+    if (result.status === 'reader') expect(result.text?.length).toBeGreaterThan(1500);
+  });
+  it('keeps at most 500 hosts in the feed cache', async () => {
+    const fetch = vi.fn(async (_url: string, _signal: AbortSignal) => failed);
+    const chain = createOtherSources({ fetch, feeds: async () => [] });
+    for (let n = 0; n <= 500; n++) await chain(`https://host${n}.test/a`, blocked);
+    fetch.mockClear();
+    await chain('https://host0.test/a', blocked);
+    // host0 was evicted, so its three guessed feeds are probed again.
+    expect(
+      fetch.mock.calls.filter(([url]) => url.includes('/feed') || url.endsWith('rss.xml')),
+    ).toHaveLength(3);
+  });
   it('uses a raw archive snapshot and preserves its timestamp', async () => {
     const fetch = vi.fn(async (url: string) =>
       url.includes('available?')

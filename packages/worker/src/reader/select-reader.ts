@@ -5,7 +5,7 @@ import { readerAccessObservation } from '../extract/access.js';
 import { type ExtractResult, isHtmlContentType } from '../extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from '../extract/extract-constants.js';
 import type { extractYouTubeWatch } from '../extract/youtube-watch.js';
-import { otherSources } from './other-sources.js';
+import { otherSources, usesOtherSources } from './other-sources.js';
 
 /** Capture and refresh must choose the same Reader and matching search text. */
 function staticReader(
@@ -129,7 +129,7 @@ export async function selectReader(
   ...args: Parameters<typeof selectPageReader>
 ): Promise<ObservedReader> {
   const page = await selectPageReader(...args);
-  if (STATIC_SOURCES.has(args[0]) || !isHtmlContentType(args[3].contentType)) return page;
+  if (!usesOtherSources(args[0]) || !isHtmlContentType(args[3].contentType)) return page;
   const result = await (args[3].sources ?? otherSources)(
     args[3].sourceUrl ?? args[3].url,
     page,

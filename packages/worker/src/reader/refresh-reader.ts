@@ -5,7 +5,7 @@ import { type ExtractInput, type ExtractResult, extract } from '../extract/extra
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
 import { readFeedMedia } from '../feeds/media.js';
 import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
-import { otherSources } from './other-sources.js';
+import { otherSources, usesOtherSources } from './other-sources.js';
 import { selectReader } from './select-reader.js';
 
 /** Uses extract's existing single reader thread, shared with capture and live reads. */
@@ -61,14 +61,14 @@ function failedRead(page: SafeFetchResult, signal: AbortSignal) {
 }
 
 async function recoverBlocked(
-  link: { id: string; url: string },
+  link: { id: string; url: string; sourceKind: string },
   failed: ReturnType<typeof failedRead>,
   signal: AbortSignal,
   invalidate: (id: string) => void,
   sources = otherSources,
 ) {
   const result =
-    failed.observation === 'blocked' && !signal.aborted
+    failed.observation === 'blocked' && !signal.aborted && usesOtherSources(link.sourceKind)
       ? await sources(link.url, failed, signal)
       : failed;
   if (result.status === 'reader') invalidate(link.id);

@@ -49,7 +49,7 @@ import { extractFeedMedia, feedMediaData } from './feeds/media.js';
 import { cleanTitle } from './feeds/parse.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 import { HTML_ACCEPT, safeFetch } from './fetch/safe-fetch.js';
-import { otherSources } from './reader/other-sources.js';
+import { otherSources, usesOtherSources } from './reader/other-sources.js';
 import { selectReader } from './reader/select-reader.js';
 
 /** Injectable seams for testing — default to the real implementations. */
@@ -754,7 +754,7 @@ async function recordBlockedSource(
   fetch: SafeFetchResult,
   options: ExtractionRecord,
 ) {
-  if (link.sourceKind === 'twitter') return false;
+  if (!usesOtherSources(link.sourceKind)) return false;
   const fallback = await blockedSources(link.url, fetch, options.sources);
   if (fallback.status !== 'reader') return false;
   await recordExtraction(link, fallback.metadata ?? { status: 'bare' }, fallback, options);
@@ -784,7 +784,7 @@ async function recoverNarrow(
   fetched: SafeFetchResult,
   at: Date,
 ) {
-  if (link.sourceKind === 'twitter') return {};
+  if (!usesOtherSources(link.sourceKind)) return {};
   const result = await blockedSources(link.url, fetched, deps.otherSources);
   if (result.status !== 'reader') return {};
   await recordReader(link.id, result, at);

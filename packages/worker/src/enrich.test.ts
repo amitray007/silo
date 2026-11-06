@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import type { ObservedReader } from '@silo/core';
 import { runMigrations } from '@silo/db/migrate';
 import {
   createDisposableDatabase,
@@ -139,6 +140,22 @@ describeIfPg('enrichLink (integration)', () => {
       core.setReaderRefresher(undefined);
     }
   });
+
+  it.each(['youtube', 'github', 'hacker_news'])(
+    'never looks for a feed or archive copy of a blocked %s link',
+    async (sourceKind) => {
+      const link = await core.createLink({ url: `https://example.com/${sourceKind}`, sourceKind });
+      const sources = vi.fn(async (_url: string, page: ObservedReader) => page);
+      await enrichMod.enrichLink(link.id, {
+        safeFetch: async () => ({ ok: false, reason: 'http-error', status: 403 }),
+        extract: async () => ({ status: 'bare' }),
+        enrichSource: async () => undefined,
+        getPluginsSetting: stubDeps({ ok: false, reason: 'timeout' }).getPluginsSetting,
+        otherSources: sources,
+      });
+      expect(sources).not.toHaveBeenCalled();
+    },
+  );
 
   afterAll(async () => {
     try {

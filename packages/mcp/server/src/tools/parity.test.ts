@@ -56,7 +56,7 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
     expect(result.structuredContent).toMatchObject({ id, readerAccess: 'paywalled' });
     const { tools } = await client.listTools();
     expect(tools.find((tool) => tool.name === 'get_link')?.description).toContain(
-      'paywalled: the text is only the free part',
+      'with paywalled and page, the text is only the free part',
     );
   });
 

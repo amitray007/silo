@@ -319,7 +319,8 @@ it('keeps blocked access when rendering a challenge fails', async () => {
   expect(result.observation).toBe('blocked');
 });
 
-vi.mock('./other-sources.js', () => ({
+vi.mock('./other-sources.js', async (original) => ({
+  ...(await original<typeof import('./other-sources.js')>()),
   otherSources: async (_url: string, page: unknown) => page,
 }));
 

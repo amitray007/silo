@@ -89,6 +89,7 @@ it('rejects an oversized Reader without invalidating live content', async () => 
   expect(invalidate).not.toHaveBeenCalled();
 });
 
-vi.mock('./other-sources.js', () => ({
+vi.mock('./other-sources.js', async (original) => ({
+  ...(await original<typeof import('./other-sources.js')>()),
   otherSources: async (_url: string, page: unknown) => page,
 }));

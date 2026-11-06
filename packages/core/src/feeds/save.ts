@@ -28,6 +28,8 @@ function copiedContent(post: Link) {
     readerRenderPending: post.readerRenderPending,
     readerAccess: post.readerAccess,
     readerAccessAt: post.readerAccessAt,
+    readerSource: post.readerSource,
+    readerSourceAt: post.readerSourceAt,
     sourceKind: post.sourceKind,
     sourceData: post.sourceData,
     captureStatus: post.captureStatus,
@@ -53,6 +55,8 @@ function revivedContent(existing: Link, post: Link) {
     readerRenderPending: reader.readerRenderPending,
     readerAccess: reader.readerAccess,
     readerAccessAt: reader.readerAccessAt,
+    readerSource: reader.readerSource,
+    readerSourceAt: reader.readerSourceAt,
     sourceKind: source.sourceKind,
     sourceData: source.sourceData,
     captureStatus: bestCaptureStatus(

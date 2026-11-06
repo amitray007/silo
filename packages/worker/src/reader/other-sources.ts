@@ -6,6 +6,7 @@ import { parseFeedBody } from '../feeds/parse.js';
 import { type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 
 type Fetch = (url: string, signal: AbortSignal) => Promise<SafeFetchResult>;
+const MAX_CACHED_HOSTS = 500;
 type Followed = { siteUrl: string | null; feedUrl: string };
 type SourceReader = Extract<ObservedReader, { status: 'reader' }> & { metadata: ExtractResult };
 
@@ -16,7 +17,11 @@ export function createOtherSources(
   const cache = new Map<string, { until: number; url: string | null }>();
   const fetch = deps.fetch ?? ((url, signal) => safeFetch(url, { signal, timeoutMs: 15_000 }));
   const now = deps.now ?? Date.now;
-  async function feed(url: URL, signal: AbortSignal): Promise<SourceReader | undefined> {
+  async function feed(
+    url: URL,
+    signal: AbortSignal,
+    accept: (result: SourceReader) => boolean,
+  ): Promise<SourceReader | undefined> {
     // Followed feeds are read fresh each time, so a feed followed a minute ago counts.
     // Only the guessed addresses are cached per host.
     const followed = await followedFeeds(url, deps.feeds ?? listFeeds);
@@ -28,7 +33,7 @@ export function createOtherSources(
       if (!parsed) continue;
       if (!followed.includes(candidate)) working ??= candidate;
       const result = await feedEntry(parsed.entries, url.href);
-      if (result) {
+      if (result && accept(result)) {
         rememberGuess(url.host, working);
         return result;
       }
@@ -37,7 +42,10 @@ export function createOtherSources(
     return undefined;
   }
   function rememberGuess(host: string, url: string | null) {
+    // Re-inserting moves the host to the end, so the first key is the stalest one.
+    cache.delete(host);
     cache.set(host, { until: now() + 3_600_000, url });
+    if (cache.size > MAX_CACHED_HOSTS) cache.delete(cache.keys().next().value ?? '');
   }
   async function archive(url: string, signal: AbortSignal): Promise<SourceReader | undefined> {
     const available = await fetch(
@@ -75,7 +83,8 @@ export function createOtherSources(
   ): Promise<ObservedReader & { metadata?: ExtractResult }> => {
     if (!needsSource(page)) return page;
     for (const run of [
-      (sourceSignal: AbortSignal) => feed(new URL(url), sourceSignal),
+      (sourceSignal: AbortSignal) =>
+        feed(new URL(url), sourceSignal, (result) => canReplace(page, result)),
       (sourceSignal: AbortSignal) => archive(url, sourceSignal),
     ]) {
       if (signal?.aborted) return page;
@@ -97,6 +106,13 @@ function sourceSignal(signal?: AbortSignal): AbortSignal {
     : AbortSignal.timeout(15_000);
 }
 export const otherSources = createOtherSources();
+
+// These kinds have their own source enrichers; a feed or archive copy is never their Reader.
+const OWN_SOURCE_KINDS = new Set(['twitter', 'youtube', 'hacker_news', 'github', 'feed_media']);
+
+export function usesOtherSources(sourceKind: string): boolean {
+  return !OWN_SOURCE_KINDS.has(sourceKind);
+}
 
 function needsSource(page: ObservedReader): boolean {
   return (
