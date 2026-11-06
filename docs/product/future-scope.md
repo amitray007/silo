@@ -113,4 +113,4 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 ### Clean links (parked from `docs/methods/clean-links.md`, 2026-11-06)
 - **Respect the page's `rel=canonical`** - enrichment stores the page canonical, and the cleaner keeps a param that the page canonical keeps.
 - **One list for dedup and cleaning** - widen `canonicalize` to the cleaner's built-in list and backfill `canonical_url`, so a re-captured clean URL never duplicates a saved one.
-- **ClearURLs catalog** - large and regex-heavy, and its 2026 maintenance status is unconfirmed. Revisit if the curated list misses too much.
+- **ClearURLs catalog and rule import or export** - large and regex-heavy, and its 2026 maintenance status is unconfirmed. Revisit if the curated list misses too much.
