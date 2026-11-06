@@ -15,6 +15,7 @@ import {
   moveHighlights,
 } from './highlights.js';
 import { assertLibraryWrite } from './library-write.js';
+import { NEEDS_FULL_TEXT, snippetFromText } from './list-snippet.js';
 import { whereFeed, whereLibrary, whereLiveAnywhere, whereTrashedLibrary } from './live.js';
 import { mergeCaptureFields } from './merge-content.js';
 import {
@@ -22,8 +23,11 @@ import {
   effectiveLimit,
   encodeListCursor,
   hydrateTags,
+  LIST_TEXT_PREFIX_CHARS,
+  type LinkListRow,
   type LinkSummaryWithTags,
   listColumns,
+  listRowColumns,
   type PageParams,
 } from './pagination.js';
 import { moveReaderPrefs } from './reader-prefs.js';
@@ -695,15 +699,6 @@ export type ListFilter = {
 };
 
 /**
- * Max characters of plain-text excerpt `list()`'s `snippet` carries (agent-
- * navigation slice U2). `list` has no query to focus a `ts_headline` around
- * (unlike `search`'s query-highlighted snippet below), so its snippet is a
- * plain truncation — just enough to let an agent recognize a link without
- * paying for the full article body.
- */
-const LIST_SNIPPET_MAX_CHARS = 200;
-
-/**
  * A `list()` result row (agent-navigation slice U2): `LinkWithTags` MINUS the
  * full `extractedText` body, PLUS a short plain-truncation `snippet`. Dropping
  * `extractedText` here is the whole point of this change — a page of 20 list
@@ -711,7 +706,8 @@ const LIST_SNIPPET_MAX_CHARS = 200;
  * context; a caller that needs the full text calls `getById` for the one
  * link it actually wants to read.
  */
-export type ListResultRow = Omit<LinkSummaryWithTags, 'extractedText'> & {
+export type ListResultRow = Omit<LinkListRow, 'extractedText'> & {
+  tags: string[];
   snippet: string | null;
 };
 
@@ -721,36 +717,15 @@ export type ListPage = {
 };
 
 /**
- * Single-line, whitespace-collapsed, ellipsized plain-text excerpt for
- * `list()`'s `snippet` (no query to focus around, unlike `search`'s
- * `ts_headline` snippet). Prefers `extractedText`, falling back to
- * `description` when the article body hasn't been extracted yet (matching
- * `search`'s snippet fallback order below) — `null` only when BOTH are
- * empty/absent. Truncates to `LIST_SNIPPET_MAX_CHARS` characters, breaking on
- * a whitespace boundary where one exists nearby so the excerpt doesn't end
- * mid-word, and appends an ellipsis whenever the source text was cut.
+ * Build a `list()` result row from a full summary: strip `extractedText`, add its bounded
+ * `snippet` (`extractedText`, else `description`). `list()` itself builds rows from a slim
+ * projection; this form serves callers that already hold whole rows (feed post lists). The
+ * snippet is identical to collapsing the whole text (see `snippetFromText`).
  */
-function truncatedSnippet(text: string | null | undefined): string | null {
-  const collapsed = text?.replace(/\s+/g, ' ').trim();
-  if (!collapsed) return null;
-  if (collapsed.length <= LIST_SNIPPET_MAX_CHARS) return collapsed;
-
-  const hardCut = collapsed.slice(0, LIST_SNIPPET_MAX_CHARS);
-  const lastSpace = hardCut.lastIndexOf(' ');
-  // Prefer breaking on the last whitespace boundary within the cut, but only
-  // if that doesn't throw away a large chunk of the budget (a boundary very
-  // early in the slice means the text has few/no spaces near the cutoff —
-  // just hard-cut instead of over-truncating).
-  const cut = lastSpace > LIST_SNIPPET_MAX_CHARS * 0.6 ? hardCut.slice(0, lastSpace) : hardCut;
-  return `${cut}…`;
-}
-
-/** Build a `list()` result row: strip `extractedText`, add its truncated `snippet`. */
 export function toListResultRow(link: LinkSummaryWithTags): ListResultRow {
   const { extractedText, ...rest } = link;
-  return { ...rest, snippet: truncatedSnippet(extractedText ?? link.description) };
+  return { ...rest, snippet: snippetFromText(extractedText ?? link.description, true) };
 }
-
 /** Selects `created_at` as full-precision text (Postgres renders all 6
  * fractional-second digits) — the value carried in the keyset cursor. See
  * `afterListCursor` for why the JS `Date` node-postgres parses the column
@@ -835,6 +810,132 @@ function requiredTagConditions(tagKeys: ReadonlyArray<string>): ReturnType<typeo
 }
 
 /**
+ * Resolve required tag keys to tag ids with one indexed lookup on the unique
+ * `normalized_key`, or `null` when any key names no tag (a link cannot carry a
+ * tag that does not exist, so an AND-match over it is empty). Filtering by id
+ * instead of joining `tags` per link row keeps the planner's row estimates
+ * honest: through the join it guessed ~1,200 rows for a 27,855-row tag and
+ * chose to sort the whole library.
+ */
+async function resolveRequiredTagIds(tagKeys: ReadonlyArray<string>): Promise<string[] | null> {
+  if (tagKeys.length === 0) return [];
+  const found = await db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(inArray(tags.normalizedKey, [...tagKeys]));
+  // `normalized_key` is unique and `tagKeys` is de-duplicated, so a short result means an unknown tag.
+  return found.length === tagKeys.length ? found.map((row) => row.id) : null;
+}
+
+/**
+ * A required tag carrying at most this many links counts as selective: `list()`
+ * then starts from that tag's links instead of walking the whole library
+ * newest-first. The walk probes `link_tags` once per library row until it has
+ * a page, which is fast for a common tag and slow for a rare one (the planner
+ * assumes matches are spread evenly through time, so it picks the walk anyway).
+ */
+const SELECTIVE_TAG_MAX_LINKS = 1000;
+
+type ListTagFilter = {
+  /** Tags still to check with `EXISTS`. */
+  tagIds: string[];
+  /** Every link carrying the rarest required tag, when it is selective. */
+  candidateLinkIds?: string[];
+};
+
+/**
+ * Resolve `list()`'s required tag keys: like `resolveRequiredTagIds`, plus, in
+ * the same round trip, the full link set of the rarest tag when it holds at
+ * most `SELECTIVE_TAG_MAX_LINKS` links (the count is capped, so a common tag
+ * costs one short index scan). `null` when any key names no tag.
+ */
+async function resolveListTagFilter(tagKeys: ReadonlyArray<string>): Promise<ListTagFilter | null> {
+  if (tagKeys.length === 0) return { tagIds: [] };
+  const keyList = sql.join(
+    tagKeys.map((key) => sql`${key}`),
+    sql`, `,
+  );
+  const { rows } = await db.execute<{ id: string; link_ids: string[] | null }>(sql`
+    select t.id, case when cardinality(c.ids) <= ${SELECTIVE_TAG_MAX_LINKS} then c.ids::text[] end as link_ids
+    from ${tags} as t
+    cross join lateral (
+      select coalesce(array_agg(s.link_id), '{}'::uuid[]) as ids
+      from (
+        select ${linkTags.linkId} as link_id from ${linkTags}
+        where ${linkTags.tagId} = t.id
+        limit ${SELECTIVE_TAG_MAX_LINKS + 1}
+      ) as s
+    ) as c
+    where t.normalized_key in (${keyList})
+  `);
+  if (rows.length !== tagKeys.length) return null;
+  let rarest: { id: string; linkIds: string[] } | undefined;
+  for (const row of rows) {
+    if (row.link_ids && (!rarest || row.link_ids.length < rarest.linkIds.length)) {
+      rarest = { id: row.id, linkIds: row.link_ids };
+    }
+  }
+  const tagIds = rows.map((row) => row.id).filter((id) => id !== rarest?.id);
+  return rarest ? { tagIds, candidateLinkIds: rarest.linkIds } : { tagIds };
+}
+
+/** True when the rarest required tag is selective (see `SELECTIVE_TAG_MAX_LINKS`) or names no tag. */
+async function hasSelectiveTagScope(tagKeys: ReadonlyArray<string>): Promise<boolean> {
+  if (tagKeys.length === 0) return false;
+  const resolved = await resolveListTagFilter(tagKeys);
+  return resolved === null || resolved.candidateLinkIds !== undefined;
+}
+
+/** ANDed correlated `EXISTS` conditions on resolved tag ids; see `requiredTagConditions` for the key-based form. */
+function requiredTagIdConditions(tagIds: ReadonlyArray<string>): ReturnType<typeof sql>[] {
+  return tagIds.map(
+    (tagId) => sql`exists (
+      select 1 from ${linkTags}
+      where ${linkTags.linkId} = ${links.id}
+        and ${linkTags.tagId} = ${tagId}
+    )`,
+  );
+}
+
+/** Rows in the page whose snippet source was only a prefix too short to settle it: re-read whole. */
+async function readFullTexts(ids: string[]): Promise<Map<string, string | null>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: links.id, extractedText: links.extractedText })
+    .from(links)
+    .where(inArray(links.id, ids));
+  return new Map(rows.map((row) => [row.id, row.extractedText]));
+}
+
+/**
+ * The snippet for each list row, keyed by link id. `extractedText` arrives as a
+ * bounded prefix; a prefix too short to settle the snippet (text that is mostly
+ * whitespace) is re-read in full, so the result matches collapsing the whole
+ * stored text.
+ */
+async function listSnippets(
+  rows: ReadonlyArray<{ id: string; extractedText: string | null; description: string | null }>,
+): Promise<Map<string, string | null>> {
+  const snippets = new Map<string, string | null>();
+  const needFullText: string[] = [];
+  for (const row of rows) {
+    const prefix = row.extractedText;
+    if (prefix === null) {
+      snippets.set(row.id, snippetFromText(row.description, true));
+      continue;
+    }
+    // Fewer UTF-16 units than the prefix bound means fewer code points: the whole value was read.
+    const snippet = snippetFromText(prefix, prefix.length < LIST_TEXT_PREFIX_CHARS);
+    if (snippet === NEEDS_FULL_TEXT) needFullText.push(row.id);
+    else snippets.set(row.id, snippet);
+  }
+  for (const [id, fullText] of await readFullTexts(needFullText)) {
+    snippets.set(id, snippetFromText(fullText, true));
+  }
+  return snippets;
+}
+
+/**
  * List live links, optionally filtered by tag(s), capture status, source, and
  * a `created_at` date range, newest first, tag-hydrated and keyset-paginated
  * on `(createdAt, id)`. `limit` is clamped to `[1, 100]` (default 20). A
@@ -850,7 +951,9 @@ export async function list(filter: ListFilter = {}, page: PageParams = {}): Prom
   const cursor = page.cursor !== undefined ? decodeListCursor(page.cursor) : undefined;
   const cursorCondition = cursor ? afterListCursor(cursor.createdAt, cursor.id) : undefined;
 
-  const tagKeys = requiredTagKeys(filter);
+  const tagFilter = await resolveListTagFilter(requiredTagKeys(filter));
+  // An unknown tag, or a selective one with no links, matches nothing.
+  if (tagFilter === null || tagFilter.candidateLinkIds?.length === 0) return { links: [] };
 
   // Each row carries `createdAtText` — the full-microsecond-precision text
   // rendering of `created_at` — alongside the typed `Link`, so the keyset
@@ -862,15 +965,29 @@ export async function list(filter: ListFilter = {}, page: PageParams = {}): Prom
   if (filter.source) conditions.push(eq(links.sourceKind, filter.source));
   if (filter.since) conditions.push(sinceCondition(filter.since));
   if (filter.until) conditions.push(untilCondition(filter.until));
-  conditions.push(...requiredTagConditions(tagKeys));
+  conditions.push(...requiredTagIdConditions(tagFilter.tagIds));
+  if (tagFilter.candidateLinkIds) conditions.push(inArray(links.id, tagFilter.candidateLinkIds));
   if (cursorCondition) conditions.push(cursorCondition);
 
-  const rows = await db
-    .select({ link: listColumns, createdAtText })
+  // Pick the page's ids and sort keys first (an index walk that stops at the
+  // LIMIT), then join back for the columns, so the wide ones are only read for
+  // the rows that are returned.
+  const pageKeys = db
+    .select({
+      id: links.id,
+      createdAt: links.createdAt,
+      createdAtText: createdAtText.as('created_at_text'),
+    })
     .from(links)
     .where(whereLibrary(...conditions))
     .orderBy(desc(links.createdAt), desc(links.id))
-    .limit(limit + 1);
+    .limit(limit + 1)
+    .as('page_keys');
+  const rows = await db
+    .select({ link: listRowColumns, createdAtText: pageKeys.createdAtText })
+    .from(pageKeys)
+    .innerJoin(links, eq(links.id, pageKeys.id))
+    .orderBy(desc(pageKeys.createdAt), desc(pageKeys.id));
 
   const hasMore = rows.length > limit;
   const page_ = hasMore ? rows.slice(0, limit) : rows;
@@ -882,7 +999,12 @@ export async function list(filter: ListFilter = {}, page: PageParams = {}): Prom
     db,
     page_.map((row) => row.link),
   );
-  const resultRows = hydrated.map(toListResultRow);
+
+  const snippets = await listSnippets(hydrated);
+  const resultRows = hydrated.map(({ extractedText: _extractedText, ...rest }) => ({
+    ...rest,
+    snippet: snippets.get(rest.id) ?? null,
+  }));
   return nextCursor === undefined ? { links: resultRows } : { links: resultRows, nextCursor };
 }
 
@@ -1135,8 +1257,10 @@ export async function search(
   // description -> title) and the fixed headline options. `runUnionSearch`
   // now returns rows ALREADY shaped as `SearchResultRow` (extractedText
   // stripped, snippet + rank attached), so this returns its result directly.
+  const selectiveTag = query.trim() ? await hasSelectiveTagScope(requiredTagKeys(filter)) : false;
   return runUnionSearch(whereLibrary(), tagSearchVector, query, tagScopeCondition, page, {
     indexedLibrary: true,
+    ...(selectiveTag ? { broadProbe: false } : {}),
     extraConditions,
     sort,
     snippetFor: (tsQuery) => buildSnippetHeadline(tsQuery),
@@ -1194,16 +1318,23 @@ export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> 
     ? sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`
     : undefined;
 
-  const source = tsQuery && filter.query ? await librarySearchSource(filter.query, tsQuery) : links;
+  const tagIds = await resolveRequiredTagIds(requiredTagKeys(filter));
+  // An unknown tag matches no link: skip the three queries.
+  if (tagIds === null) return { total: 0, bySource: {}, topTags: [] };
+  const source =
+    tsQuery && filter.query
+      ? await librarySearchSource(filter.query, tsQuery, undefined, {
+          broadProbe: !(await hasSelectiveTagScope(requiredTagKeys(filter))),
+        })
+      : links;
   // link_tags_link_id_tag_id_pk and the joined primary keys prevent duplicate links per tag.
   const tagCount = sql<string>`count(${links.id})`;
-  const tagKeys = requiredTagKeys(filter);
   const sharedConditions: ReturnType<typeof sql>[] = [];
   if (textMatchCondition) sharedConditions.push(textMatchCondition);
   if (filter.source) sharedConditions.push(eq(links.sourceKind, filter.source));
   if (filter.since) sharedConditions.push(sinceCondition(filter.since));
   if (filter.until) sharedConditions.push(untilCondition(filter.until));
-  sharedConditions.push(...requiredTagConditions(tagKeys));
+  sharedConditions.push(...requiredTagIdConditions(tagIds));
 
   const [totalRows, bySourceRows, topTagRows] = await Promise.all([
     db
@@ -1214,7 +1345,10 @@ export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> 
       .select({ source: links.sourceKind, count: sql<string>`count(*)` })
       .from(source)
       .where(whereLibrary(...sharedConditions))
-      .groupBy(links.sourceKind),
+      .groupBy(links.sourceKind)
+      // Group order was whatever the plan produced (hash order before the per-source index);
+      // pin it so the breakdown reads the same whichever plan runs.
+      .orderBy(asc(links.sourceKind)),
     db
       .select({ tag: tags.name, count: tagCount })
       .from(source)

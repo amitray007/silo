@@ -4,6 +4,7 @@ import {
   authenticateOAuthToken,
   canonicalMcpResource,
   getSetting,
+  settingsWriteEpoch,
   timingSafeEqual,
   verifyAccessToken,
 } from '@silo/core';
@@ -39,6 +40,43 @@ const UNAUTHORIZED_BODY = JSON.stringify({
   error: { code: -32001, message: 'Unauthorized' },
   id: null,
 });
+
+/** How long a `mcpAccess` read is reused. See `createMcpAccessReader`. */
+const MCP_ACCESS_TTL_MS = 2_000;
+
+/**
+ * Reads the `mcpAccess` gate with a short cache, so a burst of MCP requests costs one settings
+ * query instead of one each (concurrent misses share a single in-flight read).
+ *
+ * Staleness: a settings write made in THIS process (`setSetting` / `updateSettings`) bumps
+ * `settingsWriteEpoch()` and invalidates the cache at once, so turning MCP access off takes
+ * effect on the next request. In the two-container deploy the Settings write happens in the
+ * `api` process, not this one, so there the switch can lag by up to `MCP_ACCESS_TTL_MS` (2 s).
+ * A failed read is never cached and still rejects, so the gate fails closed.
+ */
+function createMcpAccessReader(): () => Promise<boolean> {
+  let cached: { value: boolean; epoch: number; expiresAt: number } | undefined;
+  let inflight: { epoch: number; promise: Promise<boolean> } | undefined;
+  return () => {
+    const epoch = settingsWriteEpoch();
+    if (cached && cached.epoch === epoch && Date.now() < cached.expiresAt) {
+      return Promise.resolve(cached.value);
+    }
+    if (inflight && inflight.epoch === epoch) return inflight.promise;
+    const promise = getSetting('mcpAccess')
+      .then((value) => {
+        // Keyed by the epoch from BEFORE the read: a write that landed meanwhile makes this
+        // entry stale on arrival rather than extending the old value's life.
+        cached = { value, epoch, expiresAt: Date.now() + MCP_ACCESS_TTL_MS };
+        return value;
+      })
+      .finally(() => {
+        if (inflight?.promise === promise) inflight = undefined;
+      });
+    inflight = { epoch, promise };
+    return promise;
+  };
+}
 
 function sendJson(
   res: http.ServerResponse,
@@ -170,6 +208,11 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
  * transport tracks in-flight request state internally. Both are torn down
  * when the response finishes (success or client-abort), so a slow or
  * abandoned request never leaks a server/transport pair.
+ * `McpServer.connect` refuses a second transport and the protocol layer keeps
+ * per-connection request state, so one server cannot serve concurrent requests;
+ * the per-request server is kept, and made cheap instead: `createSiloMcpServer()`
+ * reuses tool definitions (Zod schemas, handlers) built once per process and a
+ * memoized `tools/list` result (see `@silo/mcp-server`'s `server.ts`).
  *
  * Binds to `opts.host ?? '127.0.0.1'` (loopback) by default — a networked MCP
  * surface must not be reachable off-host unless an operator explicitly opts
@@ -245,8 +288,9 @@ export function startMcpHttpServer(opts: {
     return { canonicalResource, authorizationServer };
   }
 
+  const readMcpAccess = createMcpAccessReader();
   const server = http.createServer((req, res) => {
-    routeMcpRequest(req, res, opts.token, allowedHosts, resolvePublicUrls).catch(
+    routeMcpRequest(req, res, opts.token, allowedHosts, resolvePublicUrls, readMcpAccess).catch(
       (error: unknown) => {
         console.error('[silo] mcp-http request handler error:', error);
         sendJson(res, 500, JSON.stringify({ error: 'internal_error' }));
@@ -303,6 +347,7 @@ async function routeMcpRequest(
   token: string,
   computeAllowedHosts: () => string[],
   resolvePublicUrls: () => { canonicalResource: string; authorizationServer: string },
+  readMcpAccess: () => Promise<boolean>,
 ): Promise<void> {
   const url = req.url ? new URL(req.url, 'http://localhost').pathname : undefined;
 
@@ -353,7 +398,7 @@ async function routeMcpRequest(
   // server or unsetting SILO_MCP_HTTP_PORT. When off, a fully-authenticated
   // request (valid token + allowed Host) is still refused. The stdio MCP path
   // is unaffected — this gate is specific to the networked surface.
-  const mcpAccessEnabled = await getSetting('mcpAccess');
+  const mcpAccessEnabled = await readMcpAccess();
   if (!mcpAccessEnabled) {
     sendJson(res, 403, JSON.stringify({ error: 'mcp_access_disabled' }));
     return;

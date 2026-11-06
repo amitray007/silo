@@ -1,5 +1,5 @@
 /** Static metadata and readable content, with isolated, retryable Reader extraction. */
-import type { ReaderContent } from '@silo/core';
+import { detectSource, type ReaderContent } from '@silo/core/capture';
 import metascraper from 'metascraper';
 import metascraperDescription from 'metascraper-description';
 import metascraperImage from 'metascraper-image';
@@ -204,15 +204,33 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
 
   // A Reader failure falls back to metadata only, so a page that always fails still settles
   // (retry only counts recorded attempts). The Reader HTML is built live when a link opens.
-  const fields = await runMetascraper(url, html);
-  if (input.reader === false) return buildResult(fields, undefined);
-  try {
-    const page = await extractPage(
+  if (input.reader === false) return buildResult(await runMetascraper(url, html), undefined);
+  // Only YouTube's Reader step reads metascraper's description, so every other page runs the
+  // two in parallel: metascraper on this thread, the Reader in its own.
+  if (detectSource(url).kind === 'youtube') {
+    const fields = await runMetascraper(url, html);
+    return withReader(
+      fields,
       html,
-      url,
-      fields.description ? { description: fields.description } : {},
+      extractPage(html, url, fields.description ? { description: fields.description } : {}),
     );
-    return pageResult(fields, page, html);
+  }
+  const page = extractPage(html, url);
+  // Settled-or-not, a failed page must not surface as unhandled while metascraper is running.
+  page.catch(() => {});
+  // Queued behind the pool's own microtask, so the Reader job is posted before the (long,
+  // synchronous) metascraper work starts.
+  const fields = await Promise.resolve().then(() => runMetascraper(url, html));
+  return withReader(fields, html, page);
+}
+
+async function withReader(
+  fields: MetascraperFields,
+  html: string,
+  pending: Promise<PageContent>,
+): Promise<ExtractResult> {
+  try {
+    return pageResult(fields, await pending, html);
   } catch (error) {
     console.warn(
       '[reader] extraction unavailable',

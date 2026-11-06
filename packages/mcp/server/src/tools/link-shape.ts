@@ -198,7 +198,7 @@ function shapeSourceData(raw: unknown): BaseLinkContent['sourceData'] {
  * fields (e.g. `search_links`'s `rank`) spread this result and add their own
  * on top.
  */
-function toSummaryLinkContent(link: Omit<LinkSummaryWithTags, 'extractedText'>) {
+function toSummaryLinkContent(link: Omit<LinkSummaryWithTags, 'extractedText' | 'searchVector'>) {
   return {
     id: link.id,
     url: link.url,
@@ -241,7 +241,9 @@ export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
  * exported row types) so one function serves both `search_links` and
  * `list_links` — the fields this function reads are identical across both.
  */
-type SnippetSourceRow = Omit<LinkSummaryWithTags, 'extractedText'> & { snippet: string | null };
+type SnippetSourceRow = Omit<LinkSummaryWithTags, 'extractedText' | 'searchVector'> & {
+  snippet: string | null;
+};
 
 /** Build discovery rows from the same summary whitelist as detail reads. */
 export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent {

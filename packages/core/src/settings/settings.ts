@@ -42,6 +42,18 @@ function migrateGatewaySelections(ai: SettingValue<'ai'>): void {
  * (see `getAllSettings`'s doc comment).
  */
 
+let writeEpoch = 0;
+
+/**
+ * Counts settings writes that have completed (committed) in THIS process. A reader that caches
+ * a setting for a short TTL compares the epoch it read under with the current one, so an
+ * in-process write invalidates the cache immediately instead of waiting out the TTL. Writes from
+ * other processes are not visible here; a TTL cache can lag those by up to its TTL.
+ */
+export function settingsWriteEpoch(): number {
+  return writeEpoch;
+}
+
 /**
  * Non-throwing variant of `parseSettingValue`: a stored value that fails
  * validation against the CURRENT schema (e.g. hand-edited in the DB, or left
@@ -130,6 +142,7 @@ export async function setSetting<K extends SettingKey>(
   } else {
     await persistSetting(key, parsed, executor);
   }
+  writeEpoch += 1;
 }
 
 async function persistSetting<K extends SettingKey>(
@@ -215,6 +228,9 @@ export async function updateSettings(
       }
     }
   });
+  // `setSetting` above bumped the epoch inside the still-open transaction; bump again now that
+  // it has committed, so a reader that raced the commit and saw the old value is invalidated.
+  writeEpoch += 1;
 
   return getAllSettings();
 }

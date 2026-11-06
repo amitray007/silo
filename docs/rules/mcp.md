@@ -45,6 +45,11 @@ recommendation) is the external agent's, performed over these primitives.
   The package may import only `@silo/core`, the MCP SDK, and `zod`.
 - Nothing to stdout except the transport's protocol frames. All diagnostics go to
   `stderr` (stdout is the JSON-RPC channel on the stdio transport).
+- No per-request or per-server state in a `register*` function. Tool definitions
+  (Zod schemas + handlers) are built once per process and shared by every server
+  instance (`server.ts`), so a handler must not close over anything it was
+  registered on; read request context from the handler's own arguments or call a
+  module-level `@silo/core` function. `tools/list` is memoized for the same reason.
 - No hidden capability. Agent-native parity: any read/write a human UI can do, an
   MCP tool should expose too — the agent and the UI call the same `core`.
 

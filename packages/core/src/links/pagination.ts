@@ -18,13 +18,41 @@ const {
   ...summaryColumns
 } = getTableColumns(links);
 
+// Qualify the outer reference literally: Drizzle unqualifies columns in single-table selects.
+const savedLinkId = sql<
+  string | null
+>`(select saved.id from links as saved where saved.id = links.saved_link_id and saved.feed_id is null and saved.deleted_at is null)`;
+
 /** Every `links` column except the Reader payload: the select list for bulk row reads. */
 export const listColumns = {
   ...summaryColumns,
-  // Qualify the outer reference literally: Drizzle unqualifies columns in single-table selects.
-  savedLinkId: sql<
+  savedLinkId,
+};
+
+/**
+ * How many characters of `extracted_text` a list page reads per row. `list()`
+ * only needs enough raw text to build a ~200 character, whitespace-collapsed
+ * snippet; shipping the whole body (about 20 KB a row) dominated its cost.
+ */
+export const LIST_TEXT_PREFIX_CHARS = 1024;
+
+/** A list row: a `Link` without the Reader payload and the tsvector, with `extractedText` cut to a prefix. */
+export type LinkListRow = Omit<LinkSummary, 'searchVector'>;
+
+const { searchVector: _searchVector, ...listRowSummaryColumns } = summaryColumns;
+
+/**
+ * The slim select list for `list()`: no `search_vector` (about 25 KB a row as
+ * text, never read by a list caller) and `extracted_text` bounded to
+ * `LIST_TEXT_PREFIX_CHARS`. Select it AFTER the page's LIMIT (join back by id):
+ * evaluating `left()` per candidate row before the LIMIT detoasts every one.
+ */
+export const listRowColumns = {
+  ...listRowSummaryColumns,
+  extractedText: sql<
     string | null
-  >`(select saved.id from links as saved where saved.id = links.saved_link_id and saved.feed_id is null and saved.deleted_at is null)`,
+  >`left(${links.extractedText}, ${sql.raw(String(LIST_TEXT_PREFIX_CHARS))})`,
+  savedLinkId,
 };
 
 /** Shared page-request shape for `list`/`search`. */

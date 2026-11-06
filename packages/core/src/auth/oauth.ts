@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { accessTokens, db, oauthClients, oauthCodes } from '@silo/db';
 import { and, desc, eq, gt, inArray, isNotNull, lt, notExists, sql } from 'drizzle-orm';
+import { lastUsedIsStale, touchLastUsed } from './last-used.js';
 
 /** The pooled `db` singleton or a transaction handle — lets `issueOAuthTokens`
  * run its inserts inside a caller-supplied transaction (`rotateRefreshToken`,
@@ -479,7 +480,7 @@ export async function authenticateOAuthToken(
   const now = new Date();
 
   const [row] = await db
-    .select({ id: accessTokens.id, resource: accessTokens.resource })
+    .select({ id: accessTokens.id, resource: accessTokens.resource, stale: lastUsedIsStale })
     .from(accessTokens)
     .where(
       and(
@@ -493,14 +494,8 @@ export async function authenticateOAuthToken(
   if (!row) return false;
   if (row.resource !== canonicalResource) return false;
 
-  try {
-    await db
-      .update(accessTokens)
-      .set({ lastUsedAt: sql`now()` })
-      .where(eq(accessTokens.id, row.id));
-  } catch {
-    // Best-effort bookkeeping only — a failure here must never fail auth.
-  }
+  // Throttled to once per minute, same as `verifyAccessToken` (see `last-used.ts`).
+  if (row.stale) await touchLastUsed(row.id);
 
   return true;
 }

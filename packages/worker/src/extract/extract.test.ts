@@ -544,3 +544,58 @@ describe('extract - metadata only', () => {
     }
   });
 });
+
+describe('extract - metascraper and Reader run in parallel', () => {
+  const html =
+    '<title>Parallel title</title><meta name="description" content="Meta description"><article><p>Body.</p></article>';
+
+  it('posts the Reader job before metascraper finishes, without its description', async () => {
+    const run = vi.spyOn(readerWorker, 'extractPage').mockResolvedValue({ text: 'Body.' });
+    try {
+      const pending = extract({ url: URL_UNDER_TEST, html, contentType: 'text/html' });
+      // Called synchronously, not after metascraper's await: the old order would still be 0 here.
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith(html, URL_UNDER_TEST);
+      const result = await pending;
+      expect(result).toMatchObject({
+        title: 'Parallel title',
+        description: 'Meta description',
+        text: 'Body.',
+        status: 'partial',
+      });
+    } finally {
+      run.mockRestore();
+    }
+  });
+
+  it('still hands YouTube the metascraper description, so it waits for metascraper', async () => {
+    const youtube = 'https://www.youtube.com/watch?v=abcdefghijk';
+    const run = vi.spyOn(readerWorker, 'extractPage').mockResolvedValue({});
+    try {
+      const pending = extract({ url: youtube, html, contentType: 'text/html' });
+      expect(run).not.toHaveBeenCalled();
+      await pending;
+      expect(run).toHaveBeenCalledWith(html, youtube, { description: 'Meta description' });
+    } finally {
+      run.mockRestore();
+    }
+  });
+
+  it('keeps the metadata when the Reader rejects before metascraper settles', async () => {
+    const run = vi.spyOn(readerWorker, 'extractPage').mockRejectedValue(new Error('reader-exited'));
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      const result = await extract({ url: URL_UNDER_TEST, html, contentType: 'text/html' });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(result).toMatchObject({ title: 'Parallel title', readerFailed: true });
+      expect(log).toHaveBeenCalledWith('[reader] extraction unavailable', 'reader-exited');
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+      run.mockRestore();
+      log.mockRestore();
+    }
+  });
+});

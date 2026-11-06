@@ -177,7 +177,11 @@ export function registerFaviconRoutes(app: Hono): void {
       cacheSet(domain, entry);
     }
     if (!entry.icon) {
-      return c.json({ error: 'not_found', message: 'Favicon unavailable' }, 404);
+      // The server already remembers a miss for MISS_TTL_MS; without a Cache-Control the
+      // browser re-asks on every mount. Same hour, so the globe fallback stays as fresh as before.
+      return c.json({ error: 'not_found', message: 'Favicon unavailable' }, 404, {
+        'Cache-Control': `public, max-age=${MISS_TTL_MS / 1000}`,
+      });
     }
     return withETag(
       servedImageResponse(entry.icon.bytes, entry.icon.contentType),

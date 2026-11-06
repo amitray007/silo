@@ -182,6 +182,19 @@ describeIfPg('general-API bearer token gate', () => {
       expect(res.status).toBe(401);
     });
 
+    it('a DB token that just authenticated (last_used_at now fresh and throttled) is 401 right after revoke', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { core, app } = harness.mod();
+      const created = await core.generateAccessToken('general-auth revoke-after-use test');
+      const headers = { Authorization: `Bearer ${created.token}` };
+      expect((await app.request('/api/tags', { headers })).status).toBe(200);
+      expect((await app.request('/api/tags', { headers })).status).toBe(200);
+
+      expect(await core.revokeAccessToken(created.id)).toBe(true);
+
+      expect((await app.request('/api/tags', { headers })).status).toBe(401);
+    });
+
     it('the env SILO_API_TOKEN still works when DB tokens also exist', async () => {
       process.env.SILO_API_TOKEN = TOKEN;
       const { core, app } = harness.mod();

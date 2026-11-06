@@ -620,3 +620,174 @@ describeIfPg('startMcpHttpServer — invalid port handling', () => {
     expect(() => startMcpHttpServer({ port: 70000, token: TOKEN, host: '127.0.0.1' })).toThrow();
   });
 });
+
+/** One JSON-RPC POST to `/mcp`; returns the HTTP status and the decoded SSE `data:` message. */
+async function rpc(
+  baseUrl: string,
+  body: unknown,
+): Promise<{ status: number; message: Record<string, unknown> | undefined }> {
+  const res = await fetch(`${baseUrl}/mcp`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json, text/event-stream',
+      authorization: `Bearer ${TOKEN}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  const data = /^data: (.*)$/m.exec(text)?.[1];
+  return { status: res.status, message: data ? JSON.parse(data) : undefined };
+}
+
+describeIfPg('startMcpHttpServer — mcpAccess cache', () => {
+  const MCP_ACCESS_TTL_MS = 2_000;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reads the setting once for sequential requests inside the TTL', async () => {
+    const core = await import('@silo/core');
+    const { baseUrl } = await startTestServer();
+    vi.mocked(core.getSetting).mockClear();
+
+    for (let i = 0; i < 5; i++) {
+      expect((await rpc(baseUrl, { jsonrpc: '2.0', id: i, method: 'ping' })).status).toBe(200);
+    }
+    expect(core.getSetting).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares one in-flight read between concurrent requests', async () => {
+    const core = await import('@silo/core');
+    const { baseUrl } = await startTestServer();
+    vi.mocked(core.getSetting).mockClear();
+
+    const results = await Promise.all(
+      Array.from({ length: 20 }, (_, i) => rpc(baseUrl, { jsonrpc: '2.0', id: i, method: 'ping' })),
+    );
+    expect(results.every((r) => r.status === 200)).toBe(true);
+    expect(core.getSetting).toHaveBeenCalledTimes(1);
+  });
+
+  it('an in-process write turning access off takes effect on the very next request', async () => {
+    const core = await import('@silo/core');
+    const { baseUrl } = await startTestServer();
+    expect((await rpc(baseUrl, { jsonrpc: '2.0', id: 1, method: 'ping' })).status).toBe(200);
+
+    await core.setSetting('mcpAccess', false);
+    expect((await rpc(baseUrl, { jsonrpc: '2.0', id: 2, method: 'ping' })).status).toBe(403);
+
+    await core.updateSettings({ mcpAccess: true });
+    expect((await rpc(baseUrl, { jsonrpc: '2.0', id: 3, method: 'ping' })).status).toBe(200);
+  });
+
+  it('a write from another process is picked up once the TTL has passed, not before', async () => {
+    const core = await import('@silo/core');
+    const { pool } = await import('@silo/db');
+    await core.setSetting('mcpAccess', true);
+    const { baseUrl } = await startTestServer();
+    expect((await rpc(baseUrl, { jsonrpc: '2.0', id: 1, method: 'ping' })).status).toBe(200);
+
+    // Out-of-band write: it does not bump this process's settings epoch.
+    await pool.query("update settings set value = 'false'::jsonb where key = 'mcpAccess'");
+    expect((await rpc(baseUrl, { jsonrpc: '2.0', id: 2, method: 'ping' })).status).toBe(200);
+
+    const realNow = Date.now();
+    vi.spyOn(Date, 'now').mockReturnValue(realNow + MCP_ACCESS_TTL_MS + 1);
+    expect((await rpc(baseUrl, { jsonrpc: '2.0', id: 3, method: 'ping' })).status).toBe(403);
+  });
+
+  it('does not cache a failed read: the next request retries and succeeds', async () => {
+    const core = await import('@silo/core');
+    const { baseUrl } = await startTestServer();
+    vi.mocked(core.getSetting).mockRejectedValueOnce(new Error('db down (simulated)'));
+    expect((await rpc(baseUrl, { jsonrpc: '2.0', id: 1, method: 'ping' })).status).toBe(500);
+    expect((await rpc(baseUrl, { jsonrpc: '2.0', id: 2, method: 'ping' })).status).toBe(200);
+  });
+});
+
+describeIfPg('startMcpHttpServer — shared tool definitions', () => {
+  it('50 concurrent mixed calls each get the response for their own request', async () => {
+    const core = await import('@silo/core');
+    const { baseUrl } = await startTestServer();
+    const ids: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const link = await core.createLink({
+        url: `https://example.com/concurrent-${i}`,
+        sourceKind: 'link',
+      });
+      await core.recordEnrichment(link.id, { title: `Concurrent title ${i}`, status: 'full' });
+      ids.push(link.id);
+    }
+
+    type Expectation = (message: Record<string, unknown>) => void;
+    const calls: Array<{ id: number; body: unknown; check: Expectation }> = [];
+    for (let n = 1; n <= 50; n++) {
+      const i = n % ids.length;
+      const kind = n % 4;
+      if (kind === 0) {
+        calls.push({
+          id: n,
+          body: {
+            jsonrpc: '2.0',
+            id: n,
+            method: 'tools/call',
+            params: { name: 'get_link', arguments: { id: ids[i] } },
+          },
+          check: (m) => {
+            const result = m.result as { structuredContent: { id: string; title: string } };
+            expect(result.structuredContent.id).toBe(ids[i]);
+            expect(result.structuredContent.title).toBe(`Concurrent title ${i}`);
+          },
+        });
+      } else if (kind === 1) {
+        calls.push({
+          id: n,
+          body: {
+            jsonrpc: '2.0',
+            id: n,
+            method: 'tools/call',
+            params: { name: 'list_tags', arguments: {} },
+          },
+          check: (m) => {
+            expect((m.result as { structuredContent: unknown }).structuredContent).toHaveProperty(
+              'tags',
+            );
+          },
+        });
+      } else if (kind === 2) {
+        calls.push({
+          id: n,
+          body: {
+            jsonrpc: '2.0',
+            id: n,
+            method: 'tools/call',
+            params: { name: `no_such_tool_${n}`, arguments: {} },
+          },
+          check: (m) => {
+            const result = m.result as { isError: boolean; content: Array<{ text: string }> };
+            expect(result.isError).toBe(true);
+            expect(result.content[0]?.text).toContain(`no_such_tool_${n}`);
+          },
+        });
+      } else {
+        calls.push({
+          id: n,
+          body: { jsonrpc: '2.0', id: n, method: 'tools/list' },
+          check: (m) => {
+            expect((m.result as { tools: unknown[] }).tools.length).toBeGreaterThan(30);
+          },
+        });
+      }
+    }
+
+    const responses = await Promise.all(calls.map((c) => rpc(baseUrl, c.body)));
+    responses.forEach((response, index) => {
+      const call = calls[index];
+      expect(response.status).toBe(200);
+      expect(response.message?.id).toBe(call?.id);
+      call?.check(response.message ?? {});
+    });
+  });
+});
