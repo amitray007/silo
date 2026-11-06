@@ -7,6 +7,7 @@ export {
   feedFormat,
   feedStatus,
   linkOrigin,
+  readerAccess,
   titleSource,
 } from './enums.js';
 export { feedEntries, feeds } from './feeds.js';

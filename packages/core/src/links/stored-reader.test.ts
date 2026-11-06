@@ -46,6 +46,20 @@ describeIfPg('stored Reader (Postgres)', () => {
     });
     expect((await core.search('needle')).results.map((r) => r.id)).toContain(link.id);
   });
+  it('keeps every Reader column when blocked and clears access after a good read', async () => {
+    const { core } = harness.mod();
+    const link = await saved();
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, text: 'Original body' },
+      new Date(),
+    );
+    const before = await raw(link.id);
+    await core.recordReader(link.id, { status: 'fetch_failed', access: 'blocked' }, new Date());
+    expect(await raw(link.id)).toEqual({ ...before, readerAccess: 'blocked' });
+    await core.recordReader(link.id, { status: 'reader', reader }, new Date());
+    expect((await raw(link.id))?.readerAccess).toBeNull();
+  });
   it('marks a successful empty extraction checked, clearing stale payload', async () => {
     const {
       core,
