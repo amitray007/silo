@@ -1418,13 +1418,52 @@ div.silo-reader-notecard {
   min-height: 152px;
 }
 .silo-original-card {
-  padding: 20px;
+  flex: 1;
+  justify-content: center;
+  padding: 32px 24px;
   overflow: auto;
 }
-.silo-original-actions {
+.silo-original-meta {
+  max-width: min(22rem, 100%);
+  overflow: hidden;
+  margin: 24px 0 0;
+  color: var(--mut);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-original-surface[data-mode="archive"] {
+  flex-direction: column;
+}
+.silo-original-bar {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg2);
+  color: var(--mut);
+  font-size: 13px;
+}
+.silo-original-bar a {
+  color: var(--ink);
+  font-weight: 500;
+  text-underline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .silo-original-bar {
+    gap: 0 16px;
+    padding: 4px 16px;
+  }
+  .silo-original-bar a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+  }
 }
 .silo-original {
   height: 100%;

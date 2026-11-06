@@ -1,11 +1,20 @@
 import { getById } from './links.js';
 
-export type FrameHint = {
-  mode: 'direct' | 'view' | 'none';
-  reason?: string;
-  contentType?: string;
-  darkTheme?: boolean;
-};
+export type FrameHint =
+  | {
+      mode: 'archive';
+      archiveUrl: string;
+      snapshotAt: string;
+      darkTheme?: never;
+      reason?: never;
+      contentType?: never;
+    }
+  | {
+      mode: 'direct' | 'view' | 'none';
+      reason?: string;
+      contentType?: string;
+      darkTheme?: boolean;
+    };
 
 export type PageView = { frame: FrameHint; html?: string };
 
@@ -14,6 +23,7 @@ export type PageViewer = (input: {
   id: string;
   url: string;
   origin: string;
+  archiveSnapshotAt?: Date;
   signal: AbortSignal;
   fresh?: boolean;
 }) => Promise<PageView>;
@@ -41,5 +51,14 @@ export async function viewPage(
   const link = await getById(id);
   if (!link) return null;
   if (!viewer) throw new PageViewerUnavailableError();
-  return viewer({ id, url: link.url, origin, signal, fresh });
+  return viewer({
+    id,
+    url: link.url,
+    origin,
+    signal,
+    fresh,
+    ...(link.readerSource === 'archive' && link.readerSourceAt
+      ? { archiveSnapshotAt: link.readerSourceAt }
+      : {}),
+  });
 }

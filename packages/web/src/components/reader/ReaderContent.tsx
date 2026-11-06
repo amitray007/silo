@@ -3,6 +3,7 @@ import { lazy, Suspense, useContext, useEffect, useLayoutEffect, useRef, useStat
 import { queryKeys, useLiveReader, useRetryCapture } from '../../api/hooks';
 import type { LinkJson, LiveReaderJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
+import { formatSnapshotDate } from '../../lib/snapshotDate';
 import { ChunkErrorBoundary } from '../ChunkErrorBoundary';
 import { DockHostContext } from './dock/DockHostContext';
 import { embedFor } from './embedFor';
@@ -295,13 +296,7 @@ function SourceNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean 
         target="_blank"
         rel="noopener noreferrer"
       >
-        snapshot of{' '}
-        {date.toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-          timeZone: 'UTC',
-        })}
+        snapshot of {formatSnapshotDate(link.readerSourceAt)}
       </a>
       .
     </p>

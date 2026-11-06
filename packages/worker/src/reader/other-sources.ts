@@ -3,6 +3,7 @@ import { parseHTML } from 'linkedom';
 import { type ExtractResult, extract } from '../extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from '../extract/extract-constants.js';
 import { parseFeedBody } from '../feeds/parse.js';
+import { findArchiveSnapshot } from '../fetch/archive.js';
 import { type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 
 type Fetch = (url: string, signal: AbortSignal) => Promise<SafeFetchResult>;
@@ -48,21 +49,9 @@ export function createOtherSources(
     if (cache.size > MAX_CACHED_HOSTS) cache.delete(cache.keys().next().value ?? '');
   }
   async function archive(url: string, signal: AbortSignal): Promise<SourceReader | undefined> {
-    const available = await fetch(
-      `https://archive.org/wayback/available?url=${encodeURIComponent(url)}`,
-      signal,
-    );
-    if (!available.ok) return undefined;
-    const data = JSON.parse(available.html) as {
-      archived_snapshots?: { closest?: { available?: boolean; timestamp?: string } };
-    };
-    const snapshot = data.archived_snapshots?.closest;
-    const stamp = snapshot?.timestamp;
-    if (!snapshot?.available || !stamp || !/^\d{14}$/.test(stamp)) return undefined;
-    const date = new Date(
-      `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(8, 10)}:${stamp.slice(10, 12)}:${stamp.slice(12, 14)}Z`,
-    );
-    if (!Number.isFinite(date.getTime())) return undefined;
+    const snapshot = await findArchiveSnapshot(url, signal, fetch);
+    if (!snapshot) return undefined;
+    const { stamp, date } = snapshot;
     const page = await fetch(`https://web.archive.org/web/${stamp}id_/${url}`, signal);
     if (!page.ok) return undefined;
     const result = await extract({ url, html: page.html, contentType: page.contentType });
