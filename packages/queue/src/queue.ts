@@ -37,6 +37,8 @@ import { fromDrizzle, PgBoss } from 'pg-boss';
 
 /** The one enrichment queue this slice uses. */
 export const ENRICH_LINK_QUEUE = 'enrich-link';
+export const READER_FROM_PAGE_QUEUE = 'reader-from-page';
+export const CLEANUP_PAGE_SNAPSHOTS_QUEUE = 'cleanup-page-snapshots';
 
 /** Where a job lands after exhausting `retryLimit` on the main queue. */
 export const ENRICH_LINK_DLQ = 'enrich-link-dlq';
@@ -157,7 +159,7 @@ if (ENRICH_LINK_QUEUE !== CORE_ENRICH_LINK_QUEUE) {
 export function registerEnqueuer(boss: PgBoss): void {
   setPageEnqueuer(async (tx, linkId) => {
     await boss.send(
-      'reader-from-page',
+      READER_FROM_PAGE_QUEUE,
       { linkId },
       { singletonKey: linkId, db: fromDrizzle(tx, sql) },
     );
@@ -229,7 +231,7 @@ export async function startEnqueuer(logPrefix: string): Promise<PgBoss | undefin
 }
 
 export async function ensureReaderFromPageQueue(boss: PgBoss): Promise<void> {
-  await boss.createQueue('reader-from-page', {
+  await boss.createQueue(READER_FROM_PAGE_QUEUE, {
     policy: 'stately',
     retryLimit: 3,
     retryBackoff: true,

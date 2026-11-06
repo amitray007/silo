@@ -2,23 +2,22 @@ import {
   cleanupPageSnapshots,
   deletePageSnapshot,
   fillPageMetadata,
-  getById,
   getPageSnapshot,
   recordReader,
 } from '@silo/core';
-import { ensureReaderFromPageQueue } from '@silo/queue';
+import {
+  CLEANUP_PAGE_SNAPSHOTS_QUEUE,
+  ensureReaderFromPageQueue,
+  READER_FROM_PAGE_QUEUE,
+} from '@silo/queue';
 import type { PgBoss } from 'pg-boss';
 import { z } from 'zod';
 import { extract } from '../extract/extract.js';
 
 export async function readerFromPage(id: string): Promise<void> {
-  // Order by processing time: Silo's own capture of the link often reads the page
-  // after the upload arrives, and must not make the browser copy look stale.
-  const processedAt = new Date();
   const page = await getPageSnapshot(id);
   if (!page) return;
-  const link = await getById(id);
-  if (!link || (link.readerUploadAt && +link.readerUploadAt >= +page.capturedAt)) {
+  if (page.readerUploadAt && +page.readerUploadAt >= +page.capturedAt) {
     await deletePageSnapshot(id, page.capturedAt);
     return;
   }
@@ -31,6 +30,7 @@ export async function readerFromPage(id: string): Promise<void> {
     throw new Error('Browser page extraction failed');
   }
   if (result.reader && !result.readerFailed && result.access !== 'blocked') {
+    const processedAt = new Date();
     const written = await recordReader(
       id,
       {
@@ -49,12 +49,12 @@ export async function readerFromPage(id: string): Promise<void> {
 }
 export async function registerPageJobs(boss: PgBoss): Promise<void> {
   await ensureReaderFromPageQueue(boss);
-  await boss.work('reader-from-page', { batchSize: 1 }, async ([job]) => {
+  await boss.work(READER_FROM_PAGE_QUEUE, { batchSize: 1 }, async ([job]) => {
     if (job) await readerFromPage(z.object({ linkId: z.uuid() }).parse(job.data).linkId);
   });
-  await boss.createQueue('cleanup-page-snapshots');
-  await boss.schedule('cleanup-page-snapshots', '29 3 * * *', {}, { tz: 'UTC' });
-  await boss.work('cleanup-page-snapshots', { batchSize: 1 }, async () => {
+  await boss.createQueue(CLEANUP_PAGE_SNAPSHOTS_QUEUE);
+  await boss.schedule(CLEANUP_PAGE_SNAPSHOTS_QUEUE, '29 3 * * *', {}, { tz: 'UTC' });
+  await boss.work(CLEANUP_PAGE_SNAPSHOTS_QUEUE, { batchSize: 1 }, async () => {
     await cleanupPageSnapshots();
   });
 }

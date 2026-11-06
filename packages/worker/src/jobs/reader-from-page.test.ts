@@ -45,7 +45,7 @@ describeIfPg('browser snapshot Reader (Postgres)', () => {
       readerSource: 'extension',
       title: 'Owner title',
       readerAccess: 'paywalled',
-      captureStatus: 'full',
+      captureStatus: 'enriching',
     });
     expect((await core.getStoredReader(link.id))?.contentHtml).toContain('subscriber article');
     expect(await core.getPageSnapshot(link.id)).toBeUndefined();
@@ -93,6 +93,60 @@ describeIfPg('browser snapshot Reader (Postgres)', () => {
     await worker.readerFromPage(second.id);
     expect((await core.getStoredReader(second.id))?.contentHtml).not.toBe('<p>Server teaser</p>');
     expect((await core.getById(second.id))?.readerSource).toBe('extension');
+  });
+  it('orders a browser write after a server Reader recorded during extraction', async () => {
+    const link = await core.createLink({
+      sourceKind: 'link',
+      url: 'https://example.org/midflight',
+    });
+    await core.savePageSnapshot(link.id, {
+      url: link.url,
+      html: '<p>Private</p>',
+      capturedAt: new Date(),
+    });
+    const extractor = await import('../extract/extract.js');
+    const spy = vi.spyOn(extractor, 'extract').mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await core.recordReader(
+        link.id,
+        {
+          status: 'reader',
+          reader: { contentHtml: '<p>Server teaser</p>', contentImages: [] },
+          text: 'teaser',
+        },
+        new Date(),
+      );
+      return {
+        status: 'full',
+        text: 'subscriber '.repeat(500),
+        reader: { contentHtml: '<p>Subscriber</p>', contentImages: [] },
+      };
+    });
+    try {
+      await worker.readerFromPage(link.id);
+      expect((await core.getStoredReader(link.id))?.contentHtml).toBe('<p>Subscriber</p>');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it('reads the upload watermark without hydrating the link', async () => {
+    const link = await core.createLink({ sourceKind: 'link', url: 'https://example.org/narrow' });
+    await core.savePageSnapshot(link.id, {
+      url: link.url,
+      html: '<p>Page</p>',
+      capturedAt: new Date(),
+    });
+    const extractor = await import('../extract/extract.js');
+    const spy = vi.spyOn(extractor, 'extract').mockResolvedValue({ status: 'bare' });
+    const hydrate = vi.spyOn(core, 'getById');
+    try {
+      await worker.readerFromPage(link.id);
+      expect(hydrate).not.toHaveBeenCalled();
+      expect(await core.getPageSnapshot(link.id)).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+      hydrate.mockRestore();
+    }
   });
   it('retains transient parser failures but deletes blocked failures', async () => {
     const extractor = await import('../extract/extract.js');

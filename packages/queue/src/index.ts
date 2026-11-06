@@ -13,6 +13,7 @@
  * `docs/rules/architecture.md` for the boundary this preserves.
  */
 export {
+  CLEANUP_PAGE_SNAPSHOTS_QUEUE,
   createBoss,
   ENRICH_LINK_DLQ,
   ENRICH_LINK_QUEUE,
@@ -20,6 +21,7 @@ export {
   ensureEnrichLinkQueue,
   ensureReaderFromPageQueue,
   logDlqDepth,
+  READER_FROM_PAGE_QUEUE,
   registerEnqueuer,
   registerFeedPollEnqueuer,
   startEnqueuer,
