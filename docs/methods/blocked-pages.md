@@ -45,10 +45,13 @@ sources when the page itself refuses Silo. Amit approved the three slices on
 
 ### Data
 
-Migration `0033` adds one nullable enum column to `links`:
+Migration `0033` adds two nullable columns to `links`:
 
 - `reader_access reader_access` with values `paywalled` and `blocked`.
   `null` means no known restriction.
+- `reader_access_at timestamptz`: when the page read behind that value
+  started. It orders access observations apart from Reader writes, so an
+  older read that finishes late cannot erase a newer `blocked`.
 
 | Value | Meaning | Reader content |
 | --- | --- | --- |
@@ -64,28 +67,31 @@ Migration `0033` adds one nullable enum column to `links`:
   publisher-declared, so absence proves nothing. Read it from the same parsed
   document that extraction already builds; do not parse the HTML twice.
 - `blockedFetch(result)`: true for a `safeFetch` failure with reason
-  `http-error` and status 401, 403 or 429, or status 503 with the header
-  `cf-mitigated: challenge`. Ask `safeFetch` for that header through its
-  existing `responseHeaderNames` option.
-- A successful fetch whose page `isChallengePage` is also `blocked`.
+  `http-error` and status 401, 403 or 429, or status ### Write path
 
-### Write path
-
-- Extend `ReaderExtraction` with an optional `access?: 'paywalled' | 'blocked'`
-  on `reader` and `no_reader`, and allow `{ status: 'fetch_failed', access: 'blocked' }`.
-- `recordReader` writes `reader_access` with the Reader columns. For
-  `fetch_failed` with `access: 'blocked'` it writes only `reader_access` and
-  keeps every Reader column. A plain `fetch_failed` still writes nothing.
-  A later successful read sets the value again (`null` or `paywalled`).
-- `enrichFullLink`: on a blocked fetch, call `recordReader` with the blocked
-  result before `recordThenMaybeSettle`. Capture status mapping stays as it
-  is (`bare`/`partial`), so retry behavior does not change.
+- One core function, `recordReaderAccess(id, access, observedAt)`, owns the
+  two columns. It writes only when `reader_access_at` is null or not newer
+  than `observedAt`, skips trashed and X links, and never touches Reader
+  columns or `updated_at`. `recordReader` does not write access.
+- An observation is a completed page read. A blocked fetch or a challenge
+  page gives `blocked`. A successful static or accepted rendered page gives
+  `paywalled` or `null`. Timeouts, 5xx, DNS errors and aborts are not
+  observations and leave the value as it is.
+- Capture (every `enrich.ts` branch, including the held-full and
+  selected-fields paths) and refresh record access with the fetch start
+  time. One helper maps a fetch, extract or render outcome to the value.
+- Capture status mapping stays as it is (`bare`/`partial`), so retry
+  behavior does not change.
+- Opening a link (`live-reader.ts`) writes nothing, as before.
+- An HTTP-200 challenge page still gets the headless browser attempt. An
+  accepted render takes its access from the rendered page.
+try behavior does not change.
 - Capture, refresh (`refresh-reader.ts`) and the live Reader
   (`live-reader.ts`) all report access the same way. Put the mapping in one
   helper; do not repeat it per path.
-- Fix: a challenge page must not supply title, description or image. Today
-  `pageResult` keeps metascraper fields from "Just a moment..." pages. Drop
-  them when `page.challenge` is true.
+- Fix: a challenge page must not supply title, description or image, on the
+  full and the metadata-only extraction paths. Today `pageResult` keeps
+  metascraper fields from "Just a moment..." pages.
 
 ### API and MCP
 
@@ -108,10 +114,13 @@ system.
   with an "Open original" link.
 - **Reader with no text, `paywalled`:** empty state title
   "Behind a paywall", body "The site shows this article to subscribers only.
-  Silo saved its details." Actions: Open original, Retry capture.
+  Silo saved its details." Actions: Open original, Retry capture, and Show
+  live page when the Live tab is available.
 - **Reader with no text, `blocked`:** title "Blocked by the site", body
   "This site stopped Silo with a bot check. Silo saved the link and its
   details." Actions: Open original, Retry capture.
+- A saved description still shows above either card. Silo never hides
+  text it has.
 - **Live tab, reason `blocked`:** "This site blocks automated readers. Open
   it in your browser."
 - The list row stays as it is (no new badge), per the design rule that
