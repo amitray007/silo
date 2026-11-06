@@ -84,6 +84,7 @@ describeIfPg('link-json (integration)', () => {
     expect(json.description).toBe('A description');
     expect(json.sourceKind).toBe('link');
     expect(json.captureStatus).toBe('enriching');
+    expect(json.readerAccess).toBeNull();
     expect(json.addedBy).toBe('agent');
     // Capture-source slice: source is whitelisted + round-trips through toLinkJson.
     expect(json.source).toBe('mcp');

@@ -1,5 +1,12 @@
-import { type LiveReader, type ReaderContent, setLiveReader, setReaderRefresher } from '@silo/core';
+import {
+  type LiveReader,
+  type ReaderContent,
+  recordReader,
+  setLiveReader,
+  setReaderRefresher,
+} from '@silo/core';
 import { readerContentSchema } from '@silo/core/capture';
+import { withReaderAccess } from '../extract/access.js';
 import { type ExtractInput, type ExtractResult, extract } from '../extract/extract.js';
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
 import { readFeedMedia } from '../feeds/media.js';
@@ -28,8 +35,13 @@ async function buildReader(
     const result = await readFeedMedia(link.id, link.url, AbortSignal.timeout(30_000));
     return result.status === 'reader' ? result.reader : undefined;
   }
+  const fetchedAt = new Date();
   const page = await fetch(link.url);
-  if (!page.ok) return undefined;
+  if (!page.ok) {
+    const result = withReaderAccess({ status: 'fetch_failed' }, page);
+    if (result.access) await recordReader(link.id, result, fetchedAt);
+    return undefined;
+  }
   const youtube =
     link.sourceKind === 'youtube' ? extractYouTubeWatch(page.html, page.finalUrl) : undefined;
   const extracted = await run({
@@ -38,11 +50,16 @@ async function buildReader(
     contentType: page.contentType,
   });
   const parsed = readerContentSchema.safeParse(youtube?.reader ?? extracted.reader);
-  return parsed.success ? parsed.data : undefined;
+  const result = withReaderAccess(
+    parsed.success ? { status: 'reader', reader: parsed.data } : { status: 'no_reader' },
+    extracted,
+  );
+  await recordReader(link.id, result, fetchedAt);
+  return result.status === 'reader' ? result.reader : undefined;
 }
 
 /**
- * Builds the Reader HTML when a link opens instead of storing it. Results stay
+ * Builds and records Reader access when a link opens. Results stay
  * in memory by link id: a Reader for ten minutes, "no Reader" for two, so a
  * transient failure is retried soon. Overlapping requests for one link share a
  * single fetch. That fetch ignores every caller's signal (safeFetch and the
@@ -51,7 +68,9 @@ async function buildReader(
 export function createLiveReader(
   options: { fetch?: Fetch; extract?: Extract; now?: () => number } = {},
 ): LiveReader & { clear: (id?: string) => void } {
-  const fetch = options.fetch ?? ((url) => safeFetch(url, { accept: HTML_ACCEPT }));
+  const fetch =
+    options.fetch ??
+    ((url) => safeFetch(url, { responseHeaderNames: ['cf-mitigated'], accept: HTML_ACCEPT }));
   const run = options.extract ?? extract;
   const now = options.now ?? Date.now;
   const cache = new Map<string, Entry>();

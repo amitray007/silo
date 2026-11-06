@@ -65,6 +65,7 @@ export interface ExtractResult {
   status: CaptureStatus;
   reader?: ReaderContent;
   readerFailed?: boolean;
+  access?: 'paywalled' | 'blocked';
 }
 
 export interface ExtractInput {
@@ -223,11 +224,12 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
 }
 
 function pageResult(fields: MetascraperFields, page: PageContent, html: string): ExtractResult {
+  if (page.challenge) return { status: 'bare', access: 'blocked' };
   if ((fields.title === undefined || page.videoDescription) && page.title)
     fields.title = page.title;
   if (fields.description === undefined && page.description) fields.description = page.description;
   const result = buildResult(fields, page.text);
-  if (page.challenge) return { ...result, readerFailed: true };
+  if (page.access) result.access = page.access;
   if (page.videoDescription) result.status = 'partial';
   if (page.reader) result.reader = page.reader;
   if (result.status === 'bare' && isJsWalled(fields, page.text, html)) result.status = 'partial';

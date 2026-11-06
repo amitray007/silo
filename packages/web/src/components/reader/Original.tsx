@@ -7,6 +7,7 @@ import type { OriginalState } from './useOriginal';
 import { originalUrl } from './useReaderActions';
 
 function fallbackReason(reason: string | undefined): string {
+  if (reason === 'blocked') return 'This site blocks automated readers. Open it in your browser.';
   if (reason === 'needs-script') return 'This page needs its own scripts to display.';
   if (
     [

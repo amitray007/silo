@@ -1,6 +1,7 @@
 import type { ReaderExtraction } from '@silo/core';
 import { parseHTML } from 'linkedom';
 import { type BrowserResult, renderReader } from '../browser/reader.js';
+import { withReaderAccess } from '../extract/access.js';
 import { type ExtractResult, isHtmlContentType } from '../extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from '../extract/extract-constants.js';
 import type { extractYouTubeWatch } from '../extract/youtube-watch.js';
@@ -37,8 +38,9 @@ export async function selectReader(
     render?: (url: string, signal?: AbortSignal) => Promise<BrowserResult | undefined>;
   },
 ): Promise<ReaderExtraction> {
-  const fallback = staticReader(sourceKind, extracted, youtube);
+  const fallback = withReaderAccess(staticReader(sourceKind, extracted, youtube), extracted);
   if (
+    extracted.access === 'blocked' ||
     STATIC_SOURCES.has(sourceKind) ||
     !isHtmlContentType(options.contentType) ||
     options.signal?.aborted
@@ -77,11 +79,14 @@ export async function selectReader(
     choice: useRendered ? 'rendered' : 'static',
   });
   if (!useRendered || !rendered?.reader) return pendingFallback(fallback, rendered?.renderPending);
-  return {
-    status: 'reader',
-    reader: rendered.reader,
-    ...(rendered.text ? { text: rendered.text } : {}),
-  };
+  return withReaderAccess(
+    {
+      status: 'reader',
+      reader: rendered.reader,
+      ...(rendered.text ? { text: rendered.text } : {}),
+    },
+    extracted,
+  );
 }
 
 /** Inspect sanitized structure, never source-code text that resembles an attribute. */

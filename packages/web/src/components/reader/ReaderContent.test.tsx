@@ -112,6 +112,43 @@ describe('Live Reader', () => {
     return { ...view, fetchMock };
   }
 
+  it.each([
+    [
+      'blocked',
+      'Blocked by the site',
+      'This site stopped Silo with a bot check. Silo saved the link and its details.',
+    ],
+    [
+      'paywalled',
+      'Behind a paywall',
+      'The site shows this article to subscribers only. Silo saved its details.',
+    ],
+  ] as const)(
+    'explains %s without displaying metadata as article text',
+    async (readerAccess, title, body) => {
+      show(
+        () => json({}, 404),
+        makeLink({
+          readerAccess,
+          extractedText: null,
+          description: 'Saved metadata',
+          captureStatus: 'bare',
+        }),
+      );
+      expect(await screen.findByRole('heading', { name: title })).toBeTruthy();
+      expect(screen.getByText(body)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Retry capture' })).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Open original' })).toBeTruthy();
+    },
+  );
+  it('labels the free part of a subscriber article', async () => {
+    show(() => json(reader), makeLink({ readerAccess: 'paywalled' }));
+    expect(
+      await screen.findByText(
+        /Subscriber article. Silo saved the part the site shows to everyone./,
+      ),
+    ).toBeTruthy();
+  });
   it.each([false, true])(
     'keeps the prose player unless a top player is rendered: %s',
     async (top) => {

@@ -429,16 +429,16 @@ describe('Reader recovery and image URL normalization', () => {
 });
 
 describe('challenge screens', () => {
-  it('keeps Vimeo metadata without article text, HTML or embedded JSON recovery', async () => {
+  it('drops Vimeo challenge metadata, text and embedded JSON recovery', async () => {
     const result = await extract({
       url: 'https://vimeo.com/76979871',
       html: fixture('challenge-vimeo.html'),
       contentType: 'text/html',
     });
-    expect(result.title).toBe('The New Vimeo Player (You Know, For Videos)');
-    expect(result.description).toBe('Vimeo video preview');
-    expect(result.imageUrl).toBe('https://i.vimeocdn.com/video/poster.jpg');
-    expect(result.status).toBe('partial');
+    expect(result.title).toBeUndefined();
+    expect(result.description).toBeUndefined();
+    expect(result.imageUrl).toBeUndefined();
+    expect(result.status).toBe('bare');
     expect(result.text).toBeUndefined();
     expect(result.reader).toBeUndefined();
   });
@@ -461,8 +461,8 @@ describe('challenge screens', () => {
     });
     expect(result.text).toBeUndefined();
     expect(result.reader).toBeUndefined();
-    expect(result.readerFailed).toBe(true);
-    expect(result.title).toBeDefined();
+    expect(result.access).toBe('blocked');
+    expect(result.title).toBeUndefined();
   });
 
   it('keeps an article about bot protection with ordinary Cloudflare scripts', async () => {

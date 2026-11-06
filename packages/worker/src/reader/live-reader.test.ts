@@ -1,3 +1,8 @@
+vi.mock('@silo/core', async (original) => ({
+  ...(await original<typeof import('@silo/core')>()),
+  recordReader: vi.fn(async () => null),
+}));
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExtractResult } from '../extract/extract.js';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
@@ -193,6 +198,7 @@ it('requests HTML from the page fetcher by default', async () => {
   try {
     expect(await reader(link, signal())).toEqual(content);
     expect(fetch).toHaveBeenCalledWith(link.url, {
+      responseHeaderNames: ['cf-mitigated'],
       accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
     });
   } finally {

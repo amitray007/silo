@@ -2,6 +2,7 @@ import { detectSource, type ReaderContent } from '@silo/core/capture';
 import { Defuddle } from 'defuddle/node';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { parseHTML } from 'linkedom';
+import { paywallDeclared } from './access.js';
 import { prepareBoxSpacing } from './box-spacing.js';
 import { isChallengePage } from './challenge-page.js';
 import { prepareCodeEditors, restoreCodeEditors } from './code-editors.js';
@@ -19,6 +20,7 @@ export interface PageContent {
   description?: string;
   videoDescription?: boolean;
   challenge?: boolean;
+  access?: 'paywalled' | 'blocked';
 }
 
 /** Suppress stylesheet-parser noise while keeping other jsdom errors visible. */
@@ -62,7 +64,8 @@ export async function extractPageContent(
       const reader = readerFromText(dom, description, url);
       return { text: normalizeWhitespace(description), ...(reader ? { reader } : {}) };
     }
-    return await extractDocument(dom, url);
+    const access = paywallDeclared(dom.window.document) ? { access: 'paywalled' as const } : {};
+    return { ...(await extractDocument(dom, url)), ...access };
   } finally {
     dom.window.close();
   }

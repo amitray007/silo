@@ -5,6 +5,7 @@ import {
   PageViewerUnavailableError,
   setPageViewer,
 } from '@silo/core';
+import { blockedFetch } from '../extract/access.js';
 import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 import { PageCache } from './cache.js';
 import { addDarkPageStyle } from './dark-theme.js';
@@ -35,6 +36,7 @@ type ViewerOptions = {
 };
 
 function hintFor(page: Page, origin: string): FrameHint {
+  if (page.reason === 'blocked') return { mode: 'none', reason: 'blocked' };
   const contentType = page.contentType ? { contentType: page.contentType } : {};
   const mime = page.contentType?.split(';')[0]?.trim().toLowerCase() ?? '';
   const displayable =
@@ -82,7 +84,9 @@ export function createPageViewer(options: ViewerOptions = {}): {
   const pool = new TransformPool();
   const transform = options.transform ?? ((html, url, signal) => pool.run(html, url, signal));
   const fetchPage =
-    options.fetch ?? ((url, signal) => safeFetch(url, { accept: HTML_ACCEPT, signal }));
+    options.fetch ??
+    ((url, signal) =>
+      safeFetch(url, { responseHeaderNames: ['cf-mitigated'], accept: HTML_ACCEPT, signal }));
   const cache = new PageCache<Page>(options.cacheBytes, options.ttlMs);
   const limit = new ViewLimit(options.waitMs);
   const refreshed = new Map<string, number>();
@@ -94,7 +98,7 @@ export function createPageViewer(options: ViewerOptions = {}): {
       signal.throwIfAborted();
       const fetched = await fetchPage(url, signal);
       signal.throwIfAborted();
-      if (!fetched.ok) return { finalUrl: url, reason: fetched.reason };
+      if (!fetched.ok) return { finalUrl: url, reason: fetchFailureReason(fetched) };
       const { finalUrl, contentType, xFrameOptions, contentSecurityPolicy } = fetched;
       const page: Page = {
         finalUrl,
@@ -205,4 +209,8 @@ export function registerPageViewer(): { close: () => Promise<void> } {
       await viewer.close();
     },
   };
+}
+
+function fetchFailureReason(result: Extract<SafeFetchResult, { ok: false }>): string {
+  return blockedFetch(result) ? 'blocked' : result.reason;
 }

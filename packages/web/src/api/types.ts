@@ -151,6 +151,7 @@ export type LinkJson = {
   extractedText: string | null;
   sourceKind: string;
   sourceData: SourceData;
+  readerAccess: 'paywalled' | 'blocked' | null;
   captureStatus: CaptureStatus;
   addedBy: AddedBy;
   source: CaptureSource;

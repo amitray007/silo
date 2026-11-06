@@ -39,6 +39,7 @@ export const foundLinkOutputShape = {
   extractedText: baseLinkShape.extractedText.optional(),
   sourceKind: baseLinkShape.sourceKind.optional(),
   sourceData: baseLinkShape.sourceData.optional(),
+  readerAccess: baseLinkShape.readerAccess.optional(),
   captureStatus: baseLinkShape.captureStatus.optional(),
   addedBy: baseLinkShape.addedBy.optional(),
   source: baseLinkShape.source.optional(),

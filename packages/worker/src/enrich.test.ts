@@ -502,6 +502,48 @@ describeIfPg('enrichLink (integration)', () => {
     expect((await core.getById(id))?.captureStatus).toBe('partial');
   });
 
+  it('records blocked capture without replacing an existing Reader, then clears access', async () => {
+    const id = await newLink('https://example.com/access');
+    const reader = { contentHtml: '<p>Saved body</p>', contentImages: [] };
+    await core.recordReader(id, { status: 'reader', reader }, new Date());
+    const before = await core.getStoredReader(id);
+    await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', status: 403 }));
+    expect((await core.getById(id))?.readerAccess).toBe('blocked');
+    expect(await core.getStoredReader(id)).toEqual(before);
+    await enrichMod.enrichLink(
+      id,
+      stubDeps(
+        {
+          ok: true,
+          html: '',
+          finalUrl: 'https://example.com/access',
+          contentType: 'text/html',
+          status: 200,
+        },
+        { status: 'full', reader, text: 'Saved body' },
+      ),
+    );
+    expect((await core.getById(id))?.readerAccess).toBeNull();
+  });
+  it('never stores a challenge title from a successful HTTP response', async () => {
+    const id = await newLink('https://example.com/challenge-access');
+    const { extract } = await import('./extract/extract.js');
+    const html = '<title>Just a moment...</title><p>Waiting...</p>';
+    const deps = stubDeps({
+      ok: true,
+      html,
+      finalUrl: 'https://example.com/challenge-access',
+      contentType: 'text/html',
+      status: 200,
+    });
+    deps.extract = extract;
+    await enrichMod.enrichLink(id, deps);
+    expect(await core.getById(id)).toMatchObject({
+      title: null,
+      readerAccess: 'blocked',
+      captureStatus: 'bare',
+    });
+  });
   it('fetch blocked-ip -> records bare and RESOLVES (no throw, no retry storm)', async () => {
     const id = await newLink('https://example.com/blocked');
     await expect(

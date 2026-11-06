@@ -921,6 +921,7 @@ function buildOptimisticLink(input: CaptureRequest): LinkJson {
     extractedText: null,
     sourceKind: 'link',
     sourceData: { kind: 'link' },
+    readerAccess: null,
     captureStatus: 'enriching',
     addedBy: 'user',
     source: 'web',

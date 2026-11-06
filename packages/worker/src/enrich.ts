@@ -1,3 +1,4 @@
+import { blockedFetch, withReaderAccess } from './extract/access.js';
 /**
  * `enrichLink` — the `enrich-link` job's business logic: load the link,
  * `safeFetch` its url, `extract` structured metadata + text from the HTML,
@@ -83,7 +84,8 @@ export interface EnrichLinkDeps {
 }
 
 const defaultDeps: EnrichLinkDeps = {
-  safeFetch: (url) => safeFetch(url, { accept: HTML_ACCEPT }),
+  safeFetch: (url) =>
+    safeFetch(url, { responseHeaderNames: ['cf-mitigated'], accept: HTML_ACCEPT }),
   extract,
   // Adapter, not just a re-export: the real `enrichSource` takes its fetch
   // deps as a 3rd positional param (its own injectable seam, for ITS unit
@@ -447,6 +449,7 @@ async function enrichFullLink(
     }
 
     if (!fetchResult.ok) {
+      await recordBlockedFetch(linkId, fetchResult, fetchedAt);
       await recordThenMaybeSettle(link, {
         status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
         ...aiTitleFields(await aiTitlePromise),
@@ -667,6 +670,7 @@ async function recordExtraction(
   // result (only the source data and the status, which stays `full`). A
   // successful AI title is the exception: the post text is fresh, so it is written.
   if (holdFull && extracted.status !== 'full') {
+    await recordReader(linkId, withReaderAccess({ status: 'fetch_failed' }, extracted), fetchedAt);
     await recordThenMaybeSettle(link, {
       status: 'full',
       ...aiTitleFields(aiTitle),
@@ -701,4 +705,13 @@ function isFinishedSweepDuplicate(
 function updateRenderedStatus(extracted: ExtractResult, selected: ReaderExtraction): void {
   if (selected.status === 'reader' && selected.reader !== extracted.reader)
     extracted.status = (selected.text?.length ?? 0) >= FULL_TEXT_THRESHOLD ? 'full' : 'partial';
+}
+
+async function recordBlockedFetch(
+  id: string,
+  result: SafeFetchResult,
+  fetchedAt: Date,
+): Promise<void> {
+  if (blockedFetch(result))
+    await recordReader(id, withReaderAccess({ status: 'fetch_failed' }, result), fetchedAt);
 }
