@@ -16,7 +16,8 @@ everything`, and Open and Copy use the URL without the `utm_*` params.
 1. **Clean at read time. Never rewrite stored data.** `links.url` keeps the raw
    URL exactly as captured. The served URL is computed when a link leaves core
    for an adapter. Effect: a wrong rule is fixed by editing the rule, and the
-   fix applies to every link. No migration, no backfill, no data loss.
+   fix applies to every link. The change needs no migration or backfill and
+   loses no data.
 2. **One setting, on by default.** `linkCleaning` holds `enabled` plus
    per-domain `keep` and `strip` rules. Default on is safe because of
    decision 1.
