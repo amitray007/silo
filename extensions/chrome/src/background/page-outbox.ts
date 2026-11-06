@@ -1,7 +1,7 @@
 import { getSettings } from '../lib/settings.js';
 
 type Page = { url: string; html: string; capturedAt: string };
-type Entry = Page & { linkId: string; attempts: number };
+type Entry = Page & { linkId: string; baseUrl: string; attempts: number };
 const ALARM = 'silo-page-outbox';
 
 function database(): Promise<IDBDatabase> {
@@ -36,6 +36,7 @@ export function readPage(tabId: number | undefined, url: string): Promise<Page |
   return chrome.scripting
     .executeScript({
       target: { tabId, frameIds: [0] },
+      injectImmediately: true,
       func: () => {
         const html = document.documentElement.outerHTML;
         if (new TextEncoder().encode(html).byteLength > 8 * 1024 * 1024) return undefined;
@@ -49,9 +50,9 @@ export function readPage(tabId: number | undefined, url: string): Promise<Page |
     .catch(() => undefined);
 }
 
-export async function queuePage(linkId: string, page: Page): Promise<void> {
+export async function queuePage(linkId: string, page: Page, baseUrl: string): Promise<void> {
   await transact('readwrite', (store) =>
-    store.put({ ...page, linkId, attempts: 0 } satisfies Entry),
+    store.put({ ...page, linkId, baseUrl, attempts: 0 } satisfies Entry),
   );
   await chrome.alarms.create(ALARM, { periodInMinutes: 5 });
   await retryPages();
@@ -81,6 +82,10 @@ async function upload(entry: Entry): Promise<void> {
   await transact('readwrite', (store) => store.put({ ...entry, attempts: entry.attempts + 1 }));
   try {
     const settings = await getSettings();
+    if (settings.baseUrl !== entry.baseUrl) {
+      await transact('readwrite', (store) => store.delete([entry.linkId, entry.capturedAt]));
+      return;
+    }
     const response = await fetch(`${settings.baseUrl}/api/links/${entry.linkId}/page`, {
       method: 'PUT',
       headers: {

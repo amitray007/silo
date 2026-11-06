@@ -1,4 +1,5 @@
 import { CaptureError, captureLink } from '../lib/capture-client.js';
+import { getSettings } from '../lib/settings.js';
 import { isCapturableUrl, tabDisplayTitle } from '../lib/tab-payload.js';
 import { showToast } from '../lib/toast.js';
 import type { CaptureRequest } from '../lib/types.js';
@@ -22,8 +23,11 @@ export async function runQuietCapture(
   const page = includePage ? readPage(tabId, request.url) : Promise.resolve(undefined);
   void retryPages().catch(() => {});
   try {
-    const { link, deduped } = await captureLink(request);
-    void page.then((copy) => (copy ? queuePage(link.id, copy) : undefined)).catch(() => {});
+    const settings = await getSettings();
+    const { link, deduped } = await captureLink(request, settings);
+    void page
+      .then((copy) => (copy ? queuePage(link.id, copy, settings.baseUrl) : undefined))
+      .catch(() => {});
     if (tabId !== undefined) {
       await showToast(tabId, {
         kind: deduped ? 'deduped' : 'saved',

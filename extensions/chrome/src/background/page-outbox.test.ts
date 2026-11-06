@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { saveSettings } from '../lib/settings.js';
 import { queuePage, readPage, retryPages } from './page-outbox.js';
 
 beforeEach(() => {
@@ -19,7 +20,7 @@ describe('durable browser page outbox', () => {
   it('retries after service-worker module restart and removes successful entries', async () => {
     const fetch = vi.fn().mockRejectedValue(new Error('offline'));
     vi.stubGlobal('fetch', fetch);
-    await queuePage('saved-id', page);
+    await queuePage('saved-id', page, 'http://localhost:8787');
     expect(fetch).toHaveBeenCalledTimes(1);
     vi.resetModules();
     fetch.mockResolvedValue(new Response(null, { status: 202 }));
@@ -32,24 +33,45 @@ describe('durable browser page outbox', () => {
   it.each([400, 401, 404, 413])('drops terminal HTTP %s', async (status) => {
     const fetch = vi.fn(async () => new Response(null, { status }));
     vi.stubGlobal('fetch', fetch);
-    await queuePage('saved-id', page);
+    await queuePage('saved-id', page, 'http://localhost:8787');
     await retryPages();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
   it.each([408, 429, 500])('retries HTTP %s only five times', async (status) => {
     const fetch = vi.fn(async () => new Response(null, { status }));
     vi.stubGlobal('fetch', fetch);
-    await queuePage('saved-id', page);
+    await queuePage('saved-id', page, 'http://localhost:8787');
     for (let i = 0; i < 7; i++) await retryPages();
     expect(fetch).toHaveBeenCalledTimes(5);
+  });
+  it('drops pending HTML when the destination changes', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('offline'));
+    vi.stubGlobal('fetch', fetch);
+    await queuePage('saved-id', page, 'http://localhost:8787');
+    await saveSettings({ baseUrl: 'https://different.example', token: 'new-token' });
+    await retryPages();
+    await retryPages();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('uses the current token for the same server', async () => {
+    const fetch = vi.fn().mockRejectedValue(new Error('offline'));
+    vi.stubGlobal('fetch', fetch);
+    await queuePage('saved-id', page, 'http://localhost:8787');
+    await saveSettings({ baseUrl: 'http://localhost:8787', token: 'rotated' });
+    await retryPages();
+    expect(fetch.mock.calls[1]?.[1].headers.Authorization).toBe('Bearer rotated');
   });
   it('drops expired copies without uploading', async () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
-    await queuePage('saved-id', {
-      ...page,
-      capturedAt: new Date(Date.now() - 8 * 86400_000).toISOString(),
-    });
+    await queuePage(
+      'saved-id',
+      {
+        ...page,
+        capturedAt: new Date(Date.now() - 8 * 86400_000).toISOString(),
+      },
+      'http://localhost:8787',
+    );
     expect(fetch).not.toHaveBeenCalled();
   });
   it('skips pages larger than eight megabytes before returning a copy', async () => {
@@ -70,7 +92,7 @@ describe('durable browser page outbox', () => {
     ]);
     expect(await readPage(12, 'https://different.org/')).toBeUndefined();
     expect(chrome.scripting.executeScript).toHaveBeenCalledWith(
-      expect.objectContaining({ target: { tabId: 12, frameIds: [0] } }),
+      expect.objectContaining({ target: { tabId: 12, frameIds: [0] }, injectImmediately: true }),
     );
   });
 });

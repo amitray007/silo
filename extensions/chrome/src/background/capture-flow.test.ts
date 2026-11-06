@@ -30,6 +30,7 @@ describe('runQuietCapture', () => {
     vi.spyOn(toast, 'showToast').mockResolvedValue(undefined);
     const capture = runQuietCapture({ url: 'https://example.com' }, 'Example', 7);
     expect(chrome.scripting.executeScript).toHaveBeenCalled();
+    await vi.waitFor(() => expect(finish).toBeDefined());
     finish?.({
       link: { id: 'id', url: 'https://example.com', title: null, notes: null, tags: [] },
       deduped: false,
@@ -143,7 +144,10 @@ describe('captureActiveTab', () => {
 
     await captureActiveTab();
 
-    expect(captureClient.captureLink).toHaveBeenCalledWith({ url: 'https://example.com' });
+    expect(captureClient.captureLink).toHaveBeenCalledWith(
+      { url: 'https://example.com' },
+      { baseUrl: 'http://localhost:8787', token: '' },
+    );
   });
 
   it('no-ops on a non-http(s) active tab (e.g. chrome://extensions)', async () => {
@@ -191,7 +195,10 @@ describe('captureTab', () => {
     } as chrome.tabs.Tab);
 
     expect(chrome.tabs.query).not.toHaveBeenCalled();
-    expect(captureClient.captureLink).toHaveBeenCalledWith({ url: 'https://clicked.example' });
+    expect(captureClient.captureLink).toHaveBeenCalledWith(
+      { url: 'https://clicked.example' },
+      { baseUrl: 'http://localhost:8787', token: '' },
+    );
   });
 
   it('no-ops when the supplied tab is not capturable', async () => {

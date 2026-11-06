@@ -1,4 +1,4 @@
-import { getSettings } from './settings.js';
+import { getSettings, type Settings } from './settings.js';
 import type {
   ApiErrorEnvelope,
   CapturedLink,
@@ -29,8 +29,12 @@ export class CaptureError extends Error {
 /** Every request gets a hard timeout (ce-reliability finding): without one, a hung (not down, just stuck) silo leaves the service-worker capture — and the options page's "test connection" — waiting forever instead of surfacing an actionable error. */
 const REQUEST_TIMEOUT_MS = 10_000;
 
-async function apiFetch(path: string, init: RequestInit): Promise<Response> {
-  const settings = await getSettings();
+async function apiFetch(
+  path: string,
+  init: RequestInit,
+  destination?: Settings,
+): Promise<Response> {
+  const settings = destination ?? (await getSettings());
   const headers = new Headers(init.headers);
   headers.set('Content-Type', 'application/json');
   // Token is read fresh per-call from storage, never logged (ce-security:
@@ -81,11 +85,18 @@ async function safeErrorBody(response: Response): Promise<ApiErrorEnvelope | und
  * stamped HERE, centrally, so every entry point inherits it without having
  * to pass it itself (capture-source design spec, U3).
  */
-export async function captureLink(input: CaptureRequest): Promise<CaptureResponse> {
-  const response = await apiFetch('/api/links', {
-    method: 'POST',
-    body: JSON.stringify({ ...input, source: 'chrome' }),
-  });
+export async function captureLink(
+  input: CaptureRequest,
+  settings?: Settings,
+): Promise<CaptureResponse> {
+  const response = await apiFetch(
+    '/api/links',
+    {
+      method: 'POST',
+      body: JSON.stringify({ ...input, source: 'chrome' }),
+    },
+    settings,
+  );
   return (await response.json()) as CaptureResponse;
 }
 
