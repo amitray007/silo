@@ -6,7 +6,7 @@ import {
   librarianActionsSchema,
   librarianActionsStoredSchema,
 } from '../librarian/actions.js';
-import { LINK_CLEANING_DEFAULTS } from '../links/clean-url.js';
+import { LINK_CLEANING_DEFAULTS } from '../links/link-cleaning-defaults.js';
 import { type ReaderSettings, readerSchema, readerStoredSchema } from './reader.js';
 
 const registeredFeatureIds: ReadonlySet<string> = new Set(

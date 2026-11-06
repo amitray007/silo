@@ -3,6 +3,11 @@ import { parseSettingValue } from '../settings/schema.js';
 import { cleanUrl, LINK_CLEANING_DEFAULTS } from './clean-url.js';
 
 describe('cleanUrl', () => {
+  it('shares the import-free defaults with the settings schema', async () => {
+    const { LINK_CLEANING_DEFAULTS: defaults } = await import('./link-cleaning-defaults.js');
+    expect(defaults).toBe(LINK_CLEANING_DEFAULTS);
+    expect(parseSettingValue('linkCleaning', defaults)).toEqual(defaults);
+  });
   it.each(LINK_CLEANING_DEFAULTS.everySite)('strips default %s', (param) => {
     const name = param.replace('*', 'source');
     expect(cleanUrl(`https://example.com/?${name}=x`, LINK_CLEANING_DEFAULTS)).toEqual({
