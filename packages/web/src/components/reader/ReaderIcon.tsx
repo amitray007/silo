@@ -12,7 +12,7 @@ const paths = {
   highlighter: 'm13.5 4.5 6 6-8.5 8.5H5.5v-6zM4 21h7',
   quote: 'M5 17c0-4 1-7 4-9M13 17c0-4 1-7 4-9M5 17h4v-4H5zM13 17h4v-4h-4z',
   page: 'M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8M14 3.5 18.5 8M14 3.5V8h4.5M9 12.5h6M9 16h4',
-  sync: 'M20 7a8 8 0 0 0-13-3L4 7m0-5v5h5M4 17a8 8 0 0 0 13 3l3-3m0 5v-5h-5',
+  sync: 'M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5',
   refresh: 'M20 9a8 8 0 1 0 0 6M20 3v6h-6',
   close: 'M6 6l12 12M18 6 6 18',
   up: 'm6 15 6-6 6 6',
@@ -27,7 +27,7 @@ const paths = {
   copyRounded:
     'M8 5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2M5 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z',
   check: 'm5 12.5 4.5 4.5L19 7',
-  speaker: 'M4 9.5v5h3.5l5 4v-13l-5 4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
+  speaker: 'M3 9.5h3.5L12 5v14l-5.5-4.5H3zM16 9a4 4 0 0 1 0 6M19 6a8.5 8.5 0 0 1 0 12',
   edit: 'm16 3 5 5-12 12-6 1 1-6zM13 6l5 5',
   /** The pen from the approved mockup: one nib, no ridge, so it reads apart from `highlighter`. */
   pen: 'M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z',

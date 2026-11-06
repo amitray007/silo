@@ -73,7 +73,7 @@ function UserMessage({ message, style }: { message: UIMessage; style: CSSPropert
           title={label}
           onClick={() => copyText(text)}
         >
-          <ReaderIcon name={copied === true ? 'check' : 'copyRounded'} size={20} />
+          <ReaderIcon name={copied === true ? 'check' : 'copyRounded'} size={16} />
         </button>
       </div>
     </div>
@@ -192,9 +192,6 @@ export const ChatMessage = memo(function ChatMessage({
   const reasoning = held ? null : messageReasoning(message);
   return (
     <div className="silo-chat-message silo-chat-assistant" data-streaming={streaming} style={style}>
-      <span className="silo-chat-avatar" aria-hidden="true">
-        <ReaderIcon name="librarian" size={16} />
-      </span>
       <div className="silo-chat-assistant-body">
         {fixedTrace ? (
           <TurnTrace

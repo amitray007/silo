@@ -20,7 +20,7 @@ function Disclosure({
   return (
     <button type="button" className="silo-reasoning-head" aria-expanded={open} onClick={onToggle}>
       {children}
-      <ReaderIcon name="right" size={14} />
+      <ReaderIcon name="right" size={12} />
     </button>
   );
 }

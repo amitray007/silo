@@ -307,7 +307,7 @@ it('keeps completed paragraphs and list numbering through streaming and completi
 });
 
 describe('chat look', () => {
-  it('shows the owner turn as a bubble and the Librarian answer as plain text beside its tile', () => {
+  it('shows the owner turn as a bubble and the Librarian answer as plain full-width text', () => {
     const user = render(
       <ChatMessage message={{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Why?' }] }} />,
     );
@@ -317,7 +317,7 @@ describe('chat look', () => {
     user.unmount();
     const { container } = render(<ChatMessage message={reply('Because.')} />);
     expect(container.querySelector('.silo-chat-bubble')).toBeNull();
-    expect(container.querySelector('.silo-chat-avatar svg')).toBeTruthy();
+    expect(container.querySelector('.silo-chat-avatar')).toBeNull();
     expect(container.querySelector('.silo-chat-assistant-body')?.textContent).toContain('Because.');
   });
 

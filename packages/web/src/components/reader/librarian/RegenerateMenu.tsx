@@ -195,7 +195,7 @@ export function RegenerateMenu({
         aria-expanded={open}
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <ReaderIcon name="sync" size={20} />
+        <ReaderIcon name="sync" size={16} />
       </button>
       {open && (
         <RegeneratePopover
