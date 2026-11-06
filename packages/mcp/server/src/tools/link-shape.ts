@@ -96,6 +96,7 @@ export function toHighlightContent(highlight: Highlight) {
 
 export const baseLinkShape = {
   id: z.uuid(),
+  originalUrl: z.string(),
   url: z.string(),
   title: z.string().nullable(),
   titleSource: z
@@ -198,10 +199,14 @@ function shapeSourceData(raw: unknown): BaseLinkContent['sourceData'] {
  * fields (e.g. `search_links`'s `rank`) spread this result and add their own
  * on top.
  */
-function toSummaryLinkContent(link: Omit<LinkSummaryWithTags, 'extractedText'>) {
+function toSummaryLinkContent(
+  link: Omit<LinkSummaryWithTags, 'extractedText'>,
+  cleaner: (url: string) => string = (url) => url,
+) {
   return {
     id: link.id,
-    url: link.url,
+    url: cleaner(link.url),
+    originalUrl: link.url,
     title: link.title,
     titleSource: link.titleSource,
     description: link.description,
@@ -219,9 +224,12 @@ function toSummaryLinkContent(link: Omit<LinkSummaryWithTags, 'extractedText'>) 
   };
 }
 
-export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
+export function toBaseLinkContent(
+  link: LinkDetail,
+  cleaner: (url: string) => string = (url) => url,
+): BaseLinkContent {
   return {
-    ...toSummaryLinkContent(link),
+    ...toSummaryLinkContent(link, cleaner),
     extractedText: link.extractedText,
     readingPosition: link.readingPosition
       ? {
@@ -244,8 +252,11 @@ export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
 type SnippetSourceRow = Omit<LinkSummaryWithTags, 'extractedText'> & { snippet: string | null };
 
 /** Build discovery rows from the same summary whitelist as detail reads. */
-export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent {
-  const base = toSummaryLinkContent(link);
+export function toSnippetLinkContent(
+  link: SnippetSourceRow,
+  cleaner: (url: string) => string = (url) => url,
+): SnippetLinkContent {
+  const base = toSummaryLinkContent(link, cleaner);
   const sourceData = base.sourceData;
   if (sourceData.kind === 'feed_media') {
     const { content: _content, ...summary } = sourceData;

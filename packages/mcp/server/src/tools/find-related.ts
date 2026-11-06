@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { findRelated } from '@silo/core';
+import { findRelated, loadUrlCleaner } from '@silo/core';
 import { z } from 'zod';
 import { snippetLinkShape, toRankedResultLine, toSnippetLinkContent } from './link-shape.js';
 
@@ -90,7 +90,11 @@ export function registerFindRelated(server: McpServer): void {
     },
     async ({ id, limit }): Promise<CallToolResult> => {
       const rows = await findRelated(id, limit);
-      const results = rows.map((row) => ({ ...toSnippetLinkContent(row), rank: row.rank }));
+      const cleaner = await loadUrlCleaner();
+      const results = rows.map((row) => ({
+        ...toSnippetLinkContent(row, cleaner),
+        rank: row.rank,
+      }));
       const structuredContent: FindRelatedStructuredContent = {
         results,
         count: results.length,

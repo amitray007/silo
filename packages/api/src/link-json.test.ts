@@ -30,6 +30,19 @@ describeIfPg('link-json (integration)', () => {
     return (await import('@silo/core')) as typeof CoreOps;
   });
 
+  it('serves clean URLs while preserving raw URLs and the whitelist', async () => {
+    const core = harness.mod();
+    const { toLinkJson } = await import('./link-json.js');
+    const raw = 'https://example.com/clean-json?utm_source=x&q=1';
+    const created = await core.createLink({ url: raw, sourceKind: 'link' });
+    const link = await core.getById(created.id);
+    if (!link) throw new Error('missing fixture');
+    const json = toLinkJson(link, await core.loadUrlCleaner());
+    expect(json.url).toBe('https://example.com/clean-json?q=1');
+    expect(json.originalUrl).toBe(raw);
+    expectNoLeakedFields(json);
+  });
+
   it('omits raw show notes from list/search but keeps them on detail', async () => {
     const core = harness.mod();
     const { toLinkJson, toSnippetLinkJson, toSnippetSearchResultJson, toSummaryLinkJson } =

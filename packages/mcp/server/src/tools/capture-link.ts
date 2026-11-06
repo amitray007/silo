@@ -1,7 +1,14 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { CreateLinkInput } from '@silo/core';
-import { canonicalize, captureMany, createLink, getById, willDedupCapture } from '@silo/core';
+import {
+  canonicalize,
+  captureMany,
+  createLink,
+  getById,
+  loadUrlCleaner,
+  willDedupCapture,
+} from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, runBulkGuarded } from './found-result.js';
 import { toBaseLinkContent } from './link-shape.js';
@@ -30,6 +37,7 @@ const { found: _found, ...captureLinkOutputShape } = {
 void _found;
 
 const captureLinkBatchResultShape = {
+  originalUrl: z.string(),
   url: z.string(),
   ok: z.boolean(),
   id: z.uuid().optional(),
@@ -89,6 +97,7 @@ type CaptureLinkBatchInput = {
  * branch, on top of the single-url path's own branches.
  */
 async function runBatchCapture(input: CaptureLinkBatchInput): Promise<CallToolResult> {
+  const cleaner = await loadUrlCleaner();
   // Built conditionally per-input for the same `exactOptionalPropertyTypes`
   // reason the single-URL path documents below.
   const inputs: CreateLinkInput[] = input.urls.map((oneUrl) => {
@@ -108,8 +117,8 @@ async function runBatchCapture(input: CaptureLinkBatchInput): Promise<CallToolRe
 
   const results: CaptureLinkBatchResult[] = outcome.value.map((r) =>
     r.ok
-      ? { url: r.url, ok: true, id: r.id, deduped: r.deduped }
-      : { url: r.url, ok: false, reason: r.reason },
+      ? { url: cleaner(r.url), originalUrl: r.url, ok: true, id: r.id, deduped: r.deduped }
+      : { url: cleaner(r.url), originalUrl: r.url, ok: false, reason: r.reason },
   );
   return {
     content: [{ type: 'text', text: toBatchSuccessText(results) }],
@@ -161,6 +170,7 @@ type CaptureLinkSingleInput = {
  * that it also dispatches to the batch (`urls`) branch above.
  */
 async function runSingleCapture(input: CaptureLinkSingleInput): Promise<CallToolResult> {
+  const cleaner = await loadUrlCleaner();
   const { url, tags, note, sourceKind } = input;
 
   // Decision 1 (plan 004): the URL guard is edge validation, not business
@@ -263,7 +273,7 @@ async function runSingleCapture(input: CaptureLinkSingleInput): Promise<CallTool
   }
 
   const structuredContent: CaptureLinkStructuredContent = {
-    ...toBaseLinkContent(link),
+    ...toBaseLinkContent(link, cleaner),
     deduped,
   };
 

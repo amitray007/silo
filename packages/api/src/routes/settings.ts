@@ -2,6 +2,7 @@ import {
   AI_PROVIDER_KINDS,
   getAllSettings,
   librarianActionsSchema,
+  linkCleaningSchema,
   readerPatchSchema,
   updateSettings,
 } from '@silo/core';
@@ -39,6 +40,7 @@ const settingsBodyLimit = bodyLimit({
  */
 const settingsPatchBodySchema = z
   .object({
+    linkCleaning: linkCleaningSchema.optional(),
     theme: z.enum(['light', 'dark', 'system']).optional(),
     trashPurgeDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional(),
     // Access-tab MCP-toggle unit: mirrors core's `settingsSchema.mcpAccess`
@@ -144,7 +146,10 @@ export function registerSettingsRoutes(app: Hono): void {
 
   app.patch('/settings', settingsBodyLimit, async (c) => {
     const input: unknown = await c.req.json().catch(() => ({}));
-    const hasActions = typeof input === 'object' && input !== null && 'librarianActions' in input;
+    const hasActions =
+      typeof input === 'object' &&
+      input !== null &&
+      ('librarianActions' in input || 'linkCleaning' in input);
     if (!hasActions && (await c.req.arrayBuffer()).byteLength > READER_BODY_LIMIT_BYTES) {
       return c.json({ error: 'payload_too_large', message: 'Request body exceeds 16 KB' }, 413);
     }

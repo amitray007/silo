@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { getById, removeTag, removeTagMany } from '@silo/core';
+import { getById, loadUrlCleaner, removeTag, removeTagMany } from '@silo/core';
 import { z } from 'zod';
 import {
   bulkItemResultShape,
@@ -62,6 +62,7 @@ export function registerRemoveLinkTag(server: McpServer): void {
       outputSchema: removeTagOutputSchema,
     },
     async ({ id, ids, tag }): Promise<CallToolResult> => {
+      const cleaner = await loadUrlCleaner();
       if (ids !== undefined) {
         const outcome = await runBulkGuarded(() => removeTagMany(ids, tag));
         if (!outcome.ok) return outcome.error;
@@ -112,7 +113,11 @@ export function registerRemoveLinkTag(server: McpServer): void {
         };
       }
 
-      return foundResult(link, `Removed tag '${tag}' from link ${id} (or it wasn't present).`);
+      return foundResult(
+        link,
+        `Removed tag '${tag}' from link ${id} (or it wasn't present).`,
+        cleaner,
+      );
     },
   );
 }

@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { addTag, addTagMany, getById } from '@silo/core';
+import { addTag, addTagMany, getById, loadUrlCleaner } from '@silo/core';
 import { z } from 'zod';
 import {
   bulkItemResultShape,
@@ -64,6 +64,7 @@ export function registerAddLinkTag(server: McpServer): void {
       outputSchema: addTagOutputSchema,
     },
     async ({ id, ids, tag }): Promise<CallToolResult> => {
+      const cleaner = await loadUrlCleaner();
       if (ids !== undefined) {
         const outcome = await runBulkGuarded(() => addTagMany(ids, tag));
         if (!outcome.ok) return outcome.error;
@@ -111,7 +112,11 @@ export function registerAddLinkTag(server: McpServer): void {
         };
       }
 
-      return foundResult(link, `Added tag '${tag}' to link ${id} (or it was already present).`);
+      return foundResult(
+        link,
+        `Added tag '${tag}' to link ${id} (or it was already present).`,
+        cleaner,
+      );
     },
   );
 }

@@ -1,5 +1,15 @@
 import type { CountFilter, ListFilter, SearchFilter } from '@silo/core';
-import { countLinks, findRelated, getById, list, search } from '@silo/core';
+import {
+  cleanUrl,
+  countLinks,
+  findRelated,
+  getById,
+  getSetting,
+  LINK_CLEANING_DEFAULTS,
+  list,
+  loadUrlCleaner,
+  search,
+} from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import {
@@ -117,6 +127,15 @@ function buildMechanicalFilter<
  * behavioral proof.
  */
 export function registerLinksRoutes(app: Hono): void {
+  app.get('/links/clean-defaults', (c) => c.json(LINK_CLEANING_DEFAULTS));
+  app.post('/links/clean-preview', async (c) => {
+    const body = z
+      .object({ url: z.url({ protocol: /^https?$/ }) })
+      .strict()
+      .parse(await c.req.json().catch(() => null));
+    const config = await getSetting('linkCleaning');
+    return c.json({ ...cleanUrl(body.url, config), originalUrl: body.url });
+  });
   app.get('/links/search', async (c) => {
     const query = searchQuerySchema.parse(c.req.query());
     // Built conditionally (not `{ tag: query.tag }`), matching `list()`'s own
@@ -137,7 +156,8 @@ export function registerLinksRoutes(app: Hono): void {
     }
 
     const result = await search(query.q, searchFilter, toPageParams(query));
-    const results = result.results.map(toSnippetSearchResultJson);
+    const cleaner = await loadUrlCleaner();
+    const results = result.results.map((link) => toSnippetSearchResultJson(link, cleaner));
     return c.json(
       result.nextCursor === undefined ? { results } : { results, nextCursor: result.nextCursor },
     );
@@ -147,12 +167,13 @@ export function registerLinksRoutes(app: Hono): void {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
     const { textOffset, textLimit, view } = detailQuerySchema.parse(c.req.query());
 
+    const cleaner = await loadUrlCleaner();
     if (textOffset !== undefined && textLimit !== undefined) {
       const windowed = await getById(id, { textWindow: { offset: textOffset, limit: textLimit } });
       if (!windowed) {
         return c.json({ error: 'not_found', message: `No link with id ${id}` }, 404);
       }
-      return c.json({ link: toLinkWithTextWindowJson(windowed) });
+      return c.json({ link: toLinkWithTextWindowJson(windowed, cleaner) });
     }
 
     const link = await getById(id, { reader: view === 'reader' });
@@ -162,7 +183,7 @@ export function registerLinksRoutes(app: Hono): void {
     // `{ link }` (not a bare link) so a single link has the SAME envelope on the
     // read path as on every write path (PATCH/capture/tag/trash/restore/retry all
     // return `{ link }`) — a client uses one unwrap for the resource, not per-verb.
-    return c.json({ link: toLinkDetailJson(link) });
+    return c.json({ link: toLinkDetailJson(link, cleaner) });
   });
 
   /**
@@ -180,7 +201,8 @@ export function registerLinksRoutes(app: Hono): void {
     const { limit } = relatedQuerySchema.parse(c.req.query());
 
     const rows = await findRelated(id, limit);
-    const results = rows.map(toSnippetSearchResultJson);
+    const cleaner = await loadUrlCleaner();
+    const results = rows.map((link) => toSnippetSearchResultJson(link, cleaner));
     return c.json({ results, count: results.length });
   });
 
@@ -208,7 +230,8 @@ export function registerLinksRoutes(app: Hono): void {
     }
 
     const result = await list(filter, toPageParams(query));
-    const links = result.links.map(toSnippetLinkJson);
+    const cleaner = await loadUrlCleaner();
+    const links = result.links.map((link) => toSnippetLinkJson(link, cleaner));
     return c.json(
       result.nextCursor === undefined ? { links } : { links, nextCursor: result.nextCursor },
     );

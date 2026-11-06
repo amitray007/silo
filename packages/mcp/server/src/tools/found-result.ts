@@ -31,6 +31,7 @@ export const foundLinkOutputShape = {
   batch: z.boolean().optional(),
   id: baseLinkShape.id.optional(),
   url: baseLinkShape.url.optional(),
+  originalUrl: baseLinkShape.originalUrl.optional(),
   title: baseLinkShape.title.optional(),
   titleSource: baseLinkShape.titleSource.optional(),
   description: baseLinkShape.description.optional(),
@@ -56,10 +57,14 @@ export const foundLinkOutputShape = {
  * duplicating `get_link`'s `toStructuredContent`/success-`content` pairing
  * verbatim (jscpd-flagged clone risk per the W3 build brief).
  */
-export function foundResult(link: LinkDetail, text: string): CallToolResult {
+export function foundResult(
+  link: LinkDetail,
+  text: string,
+  cleaner: (url: string) => string = (url) => url,
+): CallToolResult {
   return {
     content: [{ type: 'text', text }],
-    structuredContent: { found: true, ...toBaseLinkContent(link) },
+    structuredContent: { found: true, ...toBaseLinkContent(link, cleaner) },
   };
 }
 

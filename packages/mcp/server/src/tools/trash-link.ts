@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { softDelete, trashMany } from '@silo/core';
+import { loadUrlCleaner, softDelete, trashMany } from '@silo/core';
 import { z } from 'zod';
 import {
   bulkItemResultShape,
@@ -83,6 +83,7 @@ export function registerTrashLink(server: McpServer): void {
         };
       }
 
+      const cleaner = await loadUrlCleaner();
       const deleted = await softDelete(id);
       if (!deleted) {
         return notFoundResult(
@@ -106,7 +107,8 @@ export function registerTrashLink(server: McpServer): void {
         structuredContent: {
           found: true,
           id: deleted.id,
-          url: deleted.url,
+          url: cleaner(deleted.url),
+          originalUrl: deleted.url,
           title: deleted.title,
           titleSource: deleted.titleSource,
           description: deleted.description,

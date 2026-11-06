@@ -10,6 +10,7 @@ import {
   editLink,
   getById,
   getByIds,
+  loadUrlCleaner,
   patchReaderPrefs,
   readerPatchSchema,
   removeTag,
@@ -325,7 +326,17 @@ export function registerLinksWriteRoutes(app: Hono): void {
     });
     const outcome = await runBulkGuarded(c, () => captureMany(inputs));
     if (!outcome.ok) return outcome.response;
-    return c.json({ results: outcome.value }, 201);
+    const cleaner = await loadUrlCleaner();
+    return c.json(
+      {
+        results: outcome.value.map((result) => ({
+          ...result,
+          url: cleaner(result.url),
+          originalUrl: result.url,
+        })),
+      },
+      201,
+    );
   });
 
   /**
@@ -347,9 +358,10 @@ export function registerLinksWriteRoutes(app: Hono): void {
     const body = batchIdsBodySchema.parse(await c.req.json());
     const outcome = await runBulkGuarded(c, () => getByIds(body.ids));
     if (!outcome.ok) return outcome.response;
+    const cleaner = await loadUrlCleaner();
     const results = outcome.value.map((r) => ({
       id: r.id,
-      link: r.link ? toLinkDetailJson(r.link) : null,
+      link: r.link ? toLinkDetailJson(r.link, cleaner) : null,
     }));
     return c.json({ results }, 200);
   });

@@ -6,6 +6,7 @@ import {
   type EnrichField,
   enrichFieldSchema,
   getById,
+  loadUrlCleaner,
   requestEnrich,
   retryCaptureMany,
 } from '@silo/core';
@@ -78,6 +79,7 @@ export function registerRetryCapture(server: McpServer): void {
       outputSchema: retryCaptureOutputSchema,
     },
     async ({ id, ids, fields }): Promise<CallToolResult> => {
+      const cleaner = await loadUrlCleaner();
       if (ids !== undefined) {
         const outcome = await runBulkGuarded(() =>
           fields === undefined ? retryCaptureMany(ids) : retryCaptureMany(ids, { fields }),
@@ -127,7 +129,7 @@ export function registerRetryCapture(server: McpServer): void {
         };
       }
 
-      return foundResult(link, singleText(id, fields));
+      return foundResult(link, singleText(id, fields), cleaner);
     },
   );
 }

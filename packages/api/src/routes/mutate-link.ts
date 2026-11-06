@@ -1,5 +1,5 @@
 import type { CreateLinkInput } from '@silo/core';
-import { canonicalize, createLink, getById, willDedupCapture } from '@silo/core';
+import { canonicalize, createLink, getById, loadUrlCleaner, willDedupCapture } from '@silo/core';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { toLinkDetailJson } from '../link-json.js';
@@ -38,7 +38,8 @@ export async function respondWithLink(
       404,
     );
   }
-  return c.json({ link: toLinkDetailJson(link) }, status);
+  const cleaner = await loadUrlCleaner();
+  return c.json({ link: toLinkDetailJson(link, cleaner) }, status);
 }
 
 /**
@@ -97,5 +98,6 @@ export async function performCapture(
       404,
     );
   }
-  return c.json({ link: toLinkDetailJson(link), deduped }, 201);
+  const cleaner = await loadUrlCleaner();
+  return c.json({ link: toLinkDetailJson(link, cleaner), deduped }, 201);
 }
