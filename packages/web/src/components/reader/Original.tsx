@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { apiUrl } from '../../api/client';
 import type { LinkJson } from '../../api/types';
+import { formatSnapshotDate } from '../../lib/snapshotDate';
 import { ReaderIcon } from './ReaderIcon';
 import { FrameLoadNotice, PageSkeleton, useFrameLoading } from './ReaderLoading';
 import { ReaderPlayer } from './ReaderPlayer';
@@ -31,7 +32,7 @@ function fallbackCopy(reason: string | undefined): { title: string; body: string
   if (LOAD_ERRORS.includes(reason ?? ''))
     return {
       title: 'Silo could not load this page',
-      body: 'The site did not respond. Open it in your browser, or check the Reader for saved text.',
+      body: "Silo's request for the page failed. Open it in your browser, or check the Reader for saved text.",
     };
   return {
     title: 'This page cannot be shown here',
@@ -45,17 +46,6 @@ function hostOf(url: string): string {
   } catch {
     return url;
   }
-}
-
-function snapshotDate(value: string | undefined): string | undefined {
-  const date = value ? new Date(value) : undefined;
-  if (!date || Number.isNaN(date.getTime())) return undefined;
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
 }
 
 function pageTheme(state: OriginalState): CSSProperties {
@@ -117,7 +107,7 @@ function FallbackCard({
 }
 
 function ArchiveBar({ link, snapshotAt }: { link: LinkJson; snapshotAt: string | undefined }) {
-  const date = snapshotDate(snapshotAt);
+  const date = formatSnapshotDate(snapshotAt);
   return (
     <div className="silo-original-bar">
       <span>Internet Archive copy{date ? ` from ${date}` : ''}. This site blocks Silo.</span>
