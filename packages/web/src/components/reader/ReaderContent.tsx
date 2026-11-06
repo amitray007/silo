@@ -56,23 +56,43 @@ function looksLikePdf(url: string): boolean {
   }
 }
 
+const RESTRICTED_COPY = {
+  paywalled: {
+    title: 'Behind a paywall',
+    reason: 'The site shows this article to subscribers only. Silo saved its details.',
+  },
+  blocked: {
+    title: 'Blocked by the site',
+    reason: 'This site stopped Silo with a bot check. Silo saved the link and its details.',
+  },
+} as const;
+
+function emptyCopy(link: LinkJson): { title: string; reason: string } {
+  if (link.readerAccess) return RESTRICTED_COPY[link.readerAccess];
+  return {
+    title: 'No text to read',
+    reason: looksLikePdf(link.url)
+      ? 'This link is a PDF. Silo saves its details but does not read PDF text yet.'
+      : 'Silo saved this link but could not read text from the page.',
+  };
+}
+
 function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => void }) {
-  const retryable = link.captureStatus === 'partial' || link.captureStatus === 'bare';
-  const reason = looksLikePdf(link.url)
-    ? 'This link is a PDF. Silo saves its details but does not read PDF text yet.'
-    : 'Silo saved this link but could not read text from the page.';
+  const retryable =
+    Boolean(link.readerAccess) || link.captureStatus === 'partial' || link.captureStatus === 'bare';
+  const { title, reason } = emptyCopy(link);
   return (
     <section className="silo-reader-empty" aria-labelledby={`silo-reader-empty-${link.id}`}>
       <span className="silo-reader-empty-icon">
         <ReaderIcon name="page" />
       </span>
-      <h3 id={`silo-reader-empty-${link.id}`}>No text to read</h3>
+      <h3 id={`silo-reader-empty-${link.id}`}>{title}</h3>
       <p>
         {reason}
-        {showLive && ' Try the live page instead.'}
+        {link.readerAccess !== 'blocked' && showLive && ' Try the live page instead.'}
       </p>
       <div className="silo-reader-empty-actions">
-        {showLive && (
+        {link.readerAccess !== 'blocked' && showLive && (
           <button type="button" className="silo-reader-btn" onClick={showLive}>
             Show live page
           </button>
@@ -204,6 +224,7 @@ export function ReaderContent({
           )}
         </figure>
       )}
+      <AccessNotice link={link} hasReader={Boolean(prose)} />
       {source.kind !== 'twitter' &&
         (live.isLoading ? (
           <ReaderSkeleton />
@@ -229,16 +250,27 @@ export function ReaderContent({
         ) : (
           <Paragraphs link={link} />
         ))}
-      {!prose &&
-        !live.isLoading &&
-        source.kind !== 'twitter' &&
-        !link.extractedText?.trim() &&
-        !link.description?.trim() && (
-          <NoCapturedText link={link} {...(showLive && !trashed ? { showLive } : {})} />
-        )}
+      {!prose && !live.isLoading && source.kind !== 'twitter' && hasNoText(link) && (
+        <NoCapturedText link={link} {...(showLive && !trashed ? { showLive } : {})} />
+      )}
       {/* Finds the Reader's scroll area for the refresh scroll reset; renders nothing. */}
       <span ref={anchorRef} hidden />
       <RelatedLinks link={link} html={prose?.contentHtml} trashed={trashed} />
     </>
+  );
+}
+
+function hasNoText(link: LinkJson): boolean {
+  return !link.extractedText?.trim() && Boolean(link.readerAccess || !link.description?.trim());
+}
+function AccessNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean }) {
+  if (link.readerAccess !== 'paywalled' || !(hasReader || link.extractedText?.trim())) return null;
+  return (
+    <p className="silo-reader-access-notice">
+      Subscriber article. Silo saved the part the site shows to everyone.{' '}
+      <a href={link.url} target="_blank" rel="noopener noreferrer">
+        Open original
+      </a>
+    </p>
   );
 }

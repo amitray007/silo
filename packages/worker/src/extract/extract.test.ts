@@ -429,16 +429,16 @@ describe('Reader recovery and image URL normalization', () => {
 });
 
 describe('challenge screens', () => {
-  it('keeps Vimeo metadata without article text, HTML or embedded JSON recovery', async () => {
+  it('drops Vimeo challenge metadata, text and embedded JSON recovery', async () => {
     const result = await extract({
       url: 'https://vimeo.com/76979871',
       html: fixture('challenge-vimeo.html'),
       contentType: 'text/html',
     });
-    expect(result.title).toBe('The New Vimeo Player (You Know, For Videos)');
-    expect(result.description).toBe('Vimeo video preview');
-    expect(result.imageUrl).toBe('https://i.vimeocdn.com/video/poster.jpg');
-    expect(result.status).toBe('partial');
+    expect(result.title).toBeUndefined();
+    expect(result.description).toBeUndefined();
+    expect(result.imageUrl).toBeUndefined();
+    expect(result.status).toBe('bare');
     expect(result.text).toBeUndefined();
     expect(result.reader).toBeUndefined();
   });
@@ -453,6 +453,8 @@ describe('challenge screens', () => {
     '<div id="px-captcha"></div><p>Press &amp; Hold to confirm you are a human</p>',
     '<h1>Pardon Our Interruption</h1><p>Unusual activity detected</p>',
     '<p>Please enable JS and disable any ad blocker</p>',
+    // The Atlantic's Cloudflare block page.
+    '<title>Your access has been blocked – The Atlantic</title><p>Reference ID 1a2b</p>',
   ])('discards challenge copy: %s', async (body) => {
     const result = await extract({
       url: URL_UNDER_TEST,
@@ -461,8 +463,8 @@ describe('challenge screens', () => {
     });
     expect(result.text).toBeUndefined();
     expect(result.reader).toBeUndefined();
-    expect(result.readerFailed).toBe(true);
-    expect(result.title).toBeDefined();
+    expect(result.access).toBe('blocked');
+    expect(result.title).toBeUndefined();
   });
 
   it('keeps an article about bot protection with ordinary Cloudflare scripts', async () => {
@@ -543,4 +545,15 @@ describe('extract - metadata only', () => {
       reader.mockRestore();
     }
   });
+});
+
+it('drops challenge metadata when Reader is disabled', async () => {
+  expect(
+    await extract({
+      url: 'https://example.org/',
+      html: '<title>Just a moment</title><meta name="description" content="Verify"><meta property="og:image" content="https://example.org/a.png">',
+      contentType: 'text/html',
+      reader: false,
+    }),
+  ).toEqual({ status: 'bare', access: 'blocked' });
 });

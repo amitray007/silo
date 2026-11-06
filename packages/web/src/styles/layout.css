@@ -2523,3 +2523,12 @@ div.silo-reader-notecard {
 .silo-reader-icon[data-filled="true"] {
   fill: currentColor;
 }
+
+.silo-reader-access-notice {
+  color: var(--mut);
+  font-size: var(--text-sm);
+}
+.silo-reader-access-notice a {
+  color: var(--ink);
+  text-underline-offset: 2px;
+}

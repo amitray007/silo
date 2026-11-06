@@ -16,6 +16,8 @@
 import type {
   EnrichJobData,
   LinkSummaryWithTags,
+  ObservedReader,
+  ReaderAccess,
   ReaderExtraction,
   SettingsMap,
   SourceData,
@@ -26,6 +28,7 @@ import {
   getSetting,
   recordEnrichment,
   recordReader,
+  recordReaderAccess,
   SETTINGS_DEFAULTS,
   settleGiveUp,
   softDelete,
@@ -37,6 +40,7 @@ import { planEnrich } from './enrich-plan.js';
 import { enrichSource } from './enrich-source/index.js';
 import { xPostTitle } from './enrich-source/twitter-title/index.js';
 import type { XPostTitleInput } from './enrich-source/twitter-title/prompt.js';
+import { readerAccessObservation } from './extract/access.js';
 import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extract.js';
 import { extract } from './extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from './extract/extract-constants.js';
@@ -83,7 +87,8 @@ export interface EnrichLinkDeps {
 }
 
 const defaultDeps: EnrichLinkDeps = {
-  safeFetch: (url) => safeFetch(url, { accept: HTML_ACCEPT }),
+  safeFetch: (url) =>
+    safeFetch(url, { responseHeaderNames: ['cf-mitigated'], accept: HTML_ACCEPT }),
   extract,
   // Adapter, not just a re-export: the real `enrichSource` takes its fetch
   // deps as a 3rd positional param (its own injectable seam, for ITS unit
@@ -447,6 +452,7 @@ async function enrichFullLink(
     }
 
     if (!fetchResult.ok) {
+      await recordBlockedFetch(linkId, fetchResult, fetchedAt);
       await recordThenMaybeSettle(link, {
         status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
         ...aiTitleFields(await aiTitlePromise),
@@ -558,6 +564,7 @@ async function enrichSelectedFields(
     plan.fetch ? deps.safeFetch(link.url) : undefined,
   ]);
   if (fetched && !fetched.ok) {
+    await recordBlockedFetch(link.id, fetched, fetchedAt);
     await recordEnrichment(link.id, { status }, run);
     return;
   }
@@ -603,23 +610,21 @@ async function recordNarrowReader(
   fetched: Extract<SafeFetchResult, { ok: true }> | undefined,
   fetchedAt: Date,
 ): Promise<void> {
-  if (plan.reader && fetched) {
-    const youtube =
-      link.sourceKind === 'youtube'
-        ? extractYouTubeWatch(fetched.html, fetched.finalUrl)
-        : undefined;
-    const selected = await (deps.selectReader ?? selectReader)(
-      link.sourceKind,
-      extracted,
-      youtube,
-      {
-        url: fetched.finalUrl,
-        contentType: fetched.contentType,
-        signal: AbortSignal.timeout(60_000),
-      },
-    );
-    if (link.sourceKind !== 'twitter') await recordReader(link.id, selected, fetchedAt);
+  if (!fetched) return;
+  // Metadata-only extraction skips paywall detection, so only a challenge page is an observation.
+  if (!plan.reader) {
+    if (extracted.access === 'blocked') await recordReaderAccess(link.id, 'blocked', fetchedAt);
+    return;
   }
+  const youtube =
+    link.sourceKind === 'youtube' ? extractYouTubeWatch(fetched.html, fetched.finalUrl) : undefined;
+  const selected = await (deps.selectReader ?? selectReader)(link.sourceKind, extracted, youtube, {
+    url: fetched.finalUrl,
+    contentType: fetched.contentType,
+    signal: AbortSignal.timeout(60_000),
+  });
+  await recordObservedAccess(link.id, selectedAccess(selected, extracted), fetchedAt);
+  if (link.sourceKind !== 'twitter') await recordReader(link.id, selected, fetchedAt);
 }
 
 async function narrowAiTitle(
@@ -656,10 +661,11 @@ type ExtractionRecord = {
 async function recordExtraction(
   link: Pick<LinkSummaryWithTags, 'id' | 'sourceKind' | 'enrichRequestSeq' | 'enrichFields'>,
   extracted: ExtractResult,
-  selected: ReaderExtraction,
+  selected: ObservedReader,
   { sourceData, holdFull, fetchedAt, aiTitle }: ExtractionRecord,
 ): Promise<void> {
   const linkId = link.id;
+  await recordObservedAccess(linkId, selectedAccess(selected, extracted), fetchedAt);
   updateRenderedStatus(extracted, selected);
   if (link.sourceKind === 'youtube') extracted.status = 'partial';
   // A held `full` link whose re-run comes back thin keeps everything it has:
@@ -701,4 +707,26 @@ function isFinishedSweepDuplicate(
 function updateRenderedStatus(extracted: ExtractResult, selected: ReaderExtraction): void {
   if (selected.status === 'reader' && selected.reader !== extracted.reader)
     extracted.status = (selected.text?.length ?? 0) >= FULL_TEXT_THRESHOLD ? 'full' : 'partial';
+}
+
+async function recordBlockedFetch(
+  id: string,
+  result: SafeFetchResult,
+  fetchedAt: Date,
+): Promise<void> {
+  await recordObservedAccess(id, readerAccessObservation(result), fetchedAt);
+}
+
+async function recordObservedAccess(
+  id: string,
+  access: ReaderAccess | null | undefined,
+  observedAt: Date,
+): Promise<void> {
+  if (access !== undefined) await recordReaderAccess(id, access, observedAt);
+}
+
+function selectedAccess(selected: ObservedReader, extracted: ExtractResult) {
+  return selected.observation !== undefined
+    ? selected.observation
+    : readerAccessObservation(extracted);
 }

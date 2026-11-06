@@ -201,8 +201,8 @@ export function useRefreshReader(linkId: string) {
     onSuccess: async (reader) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.liveReader(linkId) });
       queryClient.setQueryData(queryKeys.liveReader(linkId), reader);
-      queryClient.invalidateQueries({ queryKey: queryKeys.link(linkId) });
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.link(linkId) }),
   });
 }
 
@@ -924,6 +924,7 @@ function buildOptimisticLink(input: CaptureRequest): LinkJson {
     extractedText: null,
     sourceKind: 'link',
     sourceData: { kind: 'link' },
+    readerAccess: null,
     captureStatus: 'enriching',
     addedBy: 'user',
     source: 'web',

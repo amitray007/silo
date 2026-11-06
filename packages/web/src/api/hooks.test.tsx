@@ -16,6 +16,7 @@ import {
   useEmptyTrash,
   useInfiniteLinks,
   useLinksByTag,
+  useRefreshReader,
   useRemoveTag,
   useRestoreLink,
   useRetryCapture,
@@ -1482,6 +1483,33 @@ it('refetches settings when an editor mounts even while row settings are fresh',
   vi.unstubAllGlobals();
 });
 
+it.each([200, 422, 502])(
+  'invalidates link detail after Reader refresh settles: %s',
+  async (status) => {
+    const client = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    client.setQueryData(queryKeys.link('access'), makeLink());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        jsonResponse(
+          status === 200
+            ? { contentHtml: '<p>body</p>', contentImages: [], capturedAt: null }
+            : { error: 'failed', message: 'failed' },
+          status,
+        ),
+      ),
+    );
+    const { result } = renderHook(() => useRefreshReader('access'), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await act(async () => {
+      await result.current.mutateAsync().catch(() => {});
+    });
+    expect(client.getQueryState(queryKeys.link('access'))?.isInvalidated).toBe(true);
+  },
+);
 describe('link cleaning settings invalidation', () => {
   afterEach(() => vi.unstubAllGlobals());
   it.each([true, false])(

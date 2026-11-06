@@ -63,5 +63,7 @@ export const aiProviderKind = pgEnum('ai_provider_kind', [
  */
 export const titleSource = pgEnum('title_source', ['page', 'ai', 'user']);
 
+export const readerAccess = pgEnum('reader_access', ['paywalled', 'blocked']);
+
 export const feedFormat = pgEnum('feed_format', ['rss', 'atom', 'rdf', 'json']);
 export const feedStatus = pgEnum('feed_status', ['active', 'failing', 'gone']);

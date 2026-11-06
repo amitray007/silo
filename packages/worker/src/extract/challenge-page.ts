@@ -8,7 +8,7 @@ export function isChallengePage(document: Document): boolean {
     ),
   ].join(' ');
   if (
-    /just a moment|verify (?:to continue|(?:that )?you(?:'re| are) (?:a )?human)|attention required|pardon our interruption|are you a (?:human|robot)/i.test(
+    /just a moment|verify (?:to continue|(?:that )?you(?:'re| are) (?:a )?human)|attention required|pardon our interruption|are you a (?:human|robot)|your access (?:to this (?:site|page) )?(?:has been|is) (?:blocked|denied|restricted)/i.test(
       heading,
     )
   )

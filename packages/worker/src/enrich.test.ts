@@ -502,6 +502,122 @@ describeIfPg('enrichLink (integration)', () => {
     expect((await core.getById(id))?.captureStatus).toBe('partial');
   });
 
+  it('records blocked capture without replacing an existing Reader, then clears access', async () => {
+    const id = await newLink('https://example.com/access');
+    const reader = { contentHtml: '<p>Saved body</p>', contentImages: [] };
+    await core.recordReader(id, { status: 'reader', reader }, new Date());
+    const before = await core.getStoredReader(id);
+    await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', status: 403 }));
+    expect((await core.getById(id))?.readerAccess).toBe('blocked');
+    expect(await core.getStoredReader(id)).toEqual(before);
+    await enrichMod.enrichLink(
+      id,
+      stubDeps(
+        {
+          ok: true,
+          html: '',
+          finalUrl: 'https://example.com/access',
+          contentType: 'text/html',
+          status: 200,
+        },
+        { status: 'full', reader, text: 'Saved body' },
+      ),
+    );
+    expect((await core.getById(id))?.readerAccess).toBeNull();
+  });
+
+  it('opening a live Reader leaves the database unchanged', async () => {
+    const id = await newLink('https://example.com/live-read-only');
+    await core.recordReaderAccess(id, 'blocked', new Date());
+    const before = await core.getById(id);
+    const { createLiveReader } = await import('./reader/live-reader.js');
+    const live = createLiveReader({
+      fetch: async () => ({
+        ok: true,
+        html: '',
+        finalUrl: 'https://example.com/live-read-only',
+        contentType: 'text/html',
+        status: 200,
+      }),
+      extract: async () => ({
+        status: 'full',
+        reader: { contentHtml: '<p>Live</p>', contentImages: [] },
+      }),
+    });
+    await live(
+      { id, url: 'https://example.com/live-read-only', sourceKind: 'link' },
+      AbortSignal.timeout(1000),
+    );
+    expect(await core.getById(id)).toEqual(before);
+  });
+  it('records access for held-full reads without replacing Reader', async () => {
+    const id = await newLink('https://example.com/held-access');
+    const reader = { contentHtml: '<p>Original</p>', contentImages: [] };
+    await core.recordReader(id, { status: 'reader', reader }, new Date());
+    await core.recordEnrichment(id, { status: 'full' });
+    const before = await core.getStoredReader(id);
+    for (const access of ['paywalled', undefined] as const) {
+      await enrichMod.enrichLink(
+        id,
+        stubDeps(
+          {
+            ok: true,
+            html: '',
+            finalUrl: 'https://example.com/held-access',
+            contentType: 'text/html',
+            status: 200,
+          },
+          { status: 'partial', ...(access ? { access } : {}) },
+        ),
+      );
+      expect((await core.getById(id))?.readerAccess).toBe(access ?? null);
+      expect(await core.getStoredReader(id)).toEqual(before);
+    }
+  });
+  it('records blocked fetch when selected fields request Reader', async () => {
+    const id = await newLink('https://example.com/narrow-access');
+    await core.requestEnrich(id, { fields: ['reader'] });
+    await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', status: 403 }));
+    expect((await core.getById(id))?.readerAccess).toBe('blocked');
+  });
+  it('records blocked fetch when selected fields request only metadata', async () => {
+    const id = await newLink('https://example.com/narrow-metadata-access');
+    await core.requestEnrich(id, { fields: ['metadata'] });
+    await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', status: 403 }));
+    expect((await core.getById(id))?.readerAccess).toBe('blocked');
+  });
+  it('keeps a blocked label when a later read fails inside the parser', async () => {
+    const id = await newLink('https://example.com/parser-failure-access');
+    await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', status: 403 }));
+    const page = {
+      ok: true as const,
+      html: '<p>page</p>',
+      finalUrl: 'https://example.com/parser-failure-access',
+      contentType: 'text/html',
+      status: 200,
+    };
+    await enrichMod.enrichLink(id, stubDeps(page, { status: 'bare', readerFailed: true }));
+    expect((await core.getById(id))?.readerAccess).toBe('blocked');
+  });
+  it('never stores a challenge title from a successful HTTP response', async () => {
+    const id = await newLink('https://example.com/challenge-access');
+    const { extract } = await import('./extract/extract.js');
+    const html = '<title>Just a moment...</title><p>Waiting...</p>';
+    const deps = stubDeps({
+      ok: true,
+      html,
+      finalUrl: 'https://example.com/challenge-access',
+      contentType: 'text/html',
+      status: 200,
+    });
+    deps.extract = extract;
+    await enrichMod.enrichLink(id, deps);
+    expect(await core.getById(id)).toMatchObject({
+      title: null,
+      readerAccess: 'blocked',
+      captureStatus: 'bare',
+    });
+  });
   it('fetch blocked-ip -> records bare and RESOLVES (no throw, no retry storm)', async () => {
     const id = await newLink('https://example.com/blocked');
     await expect(

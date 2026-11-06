@@ -1,5 +1,6 @@
 import type { ReaderRefresher } from '@silo/core';
 import { readerContentSchema } from '@silo/core/capture';
+import { readerAccessObservation } from '../extract/access.js';
 import { type ExtractInput, type ExtractResult, extract } from '../extract/extract.js';
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
 import { readFeedMedia } from '../feeds/media.js';
@@ -14,13 +15,16 @@ export function createReaderRefresher(
     extract?: (input: ExtractInput) => Promise<ExtractResult>;
   } = {},
 ): ReaderRefresher {
-  const fetch = deps.fetch ?? ((url, signal) => safeFetch(url, { accept: HTML_ACCEPT, signal }));
+  const fetch =
+    deps.fetch ??
+    ((url, signal) =>
+      safeFetch(url, { responseHeaderNames: ['cf-mitigated'], accept: HTML_ACCEPT, signal }));
   const run = deps.extract ?? extract;
   return async (link, signal) => {
     if (signal.aborted) return { status: 'fetch_failed' };
     if (link.sourceKind === 'feed_media') return readFeedMedia(link.id, link.url, signal);
     const page = await fetch(link.url, signal);
-    if (!page.ok || signal.aborted) return { status: 'fetch_failed' };
+    if (!page.ok || signal.aborted) return failedRead(page, signal);
     const youtube =
       link.sourceKind === 'youtube' ? extractYouTubeWatch(page.html, page.finalUrl) : undefined;
     const extracted = await run({
@@ -39,5 +43,12 @@ export function createReaderRefresher(
     if (!parsed.success) return { status: 'fetch_failed' };
     invalidate(link.id);
     return { ...result, reader: parsed.data };
+  };
+}
+
+function failedRead(page: SafeFetchResult, signal: AbortSignal) {
+  return {
+    status: 'fetch_failed' as const,
+    ...(!signal.aborted ? { observation: readerAccessObservation(page) } : {}),
   };
 }
