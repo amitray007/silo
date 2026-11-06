@@ -74,9 +74,9 @@ describe('durable browser page outbox', () => {
     );
     expect(fetch).not.toHaveBeenCalled();
   });
-  it('skips pages larger than eight megabytes before returning a copy', async () => {
+  it('skips pages larger than nine serialized megabytes before returning a copy', async () => {
     const original = document.documentElement.innerHTML;
-    document.body.textContent = 'x'.repeat(8 * 1024 * 1024);
+    document.body.textContent = 'x'.repeat(9 * 1024 * 1024);
     (chrome.scripting.executeScript as unknown as ReturnType<typeof vi.fn>).mockImplementation(
       async (injection) => [{ result: injection.func() }],
     );
@@ -85,6 +85,46 @@ describe('durable browser page outbox', () => {
     } finally {
       document.documentElement.innerHTML = original;
     }
+  });
+  it('skips quote-heavy HTML that exceeds nine MB after JSON escaping', async () => {
+    const original = document.documentElement.innerHTML;
+    document.body.textContent = '"'.repeat(5 * 1024 * 1024);
+    (chrome.scripting.executeScript as unknown as ReturnType<typeof vi.fn>).mockImplementation(
+      async (injection) => [{ result: injection.func() }],
+    );
+    try {
+      expect(await readPage(12, location.href)).toBeUndefined();
+    } finally {
+      document.documentElement.innerHTML = original;
+    }
+  });
+  it('reruns an empty drain when a page is queued while its alarm clears', async () => {
+    const fetch = vi.fn(async () => new Response(null, { status: 500 }));
+    vi.stubGlobal('fetch', fetch);
+    let release!: () => void;
+    let reached!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const clear = chrome.alarms.clear as unknown as ReturnType<typeof vi.fn>;
+    clear.mockImplementationOnce(async () => {
+      reached();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return true;
+    });
+    const draining = retryPages();
+    await ready;
+    const queued = queuePage('late-id', page, 'http://localhost:8787');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release();
+    await Promise.all([draining, queued]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const create = chrome.alarms.create as unknown as ReturnType<typeof vi.fn>;
+    expect(create.mock.invocationCallOrder.at(-1)).toBeGreaterThan(
+      clear.mock.invocationCallOrder.at(-1) ?? 0,
+    );
   });
   it('skips navigated pages and targets only the top frame', async () => {
     (chrome.scripting.executeScript as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([

@@ -4,16 +4,16 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 
 export const pageBodyLimit = bodyLimit({
-  maxSize: 10 * 1024 * 1024,
+  maxSize: 12 * 1024 * 1024,
   onError: (c) =>
-    c.json({ error: 'payload_too_large', message: 'Request body exceeds 10 MB' }, 413),
+    c.json({ error: 'payload_too_large', message: 'Request body exceeds 12 MB' }, 413),
 });
 const pageSchema = z.object({
   url: z.url(),
   html: z
     .string()
     .min(1)
-    .max(8 * 1024 * 1024),
+    .max(9 * 1024 * 1024),
   capturedAt: z.iso.datetime().transform((s) => new Date(s)),
 });
 export function registerPageSnapshotRoutes(app: Hono): void {

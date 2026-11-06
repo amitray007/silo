@@ -39,12 +39,28 @@ describeIfPg('PUT browser page (Postgres)', () => {
     expect((await request(link.id)).status).toBe(400);
     expect((await request('6f1c1b0e-6f55-4d1c-9a55-1b0f4a3d2e10')).status).toBe(404);
   });
-  it('validates the input and bounds authenticated bodies at 10 MB', async () => {
+  it('validates the input and bounds authenticated bodies at 12 MB', async () => {
     const link = await harness.mod().core.createLink({ sourceKind: 'link', url: page.url });
     expect((await request(link.id, { ...page, capturedAt: 'invalid' })).status).toBe(400);
-    expect((await request(link.id, { ...page, html: 'x'.repeat(10 * 1024 * 1024) })).status).toBe(
+    expect((await request(link.id, { ...page, html: 'x'.repeat(12 * 1024 * 1024) })).status).toBe(
       413,
     );
+  });
+  it('accepts a quote-heavy payload below nine MB', async () => {
+    const link = await harness.mod().core.createLink({ sourceKind: 'link', url: page.url });
+    expect((await request(link.id, { ...page, html: '"'.repeat(4 * 1024 * 1024) })).status).toBe(
+      202,
+    );
+    expect(
+      (await request(link.id, { ...page, html: 'x'.repeat(9 * 1024 * 1024 + 1) })).status,
+    ).toBe(400);
+  });
+  it('accepts nine MB of HTML and JSON escaping below the twelve MB transport limit', async () => {
+    const link = await harness.mod().core.createLink({ sourceKind: 'link', url: page.url });
+    expect(
+      (await request(link.id, { ...page, html: 'x'.repeat(9 * 1024 * 1024 - 200) })).status,
+    ).toBe(202);
+    expect((await request(link.id, { ...page, html: '"'.repeat(5500 * 1024) })).status).toBe(202);
   });
   it('rolls back on queue failure and redacts raw HTML from error logs', async () => {
     const { core } = harness.mod();
@@ -95,7 +111,7 @@ describeIfPg('PUT browser page (Postgres)', () => {
   it('authenticates before the body limit', async () => {
     vi.stubEnv('SILO_API_TOKEN', 'page-secret');
     const link = await harness.mod().core.createLink({ sourceKind: 'link', url: page.url });
-    expect((await request(link.id, { ...page, html: 'x'.repeat(10 * 1024 * 1024) })).status).toBe(
+    expect((await request(link.id, { ...page, html: 'x'.repeat(12 * 1024 * 1024) })).status).toBe(
       401,
     );
     expect((await request(link.id, page, { Authorization: 'Bearer page-secret' })).status).toBe(

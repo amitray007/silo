@@ -242,8 +242,8 @@ bot-checked pages save in full.
   `{ url: location.href, html: document.documentElement.outerHTML, capturedAt }`.
   `activeTab` already covers all three triggers. Reading the page takes well
   under a second, so closing the tab right after the toast is safe.
-- Skip the page copy when the HTML is larger than 8 MB, or when the tab URL
-  no longer equals the captured URL.
+- Skip the page copy when the serialized JSON payload is larger than 9 MB,
+  or when the tab URL no longer equals the captured URL.
 - After both finish, put `{ linkId, baseUrl, url, html, capturedAt, attempts }` in an
   IndexedDB outbox, then upload it. Remove the entry on success or on a 4xx
   answer other than 408/429.
@@ -256,7 +256,7 @@ bot-checked pages save in full.
 ### API and worker
 
 - `PUT /api/links/:id/page` with `{ url, html, capturedAt }`, behind the
-  same auth as capture, with its own 10 MB body limit. Reject when the link
+  same auth as capture, with its own 12 MB body limit. Reject when the link
   does not exist, or when `url` and the link's URL differ after
   canonicalization.
 - Store the HTML in a short-lived table `page_snapshots (link_id primary
@@ -270,9 +270,9 @@ bot-checked pages save in full.
   Reader. A newer extension upload or the owner's "Refresh reader" can. This
   stops the server fetch, which finishes after the click, from overwriting a
   full subscriber Reader with a thin paywalled one.
-- An upload replaces a `feed`, `archive` or earlier `extension` Reader only
-  when its text is at least as long. A non-subscriber's browser sees only the
-  teaser, which must not replace a full article from the feed.
+- An upload replaces a stored Reader when none is usable or its text is at
+  least as long. A non-subscriber's browser sees only the teaser, which must
+  not replace a full article from any source.
 - Raw page HTML can include the user's name or account details from the
   site header. Silo keeps only the extracted Reader and deletes the raw HTML
   after extraction.

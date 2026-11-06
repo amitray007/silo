@@ -39,8 +39,10 @@ export function readPage(tabId: number | undefined, url: string): Promise<Page |
       injectImmediately: true,
       func: () => {
         const html = document.documentElement.outerHTML;
-        if (new TextEncoder().encode(html).byteLength > 8 * 1024 * 1024) return undefined;
-        return { url: location.href, html, capturedAt: new Date().toISOString() };
+        const page = { url: location.href, html, capturedAt: new Date().toISOString() };
+        if (new TextEncoder().encode(JSON.stringify(page)).byteLength > 9 * 1024 * 1024)
+          return undefined;
+        return page;
       },
     })
     .then((results) => {
@@ -58,10 +60,17 @@ export async function queuePage(linkId: string, page: Page, baseUrl: string): Pr
   await retryPages();
 }
 let running: Promise<void> | undefined;
+let rerunRequested = false;
 export function retryPages(): Promise<void> {
   if (typeof indexedDB === 'undefined') return Promise.resolve();
-  if (!running)
-    running = drain().finally(() => {
+  if (running) rerunRequested = true;
+  else
+    running = (async () => {
+      do {
+        rerunRequested = false;
+        await drain();
+      } while (rerunRequested);
+    })().finally(() => {
       running = undefined;
     });
   return running;
@@ -71,7 +80,10 @@ async function drain(): Promise<void> {
   if (entries.length) await chrome.alarms.create(ALARM, { periodInMinutes: 5 });
   for (const entry of entries) await upload(entry);
   const remaining = await transact<number>('readonly', (store) => store.count());
-  if (!remaining) await chrome.alarms.clear(ALARM);
+  if (!remaining && !rerunRequested) {
+    await chrome.alarms.clear(ALARM);
+    if (rerunRequested) await chrome.alarms.create(ALARM, { periodInMinutes: 5 });
+  }
 }
 async function upload(entry: Entry): Promise<void> {
   if (entry.attempts >= 5 || Date.now() - Date.parse(entry.capturedAt) > 7 * 86400_000) {
