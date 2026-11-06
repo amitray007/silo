@@ -41,6 +41,7 @@ export function LinkMenuActions({
   const libraryPost = !isFeedPost(link);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedOriginal, setCopiedOriginal] = useState(false);
   const trash = useTrashLink();
   const retry = useRetryCapture(link.id, link.title ?? deriveTitleFromUrl(link.url));
   const refresh = useRefreshReader(link.id);
@@ -53,10 +54,12 @@ export function LinkMenuActions({
   }, [refreshFailed, resetRefresh]);
   const tags = useLinkTags(link);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const originalTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const tagsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(
     () => () => {
       clearTimeout(copyTimer.current);
+      clearTimeout(originalTimer.current);
       clearTimeout(tagsTimer.current);
     },
     [],
@@ -92,6 +95,19 @@ export function LinkMenuActions({
       >
         {copied ? 'Copied' : 'Copy link'}
       </MenuAction>
+      {link.originalUrl !== link.url && (
+        <MenuAction
+          icon={<ReaderIcon name="copy" />}
+          onClick={() => {
+            navigator.clipboard.writeText(link.originalUrl).catch(() => {});
+            setCopiedOriginal(true);
+            clearTimeout(originalTimer.current);
+            originalTimer.current = setTimeout(() => setCopiedOriginal(false), 700);
+          }}
+        >
+          {copiedOriginal ? 'Copied' : 'Copy original link'}
+        </MenuAction>
+      )}
       {!trashed &&
         !('deletedAt' in link) &&
         link.sourceKind !== 'twitter' &&
