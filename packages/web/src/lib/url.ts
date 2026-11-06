@@ -42,7 +42,21 @@ export function siteName(domain: string): string {
  * pass through unchanged.
  */
 export function deriveTitleFromUrl(url: string): string {
-  return url.replace(/^https?:\/\//i, '');
+  try {
+    const parsed = new URL(url);
+    const host = parsed.host.replace(/^www\./i, '');
+    const path = parsed.pathname.replace(/\/+$/, '');
+    const segment = path.split('/').filter(Boolean).at(-1);
+    if (!segment) return host;
+    const slug = decodeURIComponent(segment).replace(/\.(html?|php|aspx)$/i, '');
+    if (/\p{L}/u.test(slug) && /[-_]/.test(slug)) {
+      const title = slug.replace(/[-_]+/g, ' ');
+      return title.charAt(0).toUpperCase() + title.slice(1);
+    }
+    return host + path;
+  } catch {
+    return url.replace(/^https?:\/\//i, '');
+  }
 }
 
 /**

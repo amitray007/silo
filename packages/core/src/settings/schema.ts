@@ -6,6 +6,7 @@ import {
   librarianActionsSchema,
   librarianActionsStoredSchema,
 } from '../librarian/actions.js';
+import { LINK_CLEANING_DEFAULTS } from '../links/clean-url.js';
 import { type ReaderSettings, readerSchema, readerStoredSchema } from './reader.js';
 
 const registeredFeatureIds: ReadonlySet<string> = new Set(
@@ -53,7 +54,34 @@ const aiSchema = z.object({ enabled: z.boolean(), features: aiFeaturesSchema }).
  * value with zero external importers) — the fix is narrowing the surface,
  * not silencing the finding.
  */
+export const linkCleaningSchema = z
+  .object({
+    enabled: z.boolean(),
+    everySite: z.array(z.string().regex(/^[A-Za-z0-9_.\-~[\]]{1,100}\*?$/)).max(500),
+    sites: z
+      .array(
+        z
+          .object({
+            domain: z
+              .string()
+              .max(253)
+              .regex(/^(?!www\.)[a-z0-9-]+(\.[a-z0-9-]+)+$/),
+            strip: z.array(z.string().regex(/^[A-Za-z0-9_.\-~[\]]{1,100}\*?$/)).max(100),
+            keep: z.array(z.string().regex(/^[A-Za-z0-9_.\-~[\]]{1,100}\*?$/)).max(100),
+          })
+          .strict(),
+      )
+      .max(500),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const domains = value.sites.map((site) => site.domain);
+    if (new Set(domains).size !== domains.length)
+      ctx.addIssue({ code: 'custom', message: 'Site domains must be unique', path: ['sites'] });
+  });
+
 const settingsSchema = {
+  linkCleaning: linkCleaningSchema,
   theme: z.enum(['light', 'dark', 'system']),
   trashPurgeDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
   /**
@@ -154,6 +182,7 @@ export type SettingsMap = { [K in SettingKey]: SettingValue<K> };
 
 /** Sensible defaults returned when a key has never been written (plan 016 QA note). */
 export const SETTINGS_DEFAULTS: SettingsMap = {
+  linkCleaning: LINK_CLEANING_DEFAULTS,
   theme: 'system',
   trashPurgeDays: 30,
   mcpAccess: true,

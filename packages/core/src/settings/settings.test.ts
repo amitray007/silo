@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import type { drizzle } from 'drizzle-orm/node-postgres';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { LIBRARIAN_ACTIONS_DEFAULTS } from '../librarian/actions.js';
+import { LINK_CLEANING_DEFAULTS } from '../links/clean-url.js';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 import type * as SettingsOps from './settings.js';
 
@@ -58,6 +59,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         librarianSuggestions: true,
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
+        linkCleaning: LINK_CLEANING_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -310,6 +312,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         librarianSuggestions: true,
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
+        linkCleaning: LINK_CLEANING_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -356,6 +359,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         librarianSuggestions: true,
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
+        linkCleaning: LINK_CLEANING_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -426,6 +430,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         librarianSuggestions: true,
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
+        linkCleaning: LINK_CLEANING_DEFAULTS,
         ai: {
           enabled: false,
           features: {
