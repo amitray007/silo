@@ -16,6 +16,7 @@
 import type {
   EnrichJobData,
   LinkSummaryWithTags,
+  ObservedReader,
   ReaderExtraction,
   SettingsMap,
   SourceData,
@@ -662,7 +663,7 @@ type ExtractionRecord = {
 async function recordExtraction(
   link: Pick<LinkSummaryWithTags, 'id' | 'sourceKind' | 'enrichRequestSeq' | 'enrichFields'>,
   extracted: ExtractResult,
-  selected: ReaderExtraction,
+  selected: ObservedReader,
   { sourceData, holdFull, fetchedAt, aiTitle }: ExtractionRecord,
 ): Promise<void> {
   const linkId = link.id;
@@ -719,10 +720,7 @@ async function recordBlockedFetch(
   if (access !== undefined) await recordReaderAccess(id, access, fetchedAt);
 }
 
-function selectedAccess(
-  selected: ReaderExtraction & { observation?: 'paywalled' | 'blocked' | null | undefined },
-  extracted: ExtractResult,
-) {
+function selectedAccess(selected: ObservedReader, extracted: ExtractResult) {
   return selected.observation !== undefined
     ? selected.observation
     : (readerAccessObservation(extracted) ?? null);

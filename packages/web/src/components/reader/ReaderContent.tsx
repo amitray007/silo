@@ -56,25 +56,31 @@ function looksLikePdf(url: string): boolean {
   }
 }
 
-function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => void }) {
-  const restricted = Boolean(link.readerAccess);
-  const retryable = restricted || link.captureStatus === 'partial' || link.captureStatus === 'bare';
-  const copy = {
-    paywalled: {
-      title: 'Behind a paywall',
-      reason: 'The site shows this article to subscribers only. Silo saved its details.',
-    },
-    blocked: {
-      title: 'Blocked by the site',
-      reason: 'This site stopped Silo with a bot check. Silo saved the link and its details.',
-    },
-  };
-  const title = link.readerAccess ? copy[link.readerAccess].title : 'No text to read';
-  const reason = link.readerAccess
-    ? copy[link.readerAccess].reason
-    : looksLikePdf(link.url)
+const RESTRICTED_COPY = {
+  paywalled: {
+    title: 'Behind a paywall',
+    reason: 'The site shows this article to subscribers only. Silo saved its details.',
+  },
+  blocked: {
+    title: 'Blocked by the site',
+    reason: 'This site stopped Silo with a bot check. Silo saved the link and its details.',
+  },
+} as const;
+
+function emptyCopy(link: LinkJson): { title: string; reason: string } {
+  if (link.readerAccess) return RESTRICTED_COPY[link.readerAccess];
+  return {
+    title: 'No text to read',
+    reason: looksLikePdf(link.url)
       ? 'This link is a PDF. Silo saves its details but does not read PDF text yet.'
-      : 'Silo saved this link but could not read text from the page.';
+      : 'Silo saved this link but could not read text from the page.',
+  };
+}
+
+function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => void }) {
+  const retryable =
+    Boolean(link.readerAccess) || link.captureStatus === 'partial' || link.captureStatus === 'bare';
+  const { title, reason } = emptyCopy(link);
   return (
     <section className="silo-reader-empty" aria-labelledby={`silo-reader-empty-${link.id}`}>
       <span className="silo-reader-empty-icon">
@@ -242,7 +248,7 @@ export function ReaderContent({
             </ChunkErrorBoundary>
           </>
         ) : (
-          <ReaderFallback link={link} />
+          <Paragraphs link={link} />
         ))}
       {!prose && !live.isLoading && source.kind !== 'twitter' && hasNoText(link) && (
         <NoCapturedText link={link} {...(showLive && !trashed ? { showLive } : {})} />
@@ -256,9 +262,6 @@ export function ReaderContent({
 
 function hasNoText(link: LinkJson): boolean {
   return !link.extractedText?.trim() && Boolean(link.readerAccess || !link.description?.trim());
-}
-function ReaderFallback({ link }: { link: LinkJson }) {
-  return <Paragraphs link={link} />;
 }
 function AccessNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean }) {
   if (link.readerAccess !== 'paywalled' || !(hasReader || link.extractedText?.trim())) return null;

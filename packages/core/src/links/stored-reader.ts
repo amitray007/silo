@@ -7,11 +7,11 @@ export type ReaderExtraction =
   | { status: 'reader'; reader: ReaderContent; text?: string; renderPending?: boolean }
   | { status: 'no_reader'; text?: string; renderPending?: boolean }
   | { status: 'fetch_failed' };
+export type ReaderAccess = 'paywalled' | 'blocked';
+/** `observation` is set only when the read saw the page or a block; `undefined` leaves access as it is. */
+export type ObservedReader = ReaderExtraction & { observation?: ReaderAccess | null | undefined };
 type ReaderLink = { id: string; url: string; sourceKind: string };
-export type ReaderRefresher = (
-  link: ReaderLink,
-  signal: AbortSignal,
-) => Promise<ReaderExtraction & { observation?: 'paywalled' | 'blocked' | null | undefined }>;
+export type ReaderRefresher = (link: ReaderLink, signal: AbortSignal) => Promise<ObservedReader>;
 export type StoredReader = ReaderContent & { capturedAt: string | null };
 type RefreshResult =
   | { status: 'reader'; reader: StoredReader }
@@ -133,7 +133,7 @@ async function extractAndRecord(
       resolve({ status: 'fetch_failed' });
     }, 45_000);
   });
-  let result: ReaderExtraction & { observation?: 'paywalled' | 'blocked' | null | undefined };
+  let result: ObservedReader;
   try {
     result = await Promise.race([run(link, controller.signal), deadline]);
   } catch {
@@ -261,7 +261,7 @@ export async function runReaderBackfill(
 /** Access observations are ordered independently of stored Reader maintenance. */
 export async function recordReaderAccess(
   id: string,
-  access: 'paywalled' | 'blocked' | null,
+  access: ReaderAccess | null,
   observedAt: Date,
 ): Promise<void> {
   await db

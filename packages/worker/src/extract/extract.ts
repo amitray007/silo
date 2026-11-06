@@ -1,5 +1,4 @@
 /** Static metadata and readable content, with isolated, retryable Reader extraction. */
-
 import type { ReaderContent } from '@silo/core';
 import { JSDOM } from 'jsdom';
 import metascraper from 'metascraper';
@@ -235,7 +234,7 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
 }
 
 function pageResult(fields: MetascraperFields, page: PageContent, html: string): ExtractResult {
-  if (page.challenge) return { status: 'bare', access: 'blocked' };
+  if (page.challenge) return { status: 'bare', access: 'blocked', readerFailed: true };
   if ((fields.title === undefined || page.videoDescription) && page.title)
     fields.title = page.title;
   if (fields.description === undefined && page.description) fields.description = page.description;

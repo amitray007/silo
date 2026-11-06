@@ -334,6 +334,8 @@ export type { SourceData } from './links/source-data.js';
 export { sourceDataSchema, THREAD_SIDE_MAX, twitterThreadPostSchema } from './links/source-data.js';
 export {
   getStoredReader,
+  type ObservedReader,
+  type ReaderAccess,
   type ReaderExtraction,
   type ReaderRefresher,
   recordReader,

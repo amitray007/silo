@@ -1,4 +1,4 @@
-import type { ReaderExtraction } from '@silo/core';
+import type { ObservedReader, ReaderExtraction } from '@silo/core';
 import { parseHTML } from 'linkedom';
 import { type BrowserResult, renderReader } from '../browser/reader.js';
 import { readerAccessObservation } from '../extract/access.js';
@@ -37,7 +37,7 @@ export async function selectReader(
     contentType?: string | undefined;
     render?: (url: string, signal?: AbortSignal) => Promise<BrowserResult | undefined>;
   },
-): Promise<ReaderExtraction & { observation?: 'paywalled' | 'blocked' | null | undefined }> {
+): Promise<ObservedReader> {
   const fallback = {
     ...staticReader(sourceKind, extracted, youtube),
     observation: readerAccessObservation(extracted),
