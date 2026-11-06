@@ -489,12 +489,21 @@ export type OAuthClientsResponse = { clients: ConnectedOAuthClient[] };
  */
 export type AppConfig = { mcpUrl?: string };
 
-export type FrameHint = {
-  mode: 'direct' | 'view' | 'none';
-  reason?: string;
-  contentType?: string;
-  darkTheme?: boolean;
-};
+export type FrameHint =
+  | {
+      mode: 'archive';
+      archiveUrl: string;
+      snapshotAt: string;
+      darkTheme?: never;
+      reason?: never;
+      contentType?: never;
+    }
+  | {
+      mode: 'direct' | 'view' | 'none';
+      reason?: string;
+      contentType?: string;
+      darkTheme?: boolean;
+    };
 
 export type SavedLinksResponse = { saved: string[] };
 /** Titles keyed by URL; a missing URL means no usable title was found. */

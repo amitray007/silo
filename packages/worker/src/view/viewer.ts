@@ -6,6 +6,7 @@ import {
   setPageViewer,
 } from '@silo/core';
 import { blockedFetch } from '../extract/access.js';
+import { archiveSnapshot, findArchiveSnapshot } from '../fetch/archive.js';
 import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 import { PageCache } from './cache.js';
 import { addDarkPageStyle } from './dark-theme.js';
@@ -30,6 +31,7 @@ type Pending = { controller: AbortController; promise: Promise<Page>; users: num
 type ViewerOptions = {
   fetch?: (url: string, signal: AbortSignal) => Promise<SafeFetchResult>;
   transform?: (html: string, finalUrl: string, signal: AbortSignal) => Promise<StyledPage>;
+  archiveFetch?: (url: string, signal: AbortSignal) => Promise<SafeFetchResult>;
   cacheBytes?: number;
   ttlMs?: number;
   waitMs?: number;
@@ -91,6 +93,26 @@ export function createPageViewer(options: ViewerOptions = {}): {
   const limit = new ViewLimit(options.waitMs);
   const refreshed = new Map<string, number>();
   const pending = new Map<string, Pending>();
+  const archives = new Map<string, { until: number; url: string; snapshot: FrameHint }>();
+
+  async function archiveHint(
+    id: string,
+    url: string,
+    signal: AbortSignal,
+    stored?: Date,
+  ): Promise<FrameHint> {
+    const snapshot = stored ? archiveSnapshot(stored) : undefined;
+    if (snapshot) return archiveFrame(url, snapshot);
+    const cached = archives.get(id);
+    if (cached && cached.url === url && cached.until > Date.now()) return cached.snapshot;
+    const found = await findArchiveSnapshot(url, signal, options.archiveFetch);
+    signal.throwIfAborted();
+    const frame = found ? archiveFrame(url, found) : { mode: 'none' as const, reason: 'blocked' };
+    archives.delete(id);
+    archives.set(id, { until: Date.now() + 3_600_000, url, snapshot: frame });
+    if (archives.size > 500) archives.delete(archives.keys().next().value ?? '');
+    return frame;
+  }
 
   async function load(url: string, signal: AbortSignal): Promise<Page> {
     const release = await limit.acquire(signal);
@@ -176,7 +198,7 @@ export function createPageViewer(options: ViewerOptions = {}): {
     return true;
   }
 
-  const view: PageViewer = async ({ id, url, origin, signal, fresh }) => {
+  const view: PageViewer = async ({ id, url, origin, signal, fresh, archiveSnapshotAt }) => {
     signal.throwIfAborted();
     const key = `${id}:${url}`;
     const bypass = bypassCache(id, fresh);
@@ -186,7 +208,11 @@ export function createPageViewer(options: ViewerOptions = {}): {
     const page = entry
       ? await subscribe(entry, signal)
       : (cached ?? (await subscribe(start(key, url), signal)));
-    return { frame: hintFor(page, origin), ...(page.html ? { html: page.html.toString() } : {}) };
+    const frame =
+      page.reason === 'blocked'
+        ? await archiveHint(id, url, signal, archiveSnapshotAt)
+        : hintFor(page, origin);
+    return { frame, ...(page.html ? { html: page.html.toString() } : {}) };
   };
   return {
     view,
@@ -195,6 +221,7 @@ export function createPageViewer(options: ViewerOptions = {}): {
       await Promise.allSettled(Array.from(pending.values(), (entry) => entry.promise));
       await pool.close();
       cache.clear();
+      archives.clear();
     },
   };
 }
@@ -213,4 +240,12 @@ export function registerPageViewer(): { close: () => Promise<void> } {
 
 function fetchFailureReason(result: Extract<SafeFetchResult, { ok: false }>): string {
   return blockedFetch(result) ? 'blocked' : result.reason;
+}
+
+function archiveFrame(url: string, snapshot: { stamp: string; date: Date }): FrameHint {
+  return {
+    mode: 'archive',
+    archiveUrl: `https://web.archive.org/web/${snapshot.stamp}if_/${url}`,
+    snapshotAt: snapshot.date.toISOString(),
+  };
 }

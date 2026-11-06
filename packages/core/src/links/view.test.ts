@@ -9,6 +9,29 @@ afterEach(() => {
 });
 
 describe('PageViewer port', () => {
+  it('passes a snapshot only for an archive Reader', async () => {
+    const date = new Date('2026-10-16T01:02:03Z');
+    const viewer = vi.fn(async (_input: Parameters<import('./view.js').PageViewer>[0]) => ({
+      frame: { mode: 'none' as const },
+    }));
+    setPageViewer(viewer);
+    for (const readerSource of ['archive', 'extension'] as const) {
+      vi.mocked(getById).mockResolvedValue({
+        url: 'https://stored.test',
+        readerSource,
+        readerSourceAt: date,
+      } as Awaited<ReturnType<typeof getById>>);
+      await viewPage('id', 'https://silo.test', new AbortController().signal);
+      const input = viewer.mock.calls.at(-1);
+      expect(input).toBeDefined();
+      expect(viewer).toHaveBeenLastCalledWith(
+        expect.objectContaining(
+          readerSource === 'archive' ? { archiveSnapshotAt: date } : { url: 'https://stored.test' },
+        ),
+      );
+      if (readerSource !== 'archive') expect(input?.[0]).not.toHaveProperty('archiveSnapshotAt');
+    }
+  });
   it('fails closed without a registered viewer', async () => {
     vi.mocked(getById).mockResolvedValue({ url: 'https://stored.test' } as Awaited<
       ReturnType<typeof getById>

@@ -40,7 +40,12 @@ function isAppOrigin(url: string | undefined): boolean {
 function originalMode(embed: boolean, hinted: FrameHint['mode'] | undefined, appOrigin: boolean) {
   if (embed) return 'player' as const;
   if (hinted === 'direct') return appOrigin ? ('view' as const) : hinted;
-  return hinted === 'view' ? hinted : ('card' as const);
+  return hinted === 'view' || hinted === 'archive' ? hinted : ('card' as const);
+}
+
+function hintFields(hint: FrameHint | undefined) {
+  if (hint?.mode === 'archive') return { archiveUrl: hint.archiveUrl };
+  return { darkTheme: hint?.darkTheme, reason: hint?.reason };
 }
 
 export function useOriginal(link: LinkJson | undefined, active: boolean) {
@@ -89,10 +94,15 @@ export function useOriginal(link: LinkJson | undefined, active: boolean) {
     theme,
     darkPage: !lightPage,
     toggleDarkPage: () => setLightPage(!lightPage),
-    darkTheme: hint.data?.darkTheme,
+    ...hintFields(hint.data),
     mode: unavailable ? ('card' as const) : mode,
     preparing,
-    reason: hint.isError || unavailable ? 'fetch-error' : hint.data?.reason,
+    reason:
+      hint.isError || unavailable
+        ? 'fetch-error'
+        : hint.data && 'reason' in hint.data
+          ? hint.data.reason
+          : undefined,
     reload,
     refresh,
   };

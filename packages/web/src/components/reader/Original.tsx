@@ -31,10 +31,24 @@ function pageTheme(state: OriginalState): CSSProperties {
   return { filter: 'invert(0.9) hue-rotate(180deg)', backgroundColor: 'white' };
 }
 
+function frameSandbox(mode: OriginalState['mode']): string {
+  if (mode === 'archive')
+    return 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox';
+  if (mode === 'view') return 'allow-scripts allow-popups allow-popups-to-escape-sandbox';
+  return 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation';
+}
+
+function frameUrl(link: LinkJson, state: OriginalState): string {
+  if (state.mode === 'archive') return state.archiveUrl ?? '';
+  if (state.mode === 'view')
+    return apiUrl(`/api/links/${encodeURIComponent(link.id)}/view?reload=${state.reload}`);
+  return originalUrl(link.url) ?? '';
+}
+
 function PageSurface({ link, state, showReader }: OriginalProps) {
   const { mode, preparing, reload } = state;
   const { loading, timedOut, onLoad } = useFrameLoading(`${link.id}-${link.url}-${reload}`, 0);
-  const framed = mode === 'direct' || mode === 'view';
+  const framed = mode === 'direct' || mode === 'view' || mode === 'archive';
   const busy = loading && (preparing || framed);
   return (
     <div className="silo-original-surface" aria-busy={busy}>
@@ -42,18 +56,9 @@ function PageSurface({ link, state, showReader }: OriginalProps) {
         <iframe
           key={`${mode}-${reload}`}
           title={mode === 'view' ? 'Silo view' : 'Live page'}
-          sandbox={
-            mode === 'view'
-              ? // Scripts here run only silo's hash-pinned scroll reporter, on an opaque origin.
-                'allow-scripts allow-popups allow-popups-to-escape-sandbox'
-              : 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation'
-          }
+          sandbox={frameSandbox(mode)}
           className="silo-original-frame"
-          src={
-            mode === 'view'
-              ? apiUrl(`/api/links/${encodeURIComponent(link.id)}/view?reload=${reload}`)
-              : (originalUrl(link.url) ?? '')
-          }
+          src={frameUrl(link, state)}
           style={pageTheme(state)}
           referrerPolicy="no-referrer"
           onLoad={onLoad}
