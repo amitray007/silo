@@ -96,8 +96,10 @@ export function toHighlightContent(highlight: Highlight) {
 
 export const baseLinkShape = {
   id: z.uuid(),
-  originalUrl: z.string(),
-  url: z.string(),
+  originalUrl: z.string().describe('The URL exactly as captured.'),
+  url: z
+    .string()
+    .describe("Served URL with tracking parameters removed per the owner's link-cleaning setting."),
   title: z.string().nullable(),
   titleSource: z
     .enum(TITLE_SOURCES)

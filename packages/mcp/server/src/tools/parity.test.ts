@@ -15,6 +15,7 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       'add_link_tag',
       'archive_feed_post',
       'capture_link',
+      'clean_url',
       'create_tag',
       'delete_highlight',
       'delete_tag',
