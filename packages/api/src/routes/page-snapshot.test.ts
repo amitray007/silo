@@ -62,6 +62,36 @@ describeIfPg('PUT browser page (Postgres)', () => {
       log.mockRestore();
     }
   });
+  it('rejects future clocks and never logs malformed private bodies', async () => {
+    const link = await harness.mod().core.createLink({ sourceKind: 'link', url: page.url });
+    const logs = ['error', 'warn', 'log', 'info', 'debug'] as const;
+    const spies = logs.map((name) => vi.spyOn(console, name).mockImplementation(() => {}));
+    const marker = 'PRIVATE_HTML_MARKER';
+    try {
+      const malformed = await harness.mod().app.request(`/api/links/${link.id}/page`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: marker,
+      });
+      expect(malformed.status).toBe(400);
+      expect(await malformed.json()).toEqual({
+        error: 'validation_error',
+        message: 'Invalid page upload',
+      });
+      expect((await request(link.id, { ...page, url: marker })).status).toBe(400);
+      expect(
+        (
+          await request(link.id, {
+            ...page,
+            capturedAt: new Date(Date.now() + 660_000).toISOString(),
+          })
+        ).status,
+      ).toBe(400);
+      for (const spy of spies) expect(JSON.stringify(spy.mock.calls)).not.toContain(marker);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
   it('authenticates before the body limit', async () => {
     vi.stubEnv('SILO_API_TOKEN', 'page-secret');
     const link = await harness.mod().core.createLink({ sourceKind: 'link', url: page.url });

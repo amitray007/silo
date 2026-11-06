@@ -18,8 +18,15 @@ const pageSchema = z.object({
 });
 export function registerPageSnapshotRoutes(app: Hono): void {
   app.put('/links/:id/page', async (c) => {
-    const id = z.uuid().parse(c.req.param('id'));
-    const page = pageSchema.parse(await c.req.json());
+    let id: string;
+    let page: z.output<typeof pageSchema>;
+    try {
+      id = z.uuid().parse(c.req.param('id'));
+      page = pageSchema.parse(await c.req.json());
+      if (+page.capturedAt > Date.now() + 10 * 60_000) throw new Error();
+    } catch {
+      return c.json({ error: 'validation_error', message: 'Invalid page upload' }, 400);
+    }
     const result = await savePageSnapshot(id, page);
     if (result === 'not_found') return c.json({ error: result, message: 'Link not found' }, 404);
     if (result === 'url_mismatch')
