@@ -38,6 +38,7 @@ describe('Save to Home on real Postgres', () => {
       image_url = 'https://example.com/image.jpg', site_name = 'Publisher', extracted_text = 'Reader text',
       content_html = '<p>Reader text</p>', content_images = '["https://example.com/image.jpg"]',
       reader_version = 4, reader_captured_at = '2026-10-29', reader_render_pending = false,
+      reader_access = 'paywalled', reader_access_at = '2026-10-29',
       source_kind = 'link', source_data = '{"kind":"link"}', capture_status = 'full'
       where id = ${row.id}`);
     const enqueue = vi.fn(async () => {});
@@ -62,6 +63,8 @@ describe('Save to Home on real Postgres', () => {
       'reader_version',
       'reader_captured_at',
       'reader_render_pending',
+      'reader_access',
+      'reader_access_at',
       'source_kind',
       'source_data',
       'capture_status',
@@ -69,6 +72,7 @@ describe('Save to Home on real Postgres', () => {
       expect(saved?.[field], field).toEqual(original?.[field]);
     }
     expect(saved).toMatchObject({
+      reader_access: 'paywalled',
       feed_id: null,
       source: 'web',
       added_by: 'user',
