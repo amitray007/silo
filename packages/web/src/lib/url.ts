@@ -48,7 +48,13 @@ export function deriveTitleFromUrl(url: string): string {
     const path = parsed.pathname.replace(/\/+$/, '');
     const segment = path.split('/').filter(Boolean).at(-1);
     if (!segment) return host;
-    const slug = decodeURIComponent(segment).replace(/\.(html?|php|aspx)$/i, '');
+    let decoded = segment;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      // Malformed escapes still have a usable raw path segment.
+    }
+    const slug = decoded.replace(/\.(html?|php|aspx)$/i, '');
     if (/\p{L}/u.test(slug) && /[-_]/.test(slug)) {
       const title = slug.replace(/[-_]+/g, ' ');
       return title.charAt(0).toUpperCase() + title.slice(1);

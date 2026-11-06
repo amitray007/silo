@@ -110,3 +110,12 @@ it.each([
   ['bad input', 'bad input'],
   ['https://example.com/a/my_post.html', 'My post'],
 ])('derives title from %s', (url, title) => expect(deriveTitleFromUrl(url)).toBe(title));
+
+it('keeps query and hash out of titles with malformed escapes', () => {
+  expect(deriveTitleFromUrl('https://example.com/bad%ZZ?secret=1#private')).toBe(
+    'example.com/bad%ZZ',
+  );
+  expect(deriveTitleFromUrl('https://example.com/bad%ZZ-slug?secret=1#private')).toBe(
+    'Bad%ZZ slug',
+  );
+});
