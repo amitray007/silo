@@ -1,4 +1,4 @@
-import { listReadingPositions } from '@silo/core';
+import { listReadingPositions, loadUrlCleaner } from '@silo/core';
 import type { Hono } from 'hono';
 import { readingPositionsQuerySchema } from '../query-schemas.js';
 
@@ -6,9 +6,14 @@ import { readingPositionsQuerySchema } from '../query-schemas.js';
 export function registerReadingPositionRoutes(app: Hono): void {
   app.get('/reading-positions', async (c) => {
     const input = readingPositionsQuerySchema.parse(c.req.query());
-    const page = await listReadingPositions(input);
+    const [page, cleaner] = await Promise.all([listReadingPositions(input), loadUrlCleaner()]);
     const positions = page.positions.map((row) => ({
-      link: { id: row.link.id, title: row.link.title, url: row.link.url },
+      link: {
+        id: row.link.id,
+        title: row.link.title,
+        url: cleaner(row.link.url),
+        originalUrl: row.link.url,
+      },
       position: row.position,
       source: row.source,
       updatedAt: row.updatedAt.toISOString(),

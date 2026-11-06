@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { librarianMcpPersona } from '@silo/core';
 import { registerAddLinkTag } from './tools/add-link-tag.js';
 import { registerCaptureLink } from './tools/capture-link.js';
+import { registerCleanUrl } from './tools/clean-url.js';
 import { registerCreateTag } from './tools/create-tag.js';
 import { registerDeleteTag } from './tools/delete-tag.js';
 import { registerEditLink } from './tools/edit-link.js';
@@ -54,6 +55,7 @@ export function createSiloMcpServer(): McpServer {
   // `tools/list` handler once the first tool is registered, so this call also
   // makes `tools/list` live for the first time.
   registerGetLink(server);
+  registerCleanUrl(server);
   // C4 registers search_links.
   registerSearchLinks(server);
   // C5 registers list_links.

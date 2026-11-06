@@ -6,6 +6,7 @@ export const compactLinkShape = z.object({
   id: z.uuid(),
   title: z.string().nullable(),
   url: z.string(),
+  originalUrl: z.string(),
 });
 export const readingSourceShape = z.enum(['pencil', 'listen', 'mark']);
 export const readerPageInputShape = {

@@ -9,6 +9,20 @@ describeMcpTool(
   'silo_mcp_get_link_test',
   'get_link (integration, via MCP client<->server)',
   (getContext) => {
+    it('serves clean URLs with the raw original', async () => {
+      const { core, client } = getContext();
+      const raw = 'https://example.com/mcp-clean?utm_source=x&q=1';
+      const { id } = await core.createLink({ url: raw, sourceKind: 'link' });
+      const result = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(result.structuredContent).toMatchObject({
+        url: 'https://example.com/mcp-clean?q=1',
+        originalUrl: raw,
+      });
+      expect(JSON.stringify(result.content)).toContain('https://example.com/mcp-clean?q=1');
+      expect(JSON.stringify(result.content)).not.toContain('utm_source');
+      expectNoLeakedFields(result.structuredContent as Record<string, unknown>);
+    });
+
     async function newLink(url: string, tags?: string[]): Promise<string> {
       const { core } = getContext();
       return tags

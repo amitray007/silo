@@ -30,6 +30,7 @@ const settings: SettingsMap = {
   hoverPreview: true,
   reader: null,
   ai: { enabled: false, features: {} },
+  linkCleaning: { enabled: true, everySite: [], sites: [] },
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },

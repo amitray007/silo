@@ -25,6 +25,7 @@ import {
   useTags,
   useTrashLink,
   useTrashList,
+  useUpdateSettings,
 } from './hooks';
 import type { LinksResponse, TrashResponse } from './types';
 
@@ -1509,3 +1510,42 @@ it.each([200, 422, 502])(
     expect(client.getQueryState(queryKeys.link('access'))?.isInvalidated).toBe(true);
   },
 );
+describe('link cleaning settings invalidation', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it.each([true, false])(
+    'invalidates link data only for a cleaning patch (%s)',
+    async (cleaning) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ theme: 'system' })));
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const keys = [
+        queryKeys.links(),
+        queryKeys.recentLinks(),
+        queryKeys.link('a'),
+        queryKeys.search('a'),
+        queryKeys.tagOnlyList('a'),
+        queryKeys.trash(),
+        queryKeys.trashSearch('a'),
+        queryKeys.feedPosts('a'),
+        ['highlights'],
+        ['reading-positions'],
+        ['link-url', 'a'],
+        ['future-link-query'],
+      ];
+      for (const key of [...keys, queryKeys.counts()]) client.setQueryData(key, { url: 'old' });
+      const { result } = renderHook(() => useUpdateSettings(), {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      });
+      await act(async () => {
+        await result.current.mutateAsync(
+          cleaning
+            ? { linkCleaning: { enabled: false, everySite: [], sites: [] } }
+            : { theme: 'system' },
+        );
+      });
+      for (const key of keys) expect(client.getQueryState(key)?.isInvalidated).toBe(cleaning);
+      expect(client.getQueryState(queryKeys.counts())?.isInvalidated).toBe(cleaning);
+    },
+  );
+});

@@ -26,9 +26,9 @@ suite('in-memory Librarian MCP', () => {
     await db?.pool.end();
     drop?.();
   });
-  it('lists all 34 tools and calls get_link against a seeded database', async () => {
+  it('lists all 35 tools and calls get_link against a seeded database', async () => {
     const tools = await handle.source.list();
-    expect(tools).toHaveLength(34);
+    expect(tools).toHaveLength(35);
     expect(tools.map((t) => t.name)).toEqual(
       expect.arrayContaining(['get_link', 'hard_delete_link', 'export_links']),
     );
