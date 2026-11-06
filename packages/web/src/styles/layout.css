@@ -549,8 +549,8 @@
   color: var(--line-2);
 }
 .silo-reader-agent {
-  color: var(--markt);
-  font-weight: 500;
+  color: var(--mut);
+  font-weight: 400;
 }
 .silo-reader-notecard {
   display: block;

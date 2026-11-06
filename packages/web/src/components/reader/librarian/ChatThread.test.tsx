@@ -68,6 +68,31 @@ it('shows a muted Send until there is text', () => {
   expect(screen.queryByRole('status')).toBeNull();
 });
 
+it('releases the starter-action row after an answer with no follow-ups', () => {
+  client.clear();
+  const thread = (messages: UIMessage[]) => (
+    <ChatThread
+      chat={fakeChat({ messages })}
+      composer={composer()}
+      actions={[['summarize', 'Summarize']]}
+      emptyText="Empty"
+      header={null}
+    />
+  );
+  const view = render(thread([]));
+  expect(screen.getByRole('button', { name: 'Summarize' })).toBeTruthy();
+  view.rerender(
+    thread([
+      text('u', 'user', 'Summarize'),
+      {
+        ...text('a', 'assistant', 'Summary'),
+        metadata: { finalAnswer: true, suggestions: [] },
+      },
+    ]),
+  );
+  expect(view.container.querySelector('.silo-composer-chips')).toBeNull();
+});
+
 it('swaps Send for Stop while streaming, and Stop stops the stream', () => {
   const chat = fakeChat({ busy: true });
   mount(chat, 'next question');
@@ -608,11 +633,10 @@ it('hides follow-ups after a request error', async () => {
   fetcher.mockRestore();
 });
 
-it('keeps the chip row in the composer from the first pending frame to the ready answer', () => {
+it('shows the chip row only once the answer has suggestions', () => {
   client.clear();
   const view = mount(fakeChat({ busy: true, messages: [text('u', 'user', 'Hi')] }));
-  const row = document.querySelector('.silo-composer-chips');
-  expect(row).not.toBeNull();
+  expect(document.querySelector('.silo-composer-chips')).toBeNull();
   view.rerender(
     <ChatThread
       chat={fakeChat({
@@ -630,7 +654,7 @@ it('keeps the chip row in the composer from the first pending frame to the ready
       header={null}
     />,
   );
-  expect(document.querySelector('.silo-composer-chips')).toBe(row);
+  expect(document.querySelector('.silo-composer-chips')).not.toBeNull();
   expect(screen.getByRole('button', { name: 'Next' })).toBeTruthy();
 });
 

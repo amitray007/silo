@@ -38,7 +38,7 @@ export function AnswerActions({
         title={copyName}
         onClick={() => copyText(markdown)}
       >
-        <ReaderIcon name={copied === true ? 'check' : 'copy'} size={16} />
+        <ReaderIcon name={copied === true ? 'check' : 'copyRounded'} size={20} />
       </button>
       {speech.available && (
         <button

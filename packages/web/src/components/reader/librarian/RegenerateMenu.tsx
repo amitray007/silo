@@ -115,7 +115,7 @@ function RegeneratePopover({
             className="silo-palette-row silo-regen-again"
             onSelect={() => onPick()}
           >
-            <ReaderIcon name="refresh" size={16} />
+            <ReaderIcon name="sync" size={16} />
             <span className="silo-regen-again-label">Try again</span>
             {currentLabel && <span className="silo-regen-again-model">{currentLabel}</span>}
           </Command.Item>
@@ -195,7 +195,7 @@ export function RegenerateMenu({
         aria-expanded={open}
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <ReaderIcon name="refresh" size={16} />
+        <ReaderIcon name="sync" size={20} />
       </button>
       {open && (
         <RegeneratePopover

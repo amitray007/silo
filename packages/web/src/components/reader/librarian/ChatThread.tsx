@@ -15,6 +15,7 @@ import {
   useRefreshOnRemovedAction,
   useSuggestFollowups,
 } from '../../../api/librarian';
+import { useChatAppearance } from '../../../lib/chatAppearance';
 import { isWord, passageChips } from '../../../lib/librarianActions';
 import { reducedMotion } from '../../../lib/motion';
 import { Spinner } from '../../Spinner';
@@ -272,6 +273,7 @@ export function ChatThread({
   /** A folded dock keeps its rendered messages but does not move its scroll position. */
   active?: boolean;
 }) {
+  const { style } = useChatAppearance();
   const { input, setInput, passage, setPassage, field } = composer;
   const log = useStickyLog(chat.messages, active, chat.busy, maxHeight);
   const announcement = useTurnAnnouncement(chat.busy);
@@ -367,9 +369,10 @@ export function ChatThread({
       className="silo-chat"
       data-variant={variant}
       ref={rootRef}
-      style={
-        maxHeight === undefined ? undefined : ({ '--silo-chat-max': `${maxHeight}px` } as object)
-      }
+      style={{
+        ...style,
+        ...(maxHeight === undefined ? {} : { '--silo-chat-max': `${maxHeight}px` }),
+      }}
     >
       {variant === 'dock' ? (
         <div className="silo-chat-surface">
@@ -406,7 +409,6 @@ export function ChatThread({
         }
         passage={passage && { quote: passage.quote, onRemove: () => setPassage(undefined) }}
         suggestions={suggestions}
-        reserveChips={actions.length > 0 || suggestFollowups}
         onSuggestion={(text) => send(text)}
         quick={quick}
         quickDisabled={disabled}
