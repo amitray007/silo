@@ -299,7 +299,8 @@ function TryLink({ config }: { config: LinkCleaning }) {
   // A result describes the rules in force when it ran. Hide it once the rules change.
   const [ranWith, setRanWith] = useState('');
   const rules = JSON.stringify(config);
-  const result = preview.data && ranWith === rules ? preview.data : null;
+  const matchesInput = preview.variables === url.trim();
+  const result = preview.data && matchesInput && ranWith === rules ? preview.data : null;
   return (
     <div className="silo-lc-try">
       <form
@@ -332,7 +333,7 @@ function TryLink({ config }: { config: LinkCleaning }) {
           Try
         </button>
       </form>
-      {preview.isError && ranWith === rules && (
+      {preview.isError && matchesInput && ranWith === rules && (
         <div role="alert" className="silo-qa-error silo-lc-problem">
           Enter a full web address that starts with http:// or https://.
         </div>
@@ -399,7 +400,7 @@ function ResetControl({ onReset, pending }: { onReset: () => void; pending: bool
  * never touch a stored URL; they apply when a link is shown, opened, copied, or served.
  */
 export function LinksTab() {
-  const { data: settings } = useSettings();
+  const { data: settings, isError, refetch } = useSettings();
   const updateSettings = useUpdateSettings();
   const defaults = useCleanDefaults();
   const saved = settings?.linkCleaning;
@@ -412,6 +413,15 @@ export function LinksTab() {
     if (!updateSettings.isPending) latest.current = saved;
   }, [saved, updateSettings.isPending]);
 
+  if (isError)
+    return (
+      <div role="alert" className="silo-qa-error silo-lc-problem">
+        Could not load link settings.{' '}
+        <button type="button" className="silo-settings-btn" onClick={() => void refetch()}>
+          Retry
+        </button>
+      </div>
+    );
   if (!saved) return <Spinner label="Loading settings" />;
   const config = latest.current && updateSettings.isPending ? latest.current : saved;
 

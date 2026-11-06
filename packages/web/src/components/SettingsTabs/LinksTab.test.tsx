@@ -164,6 +164,33 @@ describe('LinksTab', () => {
     expect(result.closest('[role="status"]')?.textContent).toContain('utm_source');
   });
 
+  it('hides the preview when the input changes', async () => {
+    await renderTab();
+    const field = screen.getByRole('textbox', { name: 'Link to try' });
+    fireEvent.change(field, { target: { value: 'https://example.com/a?utm_source=x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Try' }));
+    await screen.findByText('https://example.com/a');
+    fireEvent.change(field, { target: { value: 'https://example.com/b' } });
+    expect(screen.queryByText('Cleaned link')).toBeNull();
+  });
+
+  it('shows a settings error and retries loading', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ message: 'Unavailable' }, 500));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <LinksTab />
+      </QueryClientProvider>,
+    );
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load');
+    expect(screen.queryByRole('status')).toBeNull();
+    fetchMock.mockResolvedValue(jsonResponse({ theme: 'system', linkCleaning: DEFAULTS }));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByRole('switch', { name: 'Clean links' });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('says so when the preview refuses the input', async () => {
     await renderTab();
     fireEvent.change(screen.getByRole('textbox', { name: 'Link to try' }), {
