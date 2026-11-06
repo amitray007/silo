@@ -96,19 +96,19 @@ it('shows an external citation as a pill with its link text in a new tab', async
   expect(screen.getByRole('tooltip').textContent).toContain('example.com');
 });
 
-it('lists only the cited links under a finished answer and toggles the grid', async () => {
+it('lists only the cited links under a finished answer in a Sources menu', async () => {
   stubLinks();
   reply(`See [One](/?link=${ONE}), [One again](/?link=${ONE}) and [Two](/?link=${TWO}).`);
   const toggle = await screen.findByRole('button', { name: '2 sources' });
   expect(toggle.getAttribute('aria-expanded')).toBe('false');
-  expect(screen.queryByRole('list')).toBeNull();
+  expect(screen.queryByRole('menu')).toBeNull();
   fireEvent.click(toggle);
   expect(toggle.getAttribute('aria-expanded')).toBe('true');
-  const items = screen.getAllByRole('listitem');
+  const items = screen.getAllByRole('menuitem');
   expect(items).toHaveLength(2);
   expect(items[0]?.textContent).toContain('Title 1');
   expect(items[0]?.textContent).toContain('site1.com');
-  expect(items[0]?.querySelector('a')?.getAttribute('href')).toBe(`/?link=${ONE}`);
+  expect(items[0]?.getAttribute('href')).toBe(`/?link=${ONE}`);
 });
 
 it('shows no sources while streaming, with no citations, or for made-up ids only', async () => {

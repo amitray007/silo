@@ -5,6 +5,9 @@ import { type LinkCard, linkCardOptions } from '../../../api/hooks';
 import { relativeTimeFromNow } from '../../../lib/relativeTime';
 import { deriveDomain, siteName } from '../../../lib/url';
 import { Chip } from '../../Chip';
+import { MenuPresence } from '../../MenuPresence';
+import { MenuSurface } from '../../MenuSurface';
+import { RowPopover } from '../../RowPopover';
 
 const STACK_MAX = 4;
 const savedLink = /\]\(\/\?link=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\)/gi;
@@ -26,7 +29,7 @@ const stackDomains = (sources: Source[]) =>
 
 /**
  * Under a finished answer: the cited links as overlapping favicons and "N sources", opening a
- * grid of them. A made-up id never resolves, so it is neither shown nor counted.
+ * menu of them. A made-up id never resolves, so it is neither shown nor counted.
  */
 export function SourcesRow({
   answer,
@@ -43,18 +46,24 @@ export function SourcesRow({
 
 function SourcesFor({ ids }: { ids: string[] }) {
   const [open, setOpen] = useState(false);
+  const [trigger, setTrigger] = useState<HTMLButtonElement | null>(null);
   const cards = useQueries({ queries: ids.map(linkCardOptions) });
   const sources = ids.flatMap((id, index): Source[] => {
     const card = cards[index]?.data;
     return card ? [{ id, card }] : [];
   });
+  const close = () => setOpen(false);
   if (sources.length === 0) return null;
   return (
     <div className="silo-sources">
       <button
+        ref={setTrigger}
         type="button"
         className="silo-sources-btn"
+        aria-haspopup="menu"
         aria-expanded={open}
+        // Keeps the menu's outside-click close from racing this toggle into a reopen.
+        onMouseDown={(event) => event.stopPropagation()}
         onClick={() => setOpen((now) => !now)}
       >
         <span className="silo-sources-stack">
@@ -64,21 +73,29 @@ function SourcesFor({ ids }: { ids: string[] }) {
         </span>
         {sources.length} {sources.length === 1 ? 'source' : 'sources'}
       </button>
-      {open && (
-        <ul className="silo-sources-grid">
-          {sources.map(({ id, card }) => (
-            <li key={id}>
-              <Link to={`/?link=${id}`}>
-                <Chip domain={deriveDomain(card.url)} size={18} />
-                <b>{card.title || card.url}</b>
-                <span>
-                  {deriveDomain(card.url)} · {relativeTimeFromNow(card.createdAt)}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <RowPopover anchor={trigger} align="start" onDismiss={close}>
+        <MenuPresence>
+          {open && (
+            <MenuSurface label="Sources" className="silo-sources-menu" onClose={close}>
+              {sources.map(({ id, card }) => (
+                <Link
+                  key={id}
+                  to={`/?link=${id}`}
+                  role="menuitem"
+                  className="silo-source-item"
+                  onClick={close}
+                >
+                  <Chip domain={deriveDomain(card.url)} size={18} />
+                  <b>{card.title || card.url}</b>
+                  <span>
+                    {deriveDomain(card.url)} · {relativeTimeFromNow(card.createdAt)}
+                  </span>
+                </Link>
+              ))}
+            </MenuSurface>
+          )}
+        </MenuPresence>
+      </RowPopover>
     </div>
   );
 }

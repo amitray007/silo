@@ -114,12 +114,15 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 12px 0 10px;
+  z-index: 1;
+  height: 32px;
+  padding: 0 14px 0 10px;
   border: 0;
   border-radius: 999px;
-  background: none;
-  box-shadow: none;
+  background: var(--bg2);
+  box-shadow:
+    var(--elev-2),
+    inset 0 0 0 0.5px var(--line-2);
   color: var(--ink);
   font: inherit;
   font-size: 12px;
@@ -128,7 +131,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   animation: siloStatusIn 160ms var(--ease-out) both;
 }
 
-/* Conversation: the owner's turn is a right-aligned bubble; the Librarian's answer is plain text beside its tile. */
+/* Conversation: the owner's turn is a right-aligned bubble; the Librarian's answer is plain full-width text. */
 .silo-chat-messages {
   min-height: 0;
   padding: 16px 16px 20px;
@@ -137,8 +140,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 /* The thread fades out under the bar; the end padding keeps the last line clear of the fade. */
 .silo-chat:is([data-variant="page"], [data-variant="dock"]) .silo-chat-messages {
-  padding-bottom: 56px;
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+  padding-bottom: 32px;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
 }
 .silo-chat-messages:has(> .silo-chat-empty:only-child) {
   padding-bottom: 12px;
@@ -160,10 +163,10 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 /* A question and its answer share one block. The newest sent turn is at least as tall as the log's
    view (--silo-fill, set from script), so its answer streams into room that already exists. */
 .silo-chat-turn > * + * {
-  margin-top: 12px;
+  margin-top: 16px;
 }
 .silo-chat-turn:not(:first-child) {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 .silo-chat-turn[data-fill] {
   min-height: var(--silo-fill, 0px);
@@ -244,10 +247,15 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     color: transparent;
   }
 }
+/* Copy sits left of the bubble, so the question reserves no row of its own. */
 .silo-chat-user {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 4px;
+}
+.silo-chat-user .silo-chat-actions {
+  margin: 0;
 }
 .silo-chat-bubble {
   max-width: 80%;
@@ -255,32 +263,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   border-radius: 18px;
   background: var(--sel);
   font-weight: var(--chat-weight, 400);
-}
-.silo-chat-assistant {
-  display: grid;
-  grid-template-columns: 28px minmax(0, 1fr);
-  column-gap: 10px;
-}
-.silo-chat-avatar {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--input-bg);
-  color: var(--mut);
-}
-.silo-chat-assistant-body {
-  min-width: 0;
-}
-/* The narrow dock and the passage card drop the tile: the bubble alone says who wrote what. */
-.silo-chat[data-variant="dock"] .silo-chat-assistant,
-.silo-selection-body .silo-chat-assistant {
-  grid-template-columns: minmax(0, 1fr);
-}
-.silo-chat[data-variant="dock"] .silo-chat-avatar,
-.silo-selection-body .silo-chat-avatar {
-  display: none;
 }
 /* A whole answer that was held back arrives with the same drift as the trace. */
 /* Streamdown's headings, quotes, rules and task lists also ship only Tailwind classes. Reader
@@ -454,22 +436,22 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-actions {
   display: flex;
   gap: 2px;
-  margin: 4px 0 0 -6px;
-  min-height: 32px;
+  margin: 2px 0 0 -6px;
+  min-height: 28px;
 }
 /* While the answer streams the row holds its place unseen, then fades in without moving anything. */
 .silo-chat-actions[data-pending] {
   visibility: hidden;
 }
 .silo-chat-actions .silo-reader-iconbtn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   color: var(--mut);
 }
 .silo-chat-actions .silo-reader-icon {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   stroke-width: 1.75;
 }
 @media (hover: hover) {
@@ -1102,8 +1084,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   animation: none;
 }
 .silo-chat[data-variant="page"] .silo-chat-messages {
-  /* The bottom mask fades 48px; keep the last line and any approval buttons clear of it. */
-  padding: 24px max(16px, calc((100% - var(--silo-measure)) / 2)) 56px;
+  /* The bottom mask fades 24px; keep the last line and any approval buttons clear of it. */
+  padding: 24px max(16px, calc((100% - var(--silo-measure)) / 2)) 32px;
 }
 .silo-chat[data-variant="page"] .silo-chat-messages:has(> .silo-chat-empty:only-child) {
   display: grid;
@@ -1416,7 +1398,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 
 @media (hover: hover) and (pointer: fine) {
   .silo-chat-jump:hover {
-    color: var(--mut);
+    background: linear-gradient(var(--hov), var(--hov)), var(--bg2);
   }
 }
 
@@ -1589,7 +1571,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-trace-line {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   height: 24px;
   font-size: 13px;
   font-weight: 500;
@@ -1621,7 +1603,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-reasoning-head {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   height: 24px;
   padding: 0;
   border: 0;
@@ -1805,7 +1787,7 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   font-weight: 500;
 }
 
-/* Sources: overlapping favicons and a count, opening a grid of the cited links. */
+/* Sources: overlapping favicons and a count, opening a menu of the cited links. */
 .silo-sources {
   display: grid;
   gap: 8px;
@@ -1844,47 +1826,59 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
 .silo-sources-stack .silo-letter-chip + .silo-letter-chip {
   margin-left: -5px;
 }
-.silo-sources-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.silo-sources-btn[aria-expanded="true"] {
+  background: var(--sel);
+  color: var(--ink);
 }
-.silo-chat[data-variant="dock"] .silo-sources-grid,
-.silo-selection-body .silo-sources-grid {
-  grid-template-columns: minmax(0, 1fr);
+.silo-row-menu-portal:has(.silo-sources-menu) {
+  width: min(320px, calc(100vw - 16px));
 }
-.silo-chat-assistant .silo-sources-grid a {
+.silo-row-menu-portal .silo-menu-surface.silo-sources-menu {
+  width: 100%;
+  max-height: min(360px, calc(100dvh - 16px));
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.silo-source-item {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 0 8px;
   padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--bg2);
-  box-shadow: var(--elev-1);
+  border-radius: 8px;
+  color: var(--ink);
   text-decoration: none;
 }
-.silo-sources-grid b {
+.silo-source-item b {
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   line-height: 1.35;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.silo-sources-grid a > span:last-child {
+.silo-source-item > span:last-child {
   grid-column: 2;
   overflow: hidden;
   color: var(--fnt);
-  font-size: 11.5px;
+  font-size: 12px;
+  line-height: 1.35;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.silo-source-item:focus-visible {
+  background: var(--menu-highlight);
+  outline: 2px solid var(--fnt);
+  outline-offset: -2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-source-item:hover {
+    background: var(--menu-highlight);
+  }
+}
 @media (max-width: 640px) {
-  .silo-sources-grid {
-    grid-template-columns: minmax(0, 1fr);
+  .silo-sources-menu .silo-source-item {
+    padding: 10px;
   }
 }
 @keyframes siloStatusIn {

@@ -1,13 +1,22 @@
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
-/** Menus escape the list's scroll clipping; the list still owns their state. */
+const EDGE = 8;
+const GAP = 4;
+
+/**
+ * Menus escape the list's scroll clipping; the list still owns their state. `end` (default) lines
+ * the menu's right edge up with the anchor's; `start` lines up the left edge and opens on the side
+ * of the anchor with more room.
+ */
 export function RowPopover({
   anchor,
+  align = 'end',
   children,
   onDismiss,
 }: {
   anchor: HTMLElement | null;
+  align?: 'start' | 'end';
   children: ReactNode;
   onDismiss: () => void;
 }) {
@@ -20,16 +29,22 @@ export function RowPopover({
       const box = ref.current?.getBoundingClientRect();
       const height = box?.height ?? 0;
       const width = box?.width ?? 216;
+      const edge = align === 'start' ? row.left : row.right - width;
+      // A start-aligned menu opens toward the larger space, so one under the last chat answer
+      // rises over the thread instead of covering the composer.
+      const flip = align === 'start' && row.top > innerHeight - row.bottom;
       setPosition({
-        left: Math.max(8, Math.min(row.right - width, innerWidth - width - 8)),
-        top: Math.max(8, Math.min(row.bottom + 4, innerHeight - height - 8)),
+        left: Math.max(EDGE, Math.min(edge, innerWidth - width - EDGE)),
+        top: flip
+          ? Math.max(EDGE, row.top - GAP - height)
+          : Math.max(EDGE, Math.min(row.bottom + GAP, innerHeight - height - EDGE)),
       });
     };
     place();
     const observer = new ResizeObserver(place);
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
-  }, [anchor]);
+  }, [anchor, align]);
   useEffect(() => {
     if (!anchor) return;
     const onScroll = (event: Event) => {

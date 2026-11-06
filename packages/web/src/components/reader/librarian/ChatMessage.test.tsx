@@ -307,7 +307,7 @@ it('keeps completed paragraphs and list numbering through streaming and completi
 });
 
 describe('chat look', () => {
-  it('shows the owner turn as a bubble and the Librarian answer as plain text beside its tile', () => {
+  it('shows the owner turn as a bubble and the Librarian answer as plain full-width text', () => {
     const user = render(
       <ChatMessage message={{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Why?' }] }} />,
     );
@@ -317,7 +317,7 @@ describe('chat look', () => {
     user.unmount();
     const { container } = render(<ChatMessage message={reply('Because.')} />);
     expect(container.querySelector('.silo-chat-bubble')).toBeNull();
-    expect(container.querySelector('.silo-chat-avatar svg')).toBeTruthy();
+    expect(container.querySelector('.silo-chat-avatar')).toBeNull();
     expect(container.querySelector('.silo-chat-assistant-body')?.textContent).toContain('Because.');
   });
 
@@ -585,6 +585,25 @@ describe('ChatMessage reasoning', () => {
     fireEvent.click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Weighing the two sources.')).toBeTruthy();
+  });
+
+  it('folds the thought and the tools into one trace disclosure that opens both', () => {
+    const message = thinking('done', { reasoningMs: 1200 });
+    render(
+      <ChatMessage
+        message={{
+          ...message,
+          parts: [...message.parts.slice(0, 1), search('s1', 2), ...message.parts.slice(1)],
+        }}
+        fixedTrace
+      />,
+    );
+    const toggle = screen.getByRole('button', { name: 'Thought for 1s · Used 1 tool' });
+    expect(screen.getAllByRole('button', { name: /Thought|Used/ })).toHaveLength(1);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Weighing the two sources.')).toBeTruthy();
+    expect(document.querySelector('.silo-steps-list')).toBeTruthy();
   });
 
   it('says only "Thought" when no time was recorded', () => {
