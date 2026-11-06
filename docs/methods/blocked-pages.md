@@ -295,8 +295,47 @@ bot-checked pages save in full.
 - QA: load the built extension in a Chrome profile, save an Atlantic and a
   Big Think article, close the tab at once, and confirm the full Reader.
 
+## Slice 4: Live tab for blocked sites
+
+Approved 2026-11-06 after Amit tested slice 3: the Live tab for a blocked
+site showed the raw URL as a giant headline over one line of text.
+
+### Evidence
+
+- The Atlantic and Big Think send `X-Frame-Options: SAMEORIGIN`, so the Live
+  tab cannot frame them, and Silo's proxy fetch is blocked. Only the user's
+  own browser can load the live page, in a new tab.
+- `web.archive.org` snapshot pages send no `X-Frame-Options` and no
+  `frame-ancestors`, so the user's browser can frame a snapshot directly.
+
+### Behavior
+
+- When the Live tab's fetch is `blocked`, the frame hint looks for an
+  Internet Archive snapshot: the stored `reader_source_at` when the Reader
+  came from the archive, otherwise one availability request through
+  `safeFetch`, cached per link for an hour (hits and misses). The hint
+  becomes `{ mode: 'archive', archiveUrl, snapshotAt }`, where `archiveUrl`
+  is `https://web.archive.org/web/<timestamp>if_/<url>` (the Wayback frame
+  form, without its toolbar).
+- The web frames that URL directly; Silo never proxies archive pages. A
+  slim bar above the frame says it is an archive copy, gives the snapshot
+  date, and links to the live site.
+- With no snapshot, the blocked state is a centered card in the style of the
+  Reader empty state: icon, a short title, one sentence of reason, and
+  actions (Show Reader, Open site). The link title, or the host when there
+  is no title, appears as quiet meta, never the raw URL as a headline.
+
+### Acceptance
+
+- Worker unit tests: archive hint from a stored snapshot (no request),
+  from the availability API, cache hit, no snapshot.
+- Web tests: archive mode renders the frame and the bar; blocked mode with
+  no snapshot renders the card with the right copy and no URL headline.
+- Browser QA at 1440 and 390 px, light and dark: the 2008 Atlantic article
+  (archive frame) and the new Atlantic article (card).
+
 ## Parked
 
 - Site logins stored on the server (Wallabag-style site credentials).
 - A per-row list badge for paywalled or blocked links.
-- Rendering the Live tab from the headless browser or the archive snapshot.
+- Rendering the Live tab from the headless browser.
