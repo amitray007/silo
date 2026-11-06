@@ -139,7 +139,7 @@ function toTextSummary(link: LinkDetail | LinkWithTextWindow): string {
     link.url,
     link.siteName ? `site: ${link.siteName}` : undefined,
     `status: ${link.captureStatus}`,
-    `readerAccess: ${link.readerAccess ?? 'null'}`,
+    ...(link.readerAccess ? [`readerAccess: ${link.readerAccess}`] : []),
     link.description ? `description: ${link.description}` : undefined,
     `tags: ${link.tags.length > 0 ? link.tags.join(', ') : '(none)'}`,
     link.notes ? `note: ${link.notes}` : undefined,

@@ -51,13 +51,20 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
   it('returns reader access and explains the free-text boundary', async () => {
     const { core, client } = getContext();
     const id = await seedLink(getContext, 'https://example.com/subscriber');
-    await core.recordReader(id, { status: 'no_reader', access: 'paywalled' }, new Date());
+    await core.recordReaderAccess(id, 'paywalled', new Date());
     const result = await client.callTool({ name: 'get_link', arguments: { id } });
     expect(result.structuredContent).toMatchObject({ id, readerAccess: 'paywalled' });
     const { tools } = await client.listTools();
     expect(tools.find((tool) => tool.name === 'get_link')?.description).toContain(
       'paywalled: the text is only the free part',
     );
+  });
+
+  it('omits a null readerAccess from text summary', async () => {
+    const { client } = getContext();
+    const id = await seedLink(getContext, 'https://example.com/unrestricted');
+    const result = await client.callTool({ name: 'get_link', arguments: { id } });
+    expect(JSON.stringify(result.content)).not.toContain('readerAccess:');
   });
   it('reads user and AI title provenance through get_link and list_links', async () => {
     const { core, pool, client } = getContext();

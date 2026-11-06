@@ -199,8 +199,8 @@ export function useRefreshReader(linkId: string) {
     onSuccess: async (reader) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.liveReader(linkId) });
       queryClient.setQueryData(queryKeys.liveReader(linkId), reader);
-      queryClient.invalidateQueries({ queryKey: queryKeys.link(linkId) });
     },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.link(linkId) }),
   });
 }
 

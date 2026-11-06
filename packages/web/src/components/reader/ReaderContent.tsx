@@ -59,20 +59,22 @@ function looksLikePdf(url: string): boolean {
 function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => void }) {
   const restricted = Boolean(link.readerAccess);
   const retryable = restricted || link.captureStatus === 'partial' || link.captureStatus === 'bare';
-  const title =
-    link.readerAccess === 'paywalled'
-      ? 'Behind a paywall'
-      : link.readerAccess === 'blocked'
-        ? 'Blocked by the site'
-        : 'No text to read';
-  const reason =
-    link.readerAccess === 'paywalled'
-      ? 'The site shows this article to subscribers only. Silo saved its details.'
-      : link.readerAccess === 'blocked'
-        ? 'This site stopped Silo with a bot check. Silo saved the link and its details.'
-        : looksLikePdf(link.url)
-          ? 'This link is a PDF. Silo saves its details but does not read PDF text yet.'
-          : 'Silo saved this link but could not read text from the page.';
+  const copy = {
+    paywalled: {
+      title: 'Behind a paywall',
+      reason: 'The site shows this article to subscribers only. Silo saved its details.',
+    },
+    blocked: {
+      title: 'Blocked by the site',
+      reason: 'This site stopped Silo with a bot check. Silo saved the link and its details.',
+    },
+  };
+  const title = link.readerAccess ? copy[link.readerAccess].title : 'No text to read';
+  const reason = link.readerAccess
+    ? copy[link.readerAccess].reason
+    : looksLikePdf(link.url)
+      ? 'This link is a PDF. Silo saves its details but does not read PDF text yet.'
+      : 'Silo saved this link but could not read text from the page.';
   return (
     <section className="silo-reader-empty" aria-labelledby={`silo-reader-empty-${link.id}`}>
       <span className="silo-reader-empty-icon">
@@ -81,10 +83,10 @@ function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => v
       <h3 id={`silo-reader-empty-${link.id}`}>{title}</h3>
       <p>
         {reason}
-        {!restricted && showLive && ' Try the live page instead.'}
+        {link.readerAccess !== 'blocked' && showLive && ' Try the live page instead.'}
       </p>
       <div className="silo-reader-empty-actions">
-        {!restricted && showLive && (
+        {link.readerAccess !== 'blocked' && showLive && (
           <button type="button" className="silo-reader-btn" onClick={showLive}>
             Show live page
           </button>
@@ -256,7 +258,7 @@ function hasNoText(link: LinkJson): boolean {
   return !link.extractedText?.trim() && Boolean(link.readerAccess || !link.description?.trim());
 }
 function ReaderFallback({ link }: { link: LinkJson }) {
-  return !hasNoText(link) ? <Paragraphs link={link} /> : null;
+  return <Paragraphs link={link} />;
 }
 function AccessNotice({ link, hasReader }: { link: LinkJson; hasReader: boolean }) {
   if (link.readerAccess !== 'paywalled' || !(hasReader || link.extractedText?.trim())) return null;
