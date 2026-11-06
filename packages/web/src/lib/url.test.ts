@@ -37,7 +37,7 @@ describe('deriveTitleFromUrl', () => {
 
   it('passes through scheme-less or non-http(s) input unchanged', () => {
     expect(deriveTitleFromUrl('example.com/post')).toBe('example.com/post');
-    expect(deriveTitleFromUrl('ftp://example.com/file')).toBe('ftp://example.com/file');
+    expect(deriveTitleFromUrl('ftp://example.com/file')).toBe('example.com/file');
   });
 });
 
@@ -97,4 +97,25 @@ describe('siteName', () => {
   it('passes a single-label host through', () => {
     expect(siteName('localhost')).toBe('localhost');
   });
+});
+
+it.each([
+  [
+    'https://bigthink.com/the-well/the-consciousness-theory-that-connects-you-to-everything/?utm_source=x',
+    'The consciousness theory that connects you to everything',
+  ],
+  ['https://example.com/?q=1', 'example.com'],
+  ['https://github.com/amitray007/silo', 'github.com/amitray007/silo'],
+  ['https://example.com/post/12345', 'example.com/post/12345'],
+  ['bad input', 'bad input'],
+  ['https://example.com/a/my_post.html', 'My post'],
+])('derives title from %s', (url, title) => expect(deriveTitleFromUrl(url)).toBe(title));
+
+it('keeps query and hash out of titles with malformed escapes', () => {
+  expect(deriveTitleFromUrl('https://example.com/bad%ZZ?secret=1#private')).toBe(
+    'example.com/bad%ZZ',
+  );
+  expect(deriveTitleFromUrl('https://example.com/bad%ZZ-slug?secret=1#private')).toBe(
+    'Bad%ZZ slug',
+  );
 });

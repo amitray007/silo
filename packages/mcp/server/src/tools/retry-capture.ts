@@ -6,6 +6,7 @@ import {
   type EnrichField,
   enrichFieldSchema,
   getById,
+  loadUrlCleaner,
   requestEnrich,
   retryCaptureMany,
 } from '@silo/core';
@@ -127,7 +128,8 @@ export function registerRetryCapture(server: McpServer): void {
         };
       }
 
-      return foundResult(link, singleText(id, fields));
+      const cleaner = await loadUrlCleaner();
+      return foundResult(link, singleText(id, fields), cleaner);
     },
   );
 }

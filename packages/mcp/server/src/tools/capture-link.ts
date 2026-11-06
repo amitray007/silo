@@ -1,7 +1,14 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { CreateLinkInput } from '@silo/core';
-import { canonicalize, captureMany, createLink, getById, willDedupCapture } from '@silo/core';
+import {
+  canonicalize,
+  captureMany,
+  createLink,
+  getById,
+  loadUrlCleaner,
+  willDedupCapture,
+} from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, runBulkGuarded } from './found-result.js';
 import { toBaseLinkContent } from './link-shape.js';
@@ -161,6 +168,7 @@ type CaptureLinkSingleInput = {
  * that it also dispatches to the batch (`urls`) branch above.
  */
 async function runSingleCapture(input: CaptureLinkSingleInput): Promise<CallToolResult> {
+  const cleaner = await loadUrlCleaner();
   const { url, tags, note, sourceKind } = input;
 
   // Decision 1 (plan 004): the URL guard is edge validation, not business
@@ -263,7 +271,7 @@ async function runSingleCapture(input: CaptureLinkSingleInput): Promise<CallTool
   }
 
   const structuredContent: CaptureLinkStructuredContent = {
-    ...toBaseLinkContent(link),
+    ...toBaseLinkContent(link, cleaner),
     deduped,
   };
 

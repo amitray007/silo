@@ -44,6 +44,7 @@ function renderRow(ui: ReactNode, plugins?: SettingsMap['plugins'], hoverPreview
       plugins: plugins ?? DEFAULT_PLUGINS,
       reader: null,
       ai: { enabled: false, features: {} },
+      linkCleaning: { enabled: true, everySite: [], sites: [] },
     } satisfies SettingsMap);
   }
   const utils = render(
@@ -62,9 +63,9 @@ describe('LinkRow', () => {
     expect(screen.getByText('A post')).toBeDefined();
   });
 
-  it('falls back to the scheme-stripped url when title is null', () => {
+  it('falls back to the humanized url slug when title is null', () => {
     renderRow(<LinkRow link={link({ title: null, url: 'https://www.example.com/a-post' })} />);
-    expect(screen.getByText('www.example.com/a-post')).toBeDefined();
+    expect(screen.getByText('A post')).toBeDefined();
   });
 
   it('renders the derived domain suffix (www. stripped)', () => {
@@ -103,7 +104,7 @@ describe('LinkRow', () => {
       '/api/favicon?domain=example.com',
     );
     expect(screen.queryByLabelText('enriching')).toBeNull();
-    expect(screen.getByText('www.example.com/a')).toBeDefined();
+    expect(screen.getByText('example.com/a')).toBeDefined();
     expect(screen.getByText('example.com')).toBeDefined();
   });
 

@@ -3,6 +3,7 @@ import {
   deleteFeed,
   listFeedPosts,
   listFeedsPage,
+  loadUrlCleaner,
   normalizeFeedUrl,
   type PageParams,
   refreshFeed,
@@ -89,8 +90,9 @@ function registerFeedReads(server: McpServer): void {
     ({ feedId, tab, limit, cursor }) =>
       runFeedTool(async () => {
         const page = await listFeedPosts(feedId, { ...pageParams(limit, cursor), tab });
+        const cleaner = await loadUrlCleaner();
         const posts = page.links.map((link) => ({
-          ...toSnippetLinkContent(link),
+          ...toSnippetLinkContent(link, cleaner),
           feedId,
           publishedAt: link.publishedAt?.toISOString() ?? null,
           archivedAt: link.archivedAt?.toISOString() ?? null,

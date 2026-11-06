@@ -69,6 +69,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       librarianSuggestions: true,
       reader: null,
       librarianActions: harness.mod().core.LIBRARIAN_ACTIONS_DEFAULTS,
+      linkCleaning: harness.mod().core.LINK_CLEANING_DEFAULTS,
       ai: {
         enabled: false,
         features: {
@@ -100,6 +101,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       'librarianActions',
       'librarianSuggestions',
       'librarianThinking',
+      'linkCleaning',
       'linkPreviewImages',
       'mcpAccess',
       'plugins',

@@ -23,11 +23,16 @@ const ReaderTab = lazy(() =>
   import('./SettingsTabs/ReaderTab').then((module) => ({ default: module.ReaderTab })),
 );
 
+const LinksTab = lazy(() =>
+  import('./SettingsTabs/LinksTab').then((module) => ({ default: module.LinksTab })),
+);
+
 const TABS: { key: SettingsTab; name: string }[] = [
   { key: 'plugins', name: 'Plugins' },
   { key: 'ai', name: 'AI' },
   { key: 'prefs', name: 'Preferences' },
   { key: 'reader', name: 'Reader' },
+  { key: 'links', name: 'Links' },
   { key: 'import', name: 'Import & export' },
   { key: 'access', name: 'Access' },
 ];
@@ -87,6 +92,7 @@ const TAB_DESCRIPTIONS: Record<SettingsTab, string> = {
   ai: 'Optional AI features, using your own provider key.',
   prefs: 'How silo looks and how long it keeps things.',
   reader: 'How articles look and sound, on every device.',
+  links: 'Hide tracking parameters from the links silo shows and serves.',
   import: 'Move your library in and out.',
   access: 'Connect agents and other tools to silo.',
 };
@@ -102,6 +108,8 @@ function ActiveTabPanel({ tab }: { tab: SettingsTab }) {
       return <PreferencesTab />;
     case 'reader':
       return <ReaderTab />;
+    case 'links':
+      return <LinksTab />;
     case 'import':
       return <ImportExportTab />;
     case 'access':

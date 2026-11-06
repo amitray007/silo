@@ -108,6 +108,7 @@ function settingsWithPlugins(
     hoverPreview,
     reader: null,
     ai: { enabled: false, features: {} },
+    linkCleaning: { enabled: true, everySite: [], sites: [] },
     plugins: {
       hacker_news: { enabled: true, inline: true, hover: true, palette: true },
       github: { enabled: true, hover: true, palette: true },
