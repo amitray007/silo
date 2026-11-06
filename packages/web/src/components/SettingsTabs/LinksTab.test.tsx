@@ -151,7 +151,35 @@ describe('LinksTab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset to defaults' }));
     expect(api.patches()).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
-    await waitFor(() => expect(api.saved()).toEqual(DEFAULTS));
+    await waitFor(() => expect(api.saved()).toEqual({ ...DEFAULTS, enabled: false }));
+  });
+
+  it.each([401, 500])('shows a retry error for HTTP %s', async (status) => {
+    await renderTab();
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'failure', message: 'failed' }, status),
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: 'Link to try' }), {
+      target: { value: 'https://example.com/' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Try' }));
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      "Couldn't preview the link. Try again.",
+    );
+  });
+
+  it('disables Try while settings save is pending', async () => {
+    await renderTab();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Link to try' }), {
+      target: { value: 'https://example.com/' },
+    });
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
+    fireEvent.click(screen.getByRole('switch', { name: 'Clean links' }));
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: 'Try' }) as HTMLButtonElement).disabled).toBe(
+        true,
+      ),
+    );
   });
 
   it('previews a link with the saved rules', async () => {

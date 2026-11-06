@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
+import { ApiError } from '../../api/client';
 import { useCleanDefaults, useCleanPreview, useSettings, useUpdateSettings } from '../../api/hooks';
 import type { LinkCleaning, LinkCleaningSite } from '../../api/types';
 import {
@@ -293,7 +294,7 @@ function SiteRow({
   );
 }
 
-function TryLink({ config }: { config: LinkCleaning }) {
+function TryLink({ config, saving }: { config: LinkCleaning; saving: boolean }) {
   const [url, setUrl] = useState('');
   const preview = useCleanPreview();
   // A result describes the rules in force when it ran. Hide it once the rules change.
@@ -309,7 +310,7 @@ function TryLink({ config }: { config: LinkCleaning }) {
         onSubmit={(event) => {
           event.preventDefault();
           const value = url.trim();
-          if (!value) return;
+          if (!value || saving) return;
           setRanWith(rules);
           preview.mutate(value);
         }}
@@ -328,14 +329,16 @@ function TryLink({ config }: { config: LinkCleaning }) {
         <button
           type="submit"
           className="silo-settings-btn"
-          disabled={!url.trim() || preview.isPending}
+          disabled={saving || !url.trim() || preview.isPending}
         >
           Try
         </button>
       </form>
       {preview.isError && matchesInput && ranWith === rules && (
         <div role="alert" className="silo-qa-error silo-lc-problem">
-          Enter a full web address that starts with http:// or https://.
+          {preview.error instanceof ApiError && preview.error.status === 400
+            ? 'Enter a full web address that starts with http:// or https://.'
+            : "Couldn't preview the link. Try again."}
         </div>
       )}
       {result && (
@@ -463,7 +466,7 @@ export function LinksTab() {
             <div style={rowDesc}>See what your saved rules do to a link.</div>
           </div>
         </div>
-        <TryLink config={config} />
+        <TryLink config={saved} saving={updateSettings.isPending} />
       </section>
       <section aria-label="Every site" className="silo-lc-section">
         <div style={settingsRow} className="silo-qa-head">
@@ -478,7 +481,12 @@ export function LinksTab() {
             pending={defaults.isPending}
             onReset={() =>
               defaults.mutate(undefined, {
-                onSuccess: (value) => save(value),
+                onSuccess: (value) =>
+                  write((current) => ({
+                    ...current,
+                    everySite: value.everySite,
+                    sites: value.sites,
+                  })),
                 onError: () => setError('Could not load the default rules.'),
               })
             }

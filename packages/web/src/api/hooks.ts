@@ -1463,21 +1463,9 @@ export function useUpdateSettings() {
     onSuccess: (settings, patch) => {
       queue.settle(patch, settings);
       if ('linkCleaning' in patch) {
-        for (const key of [
-          'links',
-          'links-recents',
-          'link',
-          'search',
-          'links-tag-only',
-          'trash',
-          'trash-search',
-          'feed-posts',
-          'highlights',
-          'reading-positions',
-          'link-url',
-        ]) {
-          void queryClient.invalidateQueries({ queryKey: [key] });
-        }
+        void queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] !== queryKeys.settings()[0],
+        });
       }
     },
     onSettled: () => {

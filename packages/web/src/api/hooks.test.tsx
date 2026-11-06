@@ -1501,6 +1501,7 @@ describe('link cleaning settings invalidation', () => {
         ['highlights'],
         ['reading-positions'],
         ['link-url', 'a'],
+        ['future-link-query'],
       ];
       for (const key of [...keys, queryKeys.counts()]) client.setQueryData(key, { url: 'old' });
       const { result } = renderHook(() => useUpdateSettings(), {
@@ -1516,7 +1517,7 @@ describe('link cleaning settings invalidation', () => {
         );
       });
       for (const key of keys) expect(client.getQueryState(key)?.isInvalidated).toBe(cleaning);
-      expect(client.getQueryState(queryKeys.counts())?.isInvalidated).toBe(false);
+      expect(client.getQueryState(queryKeys.counts())?.isInvalidated).toBe(cleaning);
     },
   );
 });
