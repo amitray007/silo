@@ -1,4 +1,4 @@
-import type { Highlight, LinkDetail, LinkSummaryWithTags } from '@silo/core';
+import type { Highlight, LinkDetail, LinkSummaryWithTags, UrlCleaner } from '@silo/core';
 import { CAPTURE_SOURCES, HIGHLIGHT_COLORS, sourceDataSchema, TITLE_SOURCES } from '@silo/core';
 import { z } from 'zod';
 import { readingSourceShape } from './reader-shape.js';
@@ -96,7 +96,10 @@ export function toHighlightContent(highlight: Highlight) {
 
 export const baseLinkShape = {
   id: z.uuid(),
-  url: z.string(),
+  originalUrl: z.string().describe('The URL exactly as captured.'),
+  url: z
+    .string()
+    .describe("Served URL with tracking parameters removed per the owner's link-cleaning setting."),
   title: z.string().nullable(),
   titleSource: z
     .enum(TITLE_SOURCES)
@@ -199,10 +202,14 @@ function shapeSourceData(raw: unknown): BaseLinkContent['sourceData'] {
  * fields (e.g. `search_links`'s `rank`) spread this result and add their own
  * on top.
  */
-function toSummaryLinkContent(link: Omit<LinkSummaryWithTags, 'extractedText'>) {
+function toSummaryLinkContent(
+  link: Omit<LinkSummaryWithTags, 'extractedText'>,
+  cleaner: UrlCleaner,
+) {
   return {
     id: link.id,
-    url: link.url,
+    url: cleaner(link.url),
+    originalUrl: link.url,
     title: link.title,
     titleSource: link.titleSource,
     description: link.description,
@@ -221,9 +228,9 @@ function toSummaryLinkContent(link: Omit<LinkSummaryWithTags, 'extractedText'>) 
   };
 }
 
-export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
+export function toBaseLinkContent(link: LinkDetail, cleaner: UrlCleaner): BaseLinkContent {
   return {
-    ...toSummaryLinkContent(link),
+    ...toSummaryLinkContent(link, cleaner),
     extractedText: link.extractedText,
     readingPosition: link.readingPosition
       ? {
@@ -246,8 +253,11 @@ export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
 type SnippetSourceRow = Omit<LinkSummaryWithTags, 'extractedText'> & { snippet: string | null };
 
 /** Build discovery rows from the same summary whitelist as detail reads. */
-export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent {
-  const base = toSummaryLinkContent(link);
+export function toSnippetLinkContent(
+  link: SnippetSourceRow,
+  cleaner: UrlCleaner,
+): SnippetLinkContent {
+  const base = toSummaryLinkContent(link, cleaner);
   const sourceData = base.sourceData;
   if (sourceData.kind === 'feed_media') {
     const { content: _content, ...summary } = sourceData;

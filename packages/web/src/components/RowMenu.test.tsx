@@ -51,6 +51,17 @@ describe('RowMenu', () => {
     vi.unstubAllGlobals();
   });
 
+  it('offers Copy original link only when the served URL differs from the raw one', () => {
+    const { unmount } = renderMenu();
+    expect(screen.queryByText('Copy original link')).toBeNull();
+    unmount();
+    renderMenu({ originalUrl: 'https://example.com/x?utm_source=a' });
+    fireEvent.click(screen.getByText('Copy original link'));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      'https://example.com/x?utm_source=a',
+    );
+  });
+
   it('renders every v3 menu item: tags row, open-in-new-tab, copy link, edit, move to trash', () => {
     renderMenu();
     expect(screen.getByText('Tags')).toBeDefined();

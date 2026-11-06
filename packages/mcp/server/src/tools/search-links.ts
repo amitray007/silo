@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { PageParams, SearchFilter, SearchResultRow } from '@silo/core';
-import { countLinks, InvalidCursorError, search } from '@silo/core';
+import type { PageParams, SearchFilter, SearchResultRow, UrlCleaner } from '@silo/core';
+import { countLinks, InvalidCursorError, loadUrlCleaner, search } from '@silo/core';
 import { z } from 'zod';
 import { snippetLinkShape, toRankedResultLine, toSnippetLinkContent } from './link-shape.js';
 import {
@@ -56,8 +56,8 @@ type SearchResultContent = z.infer<z.ZodObject<typeof searchResultShape>>;
  * Same rationale as `link-shape.ts`'s doc: makes the leak
  * (`searchVector`/`canonicalUrl`/`deletedAt`) structurally impossible.
  */
-function toResultContent(result: SearchResultRow): SearchResultContent {
-  return { ...toSnippetLinkContent(result), rank: result.rank };
+function toResultContent(result: SearchResultRow, cleaner: UrlCleaner): SearchResultContent {
+  return { ...toSnippetLinkContent(result, cleaner), rank: result.rank };
 }
 
 /**
@@ -234,6 +234,7 @@ export function registerSearchLinks(server: McpServer): void {
       limit,
       cursor,
     }): Promise<CallToolResult> => {
+      const cleaner = await loadUrlCleaner();
       const filter = buildSearchFilter({ source, tags, since, until, sort });
 
       if (countOnly) {
@@ -265,7 +266,7 @@ export function registerSearchLinks(server: McpServer): void {
         throw error;
       }
 
-      const results = page.results.map(toResultContent);
+      const results = page.results.map((row) => toResultContent(row, cleaner));
       const structuredContent: SearchLinksStructuredContent =
         page.nextCursor === undefined
           ? { results, count: results.length }

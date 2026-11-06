@@ -8,6 +8,7 @@ const NOW = new Date(2026, 6, 5, 12, 0, 0); // 2026-07-05 noon, local time
 function link(overrides: Partial<LinkJson> & { id: string; createdAt: string }): LinkJson {
   return {
     url: 'https://example.com',
+    originalUrl: 'https://example.com',
     title: 'Example',
     description: null,
     imageUrl: null,
@@ -143,6 +144,7 @@ function trashLink(
 ): TrashLinkJson {
   return {
     url: 'https://example.com',
+    originalUrl: 'https://example.com',
     title: 'Example',
     description: null,
     imageUrl: null,

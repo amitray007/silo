@@ -104,3 +104,10 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **Resumable streams after a server restart** - an answer in flight during a restart is lost.
 - **More custom quick actions** (surfaced in slice 7, 2026-11-03) - prompt variables such as `{title}`, sharing actions, and saving a typed question as an action.
 - **Regenerate and answer feedback** (surfaced in `docs/methods/chat-look.md`, 2026-11-04) - regenerate the last answer; thumbs up/down once something reads the feedback.
+
+### Clean links (parked from `docs/methods/clean-links.md`, 2026-11-06)
+- **Respect the page's `rel=canonical`** - enrichment stores the page canonical, and the cleaner keeps a param that the page canonical keeps.
+- **One list for dedup and cleaning** - widen `canonicalize` to the cleaner's built-in list and backfill `canonical_url`, so a re-captured clean URL never duplicates a saved one.
+- **ClearURLs catalog and rule import or export** - large and regex-heavy, and its 2026 maintenance status is unconfirmed. Revisit if the curated list misses too much.
+- **Clean URLs in Librarian chat sources** - stored chat source parts keep the URL as captured. Backups and exports stay raw on purpose.
+- **Edit settings over MCP** - no setting is editable over MCP today, link-cleaning rules included. Agents can preview with `clean_url`.

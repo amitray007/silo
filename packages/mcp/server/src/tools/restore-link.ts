@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { getById, restore, restoreMany } from '@silo/core';
+import { getById, loadUrlCleaner, restore, restoreMany } from '@silo/core';
 import { z } from 'zod';
 import {
   bulkItemResultShape,
@@ -142,6 +142,7 @@ export function registerRestoreLink(server: McpServer): void {
         };
       }
 
+      const cleaner = await loadUrlCleaner();
       if (res.status === 'merged') {
         return {
           content: [
@@ -154,13 +155,13 @@ export function registerRestoreLink(server: McpServer): void {
                 `exists as a live link; use id ${res.link.id} going forward.`,
             },
           ],
-          structuredContent: { outcome: 'merged', ...toBaseLinkContent(link) },
+          structuredContent: { outcome: 'merged', ...toBaseLinkContent(link, cleaner) },
         };
       }
 
       return {
         content: [{ type: 'text', text: `Restored link ${id} — it's live again.` }],
-        structuredContent: { outcome: 'restored', ...toBaseLinkContent(link) },
+        structuredContent: { outcome: 'restored', ...toBaseLinkContent(link, cleaner) },
       };
     },
   );

@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { searchFeedPosts } from '@silo/core';
+import { loadUrlCleaner, searchFeedPosts } from '@silo/core';
 import { z } from 'zod';
 import { feedResult, runFeedTool } from './feed-result.js';
 import { snippetLinkShape, toRankedResultLine, toSnippetLinkContent } from './link-shape.js';
@@ -37,8 +37,9 @@ export function registerSearchFeedPosts(server: McpServer): void {
           ...(limit !== undefined ? { limit } : {}),
           ...(cursor !== undefined ? { cursor } : {}),
         });
+        const cleaner = await loadUrlCleaner();
         const results = page.results.map((post) => ({
-          ...toSnippetLinkContent(post),
+          ...toSnippetLinkContent(post, cleaner),
           rank: post.rank,
           feedId,
           publishedAt: post.publishedAt?.toISOString() ?? null,

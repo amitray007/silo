@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { listReadingPositions } from '@silo/core';
+import { listReadingPositions, loadUrlCleaner } from '@silo/core';
 import { z } from 'zod';
 import {
   compactLinkShape,
@@ -42,9 +42,10 @@ export function registerListReadingPositions(server: McpServer): void {
     },
     async (input): Promise<CallToolResult> => {
       try {
+        const cleaner = await loadUrlCleaner();
         const page = await listReadingPositions(input);
         const positions = page.positions.map((row) => ({
-          link: row.link,
+          link: { ...row.link, url: cleaner(row.link.url), originalUrl: row.link.url },
           position: row.position,
           source: row.source,
           updatedAt: row.updatedAt.toISOString(),

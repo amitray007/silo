@@ -1,7 +1,13 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { EditLinkInput } from '@silo/core';
-import { clearReadingPosition, editLink, getById, setReadingPosition } from '@silo/core';
+import {
+  clearReadingPosition,
+  editLink,
+  getById,
+  loadUrlCleaner,
+  setReadingPosition,
+} from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, foundResult, notFoundResult } from './found-result.js';
 
@@ -51,6 +57,7 @@ export function registerEditLink(server: McpServer): void {
       outputSchema: foundLinkOutputShape,
     },
     async ({ id, title, description, note, readingPosition }): Promise<CallToolResult> => {
+      const cleaner = await loadUrlCleaner();
       // Built conditionally (not object-literal spread) because
       // `exactOptionalPropertyTypes` makes `EditLinkInput`'s optional fields
       // reject an explicit `undefined` — the input schema's `.optional()`
@@ -96,6 +103,7 @@ export function registerEditLink(server: McpServer): void {
       return foundResult(
         link,
         `Updated link ${id}. Call get_link with this id to see the full result.`,
+        cleaner,
       );
     },
   );

@@ -1,5 +1,5 @@
 import type { CreateLinkInput } from '@silo/core';
-import { canonicalize, createLink, getById, willDedupCapture } from '@silo/core';
+import { canonicalize, createLink, getById, loadUrlCleaner, willDedupCapture } from '@silo/core';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import { toLinkDetailJson } from '../link-json.js';
@@ -31,14 +31,14 @@ export async function respondWithLink(
   id: string,
   status: 200 | 201,
 ): Promise<Response> {
-  const link = await getById(id);
+  const [link, cleaner] = await Promise.all([getById(id), loadUrlCleaner()]);
   if (!link) {
     return c.json(
       { error: 'not_found', message: `No live link with id ${id} to return after this write` },
       404,
     );
   }
-  return c.json({ link: toLinkDetailJson(link) }, status);
+  return c.json({ link: toLinkDetailJson(link, cleaner) }, status);
 }
 
 /**
@@ -90,12 +90,12 @@ export async function performCapture(
     throw error;
   }
 
-  const link = await getById(created.id);
+  const [link, cleaner] = await Promise.all([getById(created.id), loadUrlCleaner()]);
   if (!link) {
     return c.json(
       { error: 'not_found', message: `Saved (id ${created.id}) but could not re-fetch it.` },
       404,
     );
   }
-  return c.json({ link: toLinkDetailJson(link), deduped }, 201);
+  return c.json({ link: toLinkDetailJson(link, cleaner), deduped }, 201);
 }

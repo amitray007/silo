@@ -14,7 +14,7 @@ describeMcpTool(
   'silo_mcp_retry_capture_test',
   'retry_capture (integration, via MCP client<->server)',
   (getContext) => {
-    it('tools/list lists retry_capture alongside the other 33 tools (34 total)', async () => {
+    it('tools/list lists retry_capture alongside the other 34 tools (35 total)', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name);
@@ -44,7 +44,7 @@ describeMcpTool(
           'create_tag',
         ]),
       );
-      expect(names).toHaveLength(34);
+      expect(names).toHaveLength(35);
     });
 
     // Any live capture is retryable, 'full' included (the owner re-runs a

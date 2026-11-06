@@ -10,6 +10,7 @@ import {
   editLink,
   getById,
   getByIds,
+  loadUrlCleaner,
   patchReaderPrefs,
   readerPatchSchema,
   removeTag,
@@ -345,11 +346,14 @@ export function registerLinksWriteRoutes(app: Hono): void {
    */
   app.post('/links/batch-get', async (c) => {
     const body = batchIdsBodySchema.parse(await c.req.json());
-    const outcome = await runBulkGuarded(c, () => getByIds(body.ids));
+    const [outcome, cleaner] = await Promise.all([
+      runBulkGuarded(c, () => getByIds(body.ids)),
+      loadUrlCleaner(),
+    ]);
     if (!outcome.ok) return outcome.response;
     const results = outcome.value.map((r) => ({
       id: r.id,
-      link: r.link ? toLinkDetailJson(r.link) : null,
+      link: r.link ? toLinkDetailJson(r.link, cleaner) : null,
     }));
     return c.json({ results }, 200);
   });
