@@ -138,6 +138,12 @@ it saves: trim, lowercase the domain, drop a scheme, `www.`, path, and port.
 - New `POST /api/links/clean-preview`, body `{ url }`, returns
   `{ url, originalUrl, removed }` using the saved setting. Same auth and body
   limit as the other link routes. The settings editor uses it for "Try a link".
+- New `GET /api/links/clean-defaults` returns the curated `linkCleaning`
+  default. "Reset to defaults" PATCHes this value back, so web never copies
+  the list.
+- `packages/api/src/routes/settings.ts`: a PATCH that carries `linkCleaning`
+  uses the 128 KB limit, the same exception `librarianActions` has today. A
+  larger body gets the existing 413.
 
 ### MCP
 
