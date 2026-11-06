@@ -17,6 +17,11 @@ describe('cleanUrl', () => {
       );
     }
   });
+  it('drops an empty query even when trailing separators remain', () => {
+    expect(cleanUrl('https://example.com/?utm_source=x&#hash', LINK_CLEANING_DEFAULTS).url).toBe(
+      'https://example.com/#hash',
+    );
+  });
   it('preserves original bytes and remaining order', () => {
     expect(
       cleanUrl('https://EXAMPLE.com/a%2fb?z=%20&UTM_source=x&a=1#hash', LINK_CLEANING_DEFAULTS),

@@ -63,7 +63,10 @@ export function cleanUrl(rawUrl: string, config: LinkCleaning): { url: string; r
       });
     if (!removed.length) return unchanged;
     return {
-      url: rawUrl.slice(0, queryAt) + (kept.length ? `?${kept.join('&')}` : '') + rawUrl.slice(end),
+      url:
+        rawUrl.slice(0, queryAt) +
+        (kept.some((part) => part !== '') ? `?${kept.join('&')}` : '') +
+        rawUrl.slice(end),
       removed,
     };
   } catch {
