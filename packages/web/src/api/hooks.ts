@@ -1460,7 +1460,26 @@ export function useUpdateSettings() {
       queue.enqueue(patch);
     },
     onError: (_error, patch) => queue.settle(patch),
-    onSuccess: (settings, patch) => queue.settle(patch, settings),
+    onSuccess: (settings, patch) => {
+      queue.settle(patch, settings);
+      if ('linkCleaning' in patch) {
+        for (const key of [
+          'links',
+          'links-recents',
+          'link',
+          'search',
+          'links-tag-only',
+          'trash',
+          'trash-search',
+          'feed-posts',
+          'highlights',
+          'reading-positions',
+          'link-url',
+        ]) {
+          void queryClient.invalidateQueries({ queryKey: [key] });
+        }
+      }
+    },
     onSettled: () => {
       if (queue.isPending()) return;
       queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
