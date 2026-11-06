@@ -5,6 +5,7 @@ import { readerAccessObservation } from '../extract/access.js';
 import { type ExtractResult, isHtmlContentType } from '../extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from '../extract/extract-constants.js';
 import type { extractYouTubeWatch } from '../extract/youtube-watch.js';
+import { otherSources, usesOtherSources } from './other-sources.js';
 
 /** Capture and refresh must choose the same Reader and matching search text. */
 function staticReader(
@@ -27,12 +28,14 @@ function staticReader(
 const STATIC_SOURCES = new Set(['twitter', 'youtube', 'hacker_news', 'github']);
 
 /** Stored capture paths share rendering; live extraction never calls this selector. */
-export async function selectReader(
+async function selectPageReader(
   sourceKind: string,
   extracted: ExtractResult,
   youtube: ReturnType<typeof extractYouTubeWatch>,
   options: {
     url: string;
+    sourceUrl?: string;
+    sources?: typeof otherSources | undefined;
     signal?: AbortSignal;
     contentType?: string | undefined;
     render?: (url: string, signal?: AbortSignal) => Promise<BrowserResult | undefined>;
@@ -120,4 +123,22 @@ function renderOutcome(result: BrowserResult | undefined): string {
   if (result?.renderOutcome) return result.renderOutcome;
   if (result?.renderPending) return 'pending';
   return result?.reader && result.text?.trim() ? 'ok' : 'empty';
+}
+
+export async function selectReader(
+  ...args: Parameters<typeof selectPageReader>
+): Promise<ObservedReader> {
+  const page = await selectPageReader(...args);
+  if (!usesOtherSources(args[0]) || !isHtmlContentType(args[3].contentType)) return page;
+  const result = await (args[3].sources ?? otherSources)(
+    args[3].sourceUrl ?? args[3].url,
+    page,
+    args[3].signal,
+  );
+  if (result.metadata) {
+    for (const key of ['title', 'description', 'imageUrl', 'siteName'] as const) {
+      if (!args[1][key] && result.metadata[key]) args[1][key] = result.metadata[key];
+    }
+  }
+  return result;
 }

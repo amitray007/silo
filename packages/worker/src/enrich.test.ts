@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import type { ObservedReader } from '@silo/core';
 import { runMigrations } from '@silo/db/migrate';
 import {
   createDisposableDatabase,
@@ -45,6 +47,115 @@ describeIfPg('enrichLink (integration)', () => {
     enrichMod = await import('./enrich.js');
     pool = new Pool({ connectionString: database.url });
   }, 60_000);
+
+  it('keeps the page Reader and paywall label when a feed Reader is shorter', async () => {
+    const link = await core.createLink({
+      url: 'https://bigthink.com/starts-with-a-bang/explain-higgs-boson-in-depth/',
+      sourceKind: 'link',
+    });
+    const { createOtherSources } = await import('./reader/other-sources.js');
+    const body = readFileSync(new URL('./reader/__fixtures__/feed.xml', import.meta.url), 'utf8');
+    const sources = createOtherSources({
+      feeds: async () => [],
+      fetch: async (url) =>
+        url.includes('/feed')
+          ? { ok: true, html: body, finalUrl: url, status: 200, contentType: 'application/rss+xml' }
+          : { ok: false, reason: 'http-error', status: 403 },
+    });
+    const pageReader = { contentHtml: '<p>Original free part</p>', contentImages: [] };
+    await enrichMod.enrichLink(link.id, {
+      ...stubDeps(
+        {
+          ok: true,
+          html: '<html></html>',
+          finalUrl: link.url,
+          status: 200,
+          contentType: 'text/html',
+        },
+        { status: 'full', reader: pageReader, text: 'a'.repeat(20000), access: 'paywalled' },
+      ),
+      selectReader: async (_kind, extracted, _youtube, options) =>
+        sources(options.url, {
+          status: 'reader',
+          reader: pageReader,
+          text: extracted.text ?? '',
+          observation: 'paywalled',
+        }),
+    });
+    expect(await core.getById(link.id)).toMatchObject({
+      readerSource: 'page',
+      readerAccess: 'paywalled',
+      extractedText: 'a'.repeat(20000),
+    });
+    expect((await core.getStoredReader(link.id))?.contentHtml).toBe(pageReader.contentHtml);
+  });
+  it('stores a feed Reader and source metadata on a blocked capture without clearing access', async () => {
+    const link = await core.createLink({
+      url: 'https://bigthink.com/starts-with-a-bang/explain-higgs-boson-in-depth/',
+      sourceKind: 'link',
+    });
+    const body = readFileSync(new URL('./reader/__fixtures__/feed.xml', import.meta.url), 'utf8');
+    const { createOtherSources } = await import('./reader/other-sources.js');
+    const sources = createOtherSources({
+      feeds: async () => [],
+      fetch: async (url) => ({
+        ok: true,
+        html: body,
+        finalUrl: url,
+        status: 200,
+        contentType: 'application/rss+xml',
+      }),
+    });
+    await enrichMod.enrichLink(link.id, {
+      safeFetch: async () => ({ ok: false, reason: 'http-error', status: 403 }),
+      extract: async () => ({ status: 'bare' }),
+      enrichSource: async () => undefined,
+      getPluginsSetting: stubDeps({ ok: false, reason: 'timeout' }).getPluginsSetting,
+      otherSources: sources,
+    });
+    const saved = await core.getById(link.id);
+    expect(saved).toMatchObject({
+      readerSource: 'feed',
+      readerAccess: 'blocked',
+      captureStatus: 'full',
+    });
+    expect(saved?.title).toContain('Higgs');
+    expect(saved?.extractedText?.length).toBeGreaterThan(14000);
+    const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+    const invalidate = vi.fn();
+    core.setReaderRefresher(
+      createReaderRefresher(invalidate, {
+        fetch: async () => ({ ok: false, reason: 'http-error', status: 403 }),
+        sources,
+      }),
+    );
+    try {
+      expect(await core.refreshReader(link.id)).toMatchObject({ status: 'reader' });
+      expect(await core.getById(link.id)).toMatchObject({
+        readerSource: 'feed',
+        readerAccess: 'blocked',
+      });
+      expect(invalidate).toHaveBeenCalledWith(link.id);
+    } finally {
+      core.setReaderRefresher(undefined);
+    }
+  });
+
+  it.each(['youtube', 'github', 'hacker_news'])(
+    'never looks for a feed or archive copy of a blocked %s link',
+    async (sourceKind) => {
+      const link = await core.createLink({ url: `https://example.com/${sourceKind}`, sourceKind });
+      const sources = vi.fn(async (_url: string, page: ObservedReader) => page);
+      await enrichMod.enrichLink(link.id, {
+        safeFetch: async () => ({ ok: false, reason: 'http-error', status: 403 }),
+        extract: async () => ({ status: 'bare' }),
+        enrichSource: async () => undefined,
+        getPluginsSetting: stubDeps({ ok: false, reason: 'timeout' }).getPluginsSetting,
+        otherSources: sources,
+      });
+      expect(sources).not.toHaveBeenCalled();
+    },
+  );
 
   afterAll(async () => {
     try {
@@ -1517,3 +1628,8 @@ describeIfPg('enrichLink (integration)', () => {
     });
   });
 });
+
+vi.mock('./reader/other-sources.js', async (original) => ({
+  ...(await original<typeof import('./reader/other-sources.js')>()),
+  otherSources: async (_url: string, page: unknown) => page,
+}));

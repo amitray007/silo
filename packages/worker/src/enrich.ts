@@ -49,6 +49,7 @@ import { extractFeedMedia, feedMediaData } from './feeds/media.js';
 import { cleanTitle } from './feeds/parse.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 import { HTML_ACCEPT, safeFetch } from './fetch/safe-fetch.js';
+import { otherSources, usesOtherSources } from './reader/other-sources.js';
 import { selectReader } from './reader/select-reader.js';
 
 /** Injectable seams for testing — default to the real implementations. */
@@ -75,6 +76,7 @@ export interface EnrichLinkDeps {
    */
   getPluginsSetting: () => Promise<SettingsMap['plugins']>;
   selectReader?: typeof selectReader;
+  otherSources?: typeof otherSources;
   /**
    * Asks the optional AI layer for an X post's title (`x-post-title`). Never
    * throws; `off` means AI or the feature is off. Defaults to the real runner;
@@ -452,13 +454,18 @@ async function enrichFullLink(
     }
 
     if (!fetchResult.ok) {
-      await recordBlockedFetch(linkId, fetchResult, fetchedAt);
-      await recordThenMaybeSettle(link, {
-        status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
-        ...aiTitleFields(await aiTitlePromise),
-        ...postText,
-        ...(sourceData ? { sourceData } : {}),
-      });
+      await recordFetchFailure(
+        link,
+        fetchResult,
+        {
+          sourceData,
+          holdFull,
+          fetchedAt,
+          aiTitle: await aiTitlePromise,
+          sources: deps.otherSources,
+        },
+        postText,
+      );
       return;
     }
 
@@ -478,8 +485,10 @@ async function enrichFullLink(
       youtube,
       {
         url: fetchResult.finalUrl,
+        sourceUrl: link.url,
         contentType: fetchResult.contentType,
         signal: AbortSignal.timeout(60_000),
+        sources: deps.otherSources,
       },
     );
     await recordExtraction(link, extracted, selected, {
@@ -565,7 +574,8 @@ async function enrichSelectedFields(
   ]);
   if (fetched && !fetched.ok) {
     await recordBlockedFetch(link.id, fetched, fetchedAt);
-    await recordEnrichment(link.id, { status }, run);
+    const recovered = plan.reader ? await recoverNarrow(link, plan, deps, fetched, fetchedAt) : {};
+    await recordEnrichment(link.id, { status, ...recovered }, run);
     return;
   }
   const extracted = fetched
@@ -620,8 +630,10 @@ async function recordNarrowReader(
     link.sourceKind === 'youtube' ? extractYouTubeWatch(fetched.html, fetched.finalUrl) : undefined;
   const selected = await (deps.selectReader ?? selectReader)(link.sourceKind, extracted, youtube, {
     url: fetched.finalUrl,
+    sourceUrl: link.url,
     contentType: fetched.contentType,
     signal: AbortSignal.timeout(60_000),
+    sources: deps.otherSources,
   });
   await recordObservedAccess(link.id, selectedAccess(selected, extracted), fetchedAt);
   if (link.sourceKind !== 'twitter') await recordReader(link.id, selected, fetchedAt);
@@ -655,6 +667,7 @@ type ExtractionRecord = {
   fetchedAt: Date;
   /** A fresh AI title for an X post, or `undefined` to keep the page title. */
   aiTitle: string | undefined;
+  sources?: typeof otherSources | undefined;
 };
 
 /** Record a successful fetch + extract, including the Reader (see `enrichLink`). */
@@ -729,4 +742,51 @@ function selectedAccess(selected: ObservedReader, extracted: ExtractResult) {
   return selected.observation !== undefined
     ? selected.observation
     : readerAccessObservation(extracted);
+}
+
+async function blockedSources(url: string, result: SafeFetchResult, sources = otherSources) {
+  const page = { status: 'fetch_failed' as const, observation: readerAccessObservation(result) };
+  return page.observation === 'blocked' ? sources(url, page) : page;
+}
+
+async function recordBlockedSource(
+  link: LinkSummaryWithTags,
+  fetch: SafeFetchResult,
+  options: ExtractionRecord,
+) {
+  if (!usesOtherSources(link.sourceKind)) return false;
+  const fallback = await blockedSources(link.url, fetch, options.sources);
+  if (fallback.status !== 'reader') return false;
+  await recordExtraction(link, fallback.metadata ?? { status: 'bare' }, fallback, options);
+  return true;
+}
+
+async function recordFetchFailure(
+  link: LinkSummaryWithTags,
+  fetch: Exclude<SafeFetchResult, { ok: true }>,
+  options: ExtractionRecord,
+  postText: ReturnType<typeof twitterTextFields>,
+) {
+  await recordBlockedFetch(link.id, fetch, options.fetchedAt);
+  if (await recordBlockedSource(link, fetch, options)) return;
+  await recordThenMaybeSettle(link, {
+    status: options.holdFull ? 'full' : mapSafeFetchFailureToStatus(fetch.reason),
+    ...aiTitleFields(options.aiTitle),
+    ...postText,
+    ...(options.sourceData ? { sourceData: options.sourceData } : {}),
+  });
+}
+
+async function recoverNarrow(
+  link: NarrowLink,
+  plan: EnrichPlan,
+  deps: EnrichLinkDeps,
+  fetched: SafeFetchResult,
+  at: Date,
+) {
+  if (!usesOtherSources(link.sourceKind)) return {};
+  const result = await blockedSources(link.url, fetched, deps.otherSources);
+  if (result.status !== 'reader') return {};
+  await recordReader(link.id, result, at);
+  return narrowMetadata(plan, result.metadata ?? { status: 'bare' });
 }

@@ -20,6 +20,8 @@ export function makeLink(overrides: Partial<LinkJson> = {}): LinkJson {
     sourceKind: 'link',
     sourceData: { kind: 'link' },
     readerAccess: null,
+    readerSource: null,
+    readerSourceAt: null,
     captureStatus: 'full',
     addedBy: 'user',
     source: 'unknown',

@@ -1,3 +1,4 @@
+import type { ObservedReader } from '@silo/core';
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserResult } from '../browser/reader.js';
@@ -316,4 +317,20 @@ it('keeps blocked access when rendering a challenge fails', async () => {
     contentType: 'text/html',
   });
   expect(result.observation).toBe('blocked');
+});
+
+vi.mock('./other-sources.js', async (original) => ({
+  ...(await original<typeof import('./other-sources.js')>()),
+  otherSources: async (_url: string, page: unknown) => page,
+}));
+
+it('never looks for other sources for a non-HTML page', async () => {
+  const sources = vi.fn(async (_url: string, page: ObservedReader) => page);
+  const result = await selectReader('link', { status: 'bare' }, undefined, {
+    url: 'https://final.example/paper.pdf',
+    contentType: 'application/pdf',
+    sources,
+  });
+  expect(result.status).toBe('no_reader');
+  expect(sources).not.toHaveBeenCalled();
 });

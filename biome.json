@@ -219,6 +219,12 @@
           }
         }
       }
+    },
+    {
+      "includes": ["packages/worker/src/reader/__fixtures__/*.html"],
+      "formatter": { "enabled": false },
+      "linter": { "enabled": false },
+      "assist": { "enabled": false }
     }
   ]
 }

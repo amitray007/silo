@@ -143,6 +143,26 @@ describe('Live Reader', () => {
     expect(screen.getByRole('button', { name: 'Retry capture' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open original' })).toBeTruthy();
   });
+  it('labels a feed Reader without showing the blocked empty state', async () => {
+    show(() => json(reader), makeLink({ readerSource: 'feed', readerAccess: 'blocked' }));
+    expect(await screen.findByText("From the site's feed.")).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Blocked by the site' })).toBeNull();
+  });
+  it('drops the free-part notice when a paywalled Reader came from the feed', async () => {
+    show(() => json(reader), makeLink({ readerSource: 'feed', readerAccess: 'paywalled' }));
+    expect(await screen.findByText("From the site's feed.")).toBeTruthy();
+    expect(screen.queryByText(/Subscriber article/)).toBeNull();
+  });
+  it('links an archive Reader to its dated snapshot', async () => {
+    show(
+      () => json(reader),
+      makeLink({ readerSource: 'archive', readerSourceAt: '2026-10-16T18:10:59Z' }),
+    );
+    const anchor = await screen.findByRole('link', {
+      name: 'snapshot of 16 Oct 2026',
+    });
+    expect(anchor.getAttribute('href')).toContain('/20261016181059/https://');
+  });
   it('labels the free part of a subscriber article', async () => {
     show(() => json(reader), makeLink({ readerAccess: 'paywalled' }));
     expect(

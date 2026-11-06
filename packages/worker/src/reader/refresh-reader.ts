@@ -5,12 +5,14 @@ import { type ExtractInput, type ExtractResult, extract } from '../extract/extra
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
 import { readFeedMedia } from '../feeds/media.js';
 import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
+import { otherSources, usesOtherSources } from './other-sources.js';
 import { selectReader } from './select-reader.js';
 
 /** Uses extract's existing single reader thread, shared with capture and live reads. */
 export function createReaderRefresher(
   invalidate: (id: string) => void,
   deps: {
+    sources?: typeof otherSources;
     fetch?: (url: string, signal: AbortSignal) => Promise<SafeFetchResult>;
     extract?: (input: ExtractInput) => Promise<ExtractResult>;
   } = {},
@@ -24,7 +26,10 @@ export function createReaderRefresher(
     if (signal.aborted) return { status: 'fetch_failed' };
     if (link.sourceKind === 'feed_media') return readFeedMedia(link.id, link.url, signal);
     const page = await fetch(link.url, signal);
-    if (!page.ok || signal.aborted) return failedRead(page, signal);
+    if (!page.ok || signal.aborted) {
+      const failed = failedRead(page, signal);
+      return recoverBlocked(link, failed, signal, invalidate, deps.sources);
+    }
     const youtube =
       link.sourceKind === 'youtube' ? extractYouTubeWatch(page.html, page.finalUrl) : undefined;
     const extracted = await run({
@@ -35,6 +40,8 @@ export function createReaderRefresher(
     if (signal.aborted) return { status: 'fetch_failed' };
     const result = await selectReader(link.sourceKind, extracted, youtube, {
       url: page.finalUrl,
+      sourceUrl: link.url,
+      sources: deps.sources,
       contentType: page.contentType,
       signal,
     });
@@ -51,4 +58,19 @@ function failedRead(page: SafeFetchResult, signal: AbortSignal) {
     status: 'fetch_failed' as const,
     ...(!signal.aborted ? { observation: readerAccessObservation(page) } : {}),
   };
+}
+
+async function recoverBlocked(
+  link: { id: string; url: string; sourceKind: string },
+  failed: ReturnType<typeof failedRead>,
+  signal: AbortSignal,
+  invalidate: (id: string) => void,
+  sources = otherSources,
+) {
+  const result =
+    failed.observation === 'blocked' && !signal.aborted && usesOtherSources(link.sourceKind)
+      ? await sources(link.url, failed, signal)
+      : failed;
+  if (result.status === 'reader') invalidate(link.id);
+  return result;
 }

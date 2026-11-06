@@ -33,3 +33,8 @@ describe('runEnrichJob', () => {
     }
   });
 });
+
+vi.mock('./reader/other-sources.js', async (original) => ({
+  ...(await original<typeof import('./reader/other-sources.js')>()),
+  otherSources: async (_url: string, page: unknown) => page,
+}));

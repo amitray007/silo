@@ -8,6 +8,7 @@ export {
   feedStatus,
   linkOrigin,
   readerAccess,
+  readerSource,
   titleSource,
 } from './enums.js';
 export { feedEntries, feeds } from './feeds.js';

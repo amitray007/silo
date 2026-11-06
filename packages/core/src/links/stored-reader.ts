@@ -4,7 +4,14 @@ import { READER_VERSION, type ReaderContent, readerContentSchema } from '../capt
 import { FIELD_MAX } from './enrichment.js';
 
 export type ReaderExtraction =
-  | { status: 'reader'; reader: ReaderContent; text?: string; renderPending?: boolean }
+  | {
+      status: 'reader';
+      reader: ReaderContent;
+      readerSource?: 'page' | 'feed' | 'archive';
+      readerSourceAt?: Date | null;
+      text?: string;
+      renderPending?: boolean;
+    }
   | { status: 'no_reader'; text?: string; renderPending?: boolean }
   | { status: 'fetch_failed' };
 export type ReaderAccess = 'paywalled' | 'blocked';
@@ -81,6 +88,13 @@ function readerUpdate(
   const text = result.text?.trim();
   const keepCurrent = sql`${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null`;
   return {
+    ...(reader && result.status === 'reader'
+      ? {
+          readerSource: result.readerSource ?? 'page',
+          readerSourceAt:
+            result.readerSource === 'archive' ? (result.readerSourceAt ?? null) : null,
+        }
+      : {}),
     contentHtml:
       reader?.contentHtml ?? sql`case when ${keepCurrent} then ${links.contentHtml} else null end`,
     contentImages:

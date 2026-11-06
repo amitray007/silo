@@ -57,10 +57,30 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
     expect(result.structuredContent).toMatchObject({ id, readerAccess: 'paywalled' });
     const { tools } = await client.listTools();
     expect(tools.find((tool) => tool.name === 'get_link')?.description).toContain(
-      'paywalled: the text is only the free part',
+      'with paywalled and page, the text is only the free part',
     );
   });
 
+  it('returns Reader provenance through get_link', async () => {
+    const { core, client } = getContext();
+    const id = await seedLink(getContext, 'https://example.com/archive');
+    await core.recordReader(
+      id,
+      {
+        status: 'reader',
+        reader: { contentHtml: '<p>Archived</p>', contentImages: [] },
+        readerSource: 'archive',
+        readerSourceAt: new Date('2026-10-16T18:10:59Z'),
+      },
+      new Date(),
+    );
+    const result = await client.callTool({ name: 'get_link', arguments: { id } });
+    expect(result.structuredContent).toMatchObject({
+      readerSource: 'archive',
+      readerSourceAt: '2026-10-16T18:10:59.000Z',
+    });
+    expect(JSON.stringify(result.content)).toContain('readerSource: archive');
+  });
   it('omits a null readerAccess from text summary', async () => {
     const { client } = getContext();
     const id = await seedLink(getContext, 'https://example.com/unrestricted');

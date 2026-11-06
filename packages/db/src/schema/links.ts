@@ -14,7 +14,14 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { tsvector } from '../types.js';
-import { captureSource, captureStatus, linkOrigin, readerAccess, titleSource } from './enums.js';
+import {
+  captureSource,
+  captureStatus,
+  linkOrigin,
+  readerAccess,
+  readerSource,
+  titleSource,
+} from './enums.js';
 import { feeds } from './feeds.js';
 
 /**
@@ -66,6 +73,8 @@ export const links = pgTable(
     extractedText: text('extracted_text'),
     contentHtml: text('content_html'),
     contentImages: jsonb('content_images').$type<string[]>(),
+    readerSource: readerSource('reader_source'),
+    readerSourceAt: timestamp('reader_source_at', { withTimezone: true }),
     readerAccess: readerAccess('reader_access'),
     readerAccessAt: timestamp('reader_access_at', { withTimezone: true }),
     readerVersion: integer('reader_version'),
