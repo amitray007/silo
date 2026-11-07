@@ -232,10 +232,7 @@ export function AppFrame() {
   useEffect(() => {
     if (!drawerOpen) {
       if (drawerWasOpen.current && !document.querySelector('[role="dialog"], [role="alertdialog"]'))
-        (matchMedia(layoutMedia.phone).matches
-          ? document.querySelector<HTMLElement>('.silo-collection-trigger')
-          : menuButtonRef.current
-        )?.focus();
+        menuButtonRef.current?.focus();
       drawerWasOpen.current = false;
       return;
     }

@@ -1265,6 +1265,7 @@
     bottom: 0;
     left: 0;
     width: min(280px, 84%);
+    background: var(--bg);
     box-shadow: var(--elev-3);
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-100%);
@@ -1272,6 +1273,10 @@
     transition:
       transform 0.3s var(--ease-drawer),
       visibility 0s 0.3s;
+  }
+  /* Opening the drawer focuses it for screen readers; a ring around the whole drawer adds nothing. */
+  .silo-frame .silo-sidebar:focus-visible {
+    outline: none;
   }
   .silo-sidebar[data-open="true"] {
     display: flex;
@@ -1291,8 +1296,13 @@
   .silo-content {
     margin-left: 0;
   }
+  /* 40px touch target; the icon stays centered on the title row. */
   .silo-frame .silo-list-menu {
     display: grid;
+    top: 2px;
+    left: 4px;
+    width: 40px;
+    height: 40px;
   }
   .silo-panehead {
     padding-left: 44px;
@@ -1338,12 +1348,6 @@
 @media (max-width: 640px) {
   .silo-listpane {
     border-right: 0;
-  }
-  .silo-frame .silo-list-menu {
-    display: none;
-  }
-  .silo-frame .silo-panehead {
-    padding-left: 24px;
   }
   .silo-content-body {
     padding: 12px 12px calc(100px + env(safe-area-inset-bottom, 0px));
