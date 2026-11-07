@@ -327,3 +327,33 @@ it('folds on an outside press, retains the chat, and returns focus only from ins
   expect(screen.getByRole('button', { name: 'Ask' })).toBe(ask);
   outside.remove();
 });
+
+it.each(['Type', 'Ask'])('clears only article selections when opening %s', async (name) => {
+  renderContent(makeLink({ id: `selection-${name}` }), prose, true);
+  const body = await screen.findByText('Body text');
+  const button = await screen.findByRole('button', { name });
+  const selection = window.getSelection();
+  if (!selection) throw new Error('Selection API missing');
+  const range = document.createRange();
+  range.selectNodeContents(body);
+  selection?.removeAllRanges();
+  selection.addRange(range);
+  const clear = vi.spyOn(selection, 'removeAllRanges');
+  fireEvent.click(button);
+  expect(clear).toHaveBeenCalled();
+  expect(selection.toString()).toBe('');
+  clear.mockRestore();
+});
+
+it('leaves a selection outside the article alone when a sheet opens', async () => {
+  renderContent(undefined, prose);
+  const button = await screen.findByRole('button', { name: 'Type' });
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(button);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.click(button);
+  expect(selection?.rangeCount).toBe(1);
+  selection?.removeAllRanges();
+});
