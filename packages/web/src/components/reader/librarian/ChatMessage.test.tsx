@@ -627,3 +627,28 @@ describe('ChatMessage reasoning', () => {
     expect(screen.queryByText('Weighing the two sources.')).toBeNull();
   });
 });
+
+it.each([
+  'Select these words while the answer streams.',
+  '**Select these words** while the answer streams.\n\nAnother paragraph.',
+  '- Select these words\n- Keep this list',
+])('keeps selected text nodes at finish: %s', (answer) => {
+  const message = reply(answer);
+  const view = render(<ChatMessage message={message} streaming />);
+  const paragraph = view.container.querySelector('.silo-chat-answer :is(p, li)');
+  if (!paragraph) throw new Error('Answer paragraph missing');
+  const walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT);
+  const node = walker.nextNode();
+  if (!node) throw new Error('Answer text missing');
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  const selected = selection?.toString();
+  expect(selected).not.toBe('');
+  view.rerender(<ChatMessage message={{ ...message, metadata: { finalAnswer: true } }} />);
+  expect(node.isConnected).toBe(true);
+  expect(selection?.toString()).toBe(selected);
+  selection?.removeAllRanges();
+});

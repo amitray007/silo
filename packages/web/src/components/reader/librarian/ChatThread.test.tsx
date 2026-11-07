@@ -758,3 +758,28 @@ it('keeps a pinned log at the end when its own height shrinks, but leaves an unp
     vi.unstubAllGlobals();
   }
 });
+
+it('retains answer text nodes across stream completion and a persisted assistant id', () => {
+  const thread = (busy: boolean, id: string) => (
+    <ChatThread
+      chat={fakeChat({
+        busy,
+        messages: [text('question', 'user', 'Why?'), text(id, 'assistant', 'A stable answer.')],
+      })}
+      composer={composer()}
+      actions={[]}
+      emptyText="Empty"
+      header={null}
+    />
+  );
+  const view = render(thread(true, 'streamed'));
+  const answer = view.container.querySelector('.silo-chat-answer');
+  if (!answer) throw new Error('Answer missing');
+  const walker = document.createTreeWalker(answer, NodeFilter.SHOW_TEXT);
+  const node = walker.nextNode();
+  if (!node) throw new Error('Answer text missing');
+  view.rerender(thread(false, 'stored'));
+  expect(node.isConnected).toBe(true);
+  expect(view.container.querySelector('.silo-chat-answer')).toBe(answer);
+  expect(screen.getByRole('button', { name: 'Copy answer' })).toBeTruthy();
+});

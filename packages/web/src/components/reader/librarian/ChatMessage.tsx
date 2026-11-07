@@ -1,6 +1,20 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { type CSSProperties, memo, type SyntheticEvent, useCallback, useState } from 'react';
-import { type AnimateOptions, defaultRehypePlugins, Streamdown } from 'streamdown';
+import {
+  type CSSProperties,
+  memo,
+  type SyntheticEvent,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  type AnimateOptions,
+  Block,
+  type BlockProps,
+  defaultRehypePlugins,
+  Streamdown,
+} from 'streamdown';
 import { useChatAppearance } from '../../../lib/chatAppearance';
 import { copyLabel, useCopyFlash } from '../../SettingsTabs/copyFlash';
 import { ReaderIcon } from '../ReaderIcon';
@@ -39,6 +53,18 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof Streamdown>['c
 
 /** Words fade in as they arrive; sd-fadeIn and the reduced-motion rule live in reader-librarian.css. */
 const wordFade: AnimateOptions = { animation: 'fadeIn', duration: 250, sep: 'word' };
+
+/** Streamdown drops its word spans at finish; retain the block's plugin so selected text stays put. */
+function AnswerBlock({ animatePlugin, rehypePlugins = [], ...props }: BlockProps) {
+  const animation = useRef(animatePlugin);
+  if (animatePlugin) animation.current = animatePlugin;
+  const retained = animation.current;
+  const plugins = useMemo(
+    () => (!animatePlugin && retained ? [...rehypePlugins, retained.rehypePlugin] : rehypePlugins),
+    [animatePlugin, retained, rehypePlugins],
+  );
+  return <Block {...props} animatePlugin={retained ?? null} rehypePlugins={plugins} />;
+}
 
 // Streamdown 2.7.1 hides pan controls but keeps its wheel and pointer listeners active.
 function nativeDiagramScroll(event: SyntheticEvent) {
@@ -226,6 +252,7 @@ export const ChatMessage = memo(function ChatMessage({
                   controls={false}
                   tableMaxHeight={0}
                   codeBlockMaxHeight={0}
+                  BlockComponent={AnswerBlock}
                   animated={wordFade}
                   isAnimating={streaming}
                   rehypePlugins={citationPlugins}
