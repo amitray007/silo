@@ -6,32 +6,68 @@ type DockEntry = {
   token: string;
   url: string;
   close: (reason: CloseReason) => void;
-  popped: () => void;
 };
 let current: DockEntry | undefined;
 let consuming: Promise<void> | undefined;
+let finishConsuming: (() => void) | undefined;
+let listening = false;
+let lastIndex: number | undefined;
+let tail: { token: string; length: number } | undefined;
+
+function historyIndex(): number | undefined {
+  const index = window.history.state?.idx;
+  return typeof index === 'number' ? index : undefined;
+}
+
+function onPopState(event: PopStateEvent) {
+  const index = historyIndex();
+  const previous = lastIndex;
+  lastIndex = index;
+  if (current && !owns(current)) {
+    const entry = current;
+    current = undefined;
+    entry.close('back');
+  }
+  const token = window.history.state?.[MARKER];
+  if (token && token !== current?.token && index !== undefined && previous !== undefined) {
+    const direction = Math.sign(index - previous);
+    if (direction) {
+      // React Router must only see the final destination, not an abandoned dock entry.
+      event.stopImmediatePropagation();
+      const atTail =
+        tail !== undefined && tail.token === token && tail.length === window.history.length;
+      // Forward has no destination beyond the tail; return to the article instead.
+      if (direction > 0 && !atTail) window.history.forward();
+      else window.history.back();
+      return;
+    }
+  }
+  const finish = finishConsuming;
+  finishConsuming = undefined;
+  consuming = undefined;
+  finish?.();
+}
+
+function listen() {
+  if (listening) return;
+  listening = true;
+  window.addEventListener('popstate', onPopState, { capture: true });
+}
 
 function owns(entry: DockEntry) {
   return window.location.href === entry.url && window.history.state?.[MARKER] === entry.token;
 }
 
 function forget(entry: DockEntry) {
-  window.removeEventListener('popstate', entry.popped);
   if (current === entry) current = undefined;
 }
 
 function consume(entry: DockEntry) {
+  lastIndex = historyIndex();
   forget(entry);
   if (!owns(entry)) return;
   consuming = new Promise<void>((resolve) => {
-    window.addEventListener(
-      'popstate',
-      () => {
-        consuming = undefined;
-        resolve();
-      },
-      { once: true },
-    );
+    finishConsuming = resolve;
     window.history.back();
   });
 }
@@ -54,17 +90,20 @@ export function clearArticleSelection(prose: HTMLElement | null) {
     selection.removeAllRanges();
 }
 
-/** One same-URL entry protects the reader beneath the dock's top overlay. */
+/** One same-URL entry protects the reader while any dock overlay is open. */
 export function useDockHistory(
-  overlay: string | null,
+  open: boolean,
   onClose: (reason: CloseReason) => void,
   prose: HTMLElement | null,
 ) {
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
-    if (!overlay) return;
-    clearArticleSelection(prose);
+    if (open) clearArticleSelection(prose);
+  }, [open, prose]);
+  useEffect(() => {
+    listen();
+    if (!open) return;
     let cancelled = false;
     let entry: DockEntry | undefined;
     const push = () => {
@@ -73,11 +112,6 @@ export function useDockHistory(
         token: crypto.randomUUID(),
         url: window.location.href,
         close: (reason) => close.current(reason),
-        popped: () => {
-          if (!entry || owns(entry)) return;
-          forget(entry);
-          entry.close('back');
-        },
       };
       current = entry;
       const state = window.history.state;
@@ -86,7 +120,8 @@ export function useDockHistory(
         '',
         entry.url,
       );
-      window.addEventListener('popstate', entry.popped);
+      lastIndex = historyIndex();
+      tail = { token: entry.token, length: window.history.length };
     };
     if (consuming) void consuming.then(push);
     else push();
@@ -94,5 +129,5 @@ export function useDockHistory(
       cancelled = true;
       if (entry && current === entry) consume(entry);
     };
-  }, [overlay, prose]);
+  }, [open]);
 }

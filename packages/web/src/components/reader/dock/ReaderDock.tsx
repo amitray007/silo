@@ -484,12 +484,11 @@ function DockSurface({
     setOpenId(null);
   };
   useDockHistory(
-    openId ?? (lane.open ? 'notes' : null),
-    (reason) => {
-      if (reason === 'navigate') lane.close();
+    openId !== null || lane.open,
+    () => {
+      lane.close();
       if (openId === 'ask') foldChat();
-      else if (openId) setOpenId(null);
-      else lane.close();
+      else setOpenId(null);
     },
     prose,
   );

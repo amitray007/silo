@@ -16,11 +16,10 @@ function Dock() {
   const [overlay, setOverlay] = useState<string | null>(null);
   const [notes, setNotes] = useState(false);
   useDockHistory(
-    overlay ?? (notes ? 'Notes' : null),
-    (reason) => {
-      if (reason === 'navigate') setNotes(false);
-      if (overlay) setOverlay(null);
-      else setNotes(false);
+    overlay !== null || notes,
+    () => {
+      setNotes(false);
+      setOverlay(null);
     },
     null,
   );
@@ -146,39 +145,44 @@ it('waits for a pending close before reopening and handles a sheet switch', asyn
   fireEvent.click(screen.getByRole('button', { name: 'Type' }));
   const first = window.history.state.siloDock;
   fireEvent.click(screen.getByRole('button', { name: 'Chat' }));
-  await waitFor(() => expect(window.history.state.siloDock).not.toBe(first));
-  await waitFor(() => expect(window.history.state.siloDock).toBeDefined());
+  expect(window.history.state.siloDock).toBe(first);
   await back();
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(window.location.search).toBe('?link=a');
 });
 
-it('backs through the top sheet then Notes, and dismisses both before article navigation', async () => {
+it('keeps one entry for Notes and a sheet, and closes both on Back or navigation', async () => {
   mount();
   fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
   const notesEntry = window.history.state.siloDock;
+  const length = window.history.length;
   fireEvent.click(screen.getByRole('button', { name: 'Type' }));
-  await waitFor(() => {
-    expect(window.history.state.siloDock).toBeDefined();
-    expect(window.history.state.siloDock).not.toBe(notesEntry);
-  });
+  expect(window.history.state.siloDock).toBe(notesEntry);
+  expect(window.history.length).toBe(length);
+  fireEvent.click(screen.getByRole('button', { name: 'Close overlay' }));
+  expect(screen.getByLabelText('Notes')).toBeTruthy();
+  expect(window.history.state.siloDock).toBe(notesEntry);
+  fireEvent.click(screen.getByRole('button', { name: 'Chat' }));
   await back();
   expect(screen.queryByRole('dialog')).toBeNull();
-  expect(screen.getByLabelText('Notes')).toBeTruthy();
-  await waitFor(() => expect(window.history.state.siloDock).toBeDefined());
-  await back();
   expect(screen.queryByLabelText('Notes')).toBeNull();
   expect(screen.getByTestId('article').textContent).toBe('a');
   fireEvent.click(screen.getByRole('button', { name: 'Notes' }));
-  const reopened = window.history.state.siloDock;
-  fireEvent.click(screen.getByRole('button', { name: 'Type' }));
-  await waitFor(() => {
-    expect(window.history.state.siloDock).toBeDefined();
-    expect(window.history.state.siloDock).not.toBe(reopened);
-  });
+  fireEvent.click(screen.getByRole('button', { name: 'Chat' }));
   fireEvent.click(screen.getByRole('button', { name: 'Next' }));
   await waitFor(() => expect(screen.getByTestId('article').textContent).toBe('b'));
+  expect(screen.queryByLabelText('Notes')).toBeNull();
   expect(window.history.state.siloDock).toBeUndefined();
   await back();
   expect(screen.getByTestId('article').textContent).toBe('a');
+});
+
+it('does not skip the marker owned by an open overlay', async () => {
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Type' }));
+  const token = window.history.state.siloDock;
+  act(() => window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state })));
+  expect(window.history.state.siloDock).toBe(token);
+  expect(screen.getByRole('dialog', { name: 'Type' })).toBeDefined();
+  expect(window.location.search).toBe('?link=a');
 });
