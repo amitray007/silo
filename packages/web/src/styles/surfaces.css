@@ -1396,14 +1396,21 @@
 }
 /* Plugins: compact source disclosures. */
 .silo-settings-panel .silo-plugin-section-label {
-  margin: 20px 0 6px;
+  margin: 36px 0 -8px;
+  line-height: 16px;
   font-size: 12px;
   font-weight: 500;
   color: var(--fnt);
   letter-spacing: normal;
 }
-.silo-settings-panel .silo-plugin-section-label:first-child {
+.silo-settings-panel > .silo-plugin-section-label:first-child {
   margin-top: 0;
+}
+.silo-plugin-sources {
+  padding-top: 16px;
+}
+.silo-plugin-section-label + .silo-plugin-silo-row {
+  padding-top: 16px;
 }
 .silo-plugin-source,
 .silo-plugin-silo-row {
