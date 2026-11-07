@@ -1296,16 +1296,17 @@
   .silo-content {
     margin-left: 0;
   }
-  /* 40px touch target; the icon stays centered on the title row. */
+  /* A 40px touch target whose icon sits on the row icons' 24px edge; the title takes the row
+     titles' 60px edge. */
   .silo-frame .silo-list-menu {
     display: grid;
     top: 2px;
-    left: 4px;
+    left: 14px;
     width: 40px;
     height: 40px;
   }
-  .silo-panehead {
-    padding-left: 44px;
+  .silo-frame .silo-panehead:not(.silo-chatpage-head) {
+    padding-left: 60px;
   }
 }
 @media (min-width: 1024px) {

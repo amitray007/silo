@@ -1058,7 +1058,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   }
 }
 @media (max-width: 1023px) {
-  .silo-frame .silo-chatpage-head {
+  .silo-frame .silo-chatpage-head,
+  .silo-frame[data-collapsed="true"] .silo-chatpage-head {
     padding-left: 8px;
   }
   .silo-chatpage-back {
