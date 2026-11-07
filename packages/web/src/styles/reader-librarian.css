@@ -1936,6 +1936,30 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   .silo-composer textarea {
     font-size: 16px;
   }
+  .silo-panehead .silo-reader-iconbtn {
+    width: 40px;
+    height: 40px;
+  }
+  /* Small pills keep their look; an invisible layer takes the finger. */
+  .silo-sources-btn,
+  button.silo-reasoning-head,
+  .silo-chat-assistant a.silo-cite {
+    position: relative;
+  }
+  .silo-sources-btn::before,
+  button.silo-reasoning-head::before,
+  .silo-chat-jump::before,
+  .silo-chat-assistant a.silo-cite::before {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  button.silo-reasoning-head::before {
+    inset: -8px 0;
+  }
+  .silo-chat-assistant a.silo-cite::before {
+    inset: -10px -2px;
+  }
   .silo-chat-actions {
     min-height: 40px;
   }
