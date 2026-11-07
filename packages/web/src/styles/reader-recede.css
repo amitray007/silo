@@ -31,6 +31,15 @@
   color: var(--ink);
 }
 
+/* A finger device skips the full-height blur: a plain, stronger tint recedes the article. */
+@media (pointer: coarse) {
+  .silo-reader-recede {
+    background: color-mix(in oklch, var(--bg2) 72%, transparent);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .silo-reader-recede {
     -webkit-backdrop-filter: none;

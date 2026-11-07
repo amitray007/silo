@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { frameThrottle } from '../../../lib/frameThrottle';
 import { isProseRange, offsetsFromRange, type TextMap } from './textMap';
 
 /** A text selection inside the prose, as offsets into the normalised text. */
@@ -13,6 +14,16 @@ export type PendingSelection = {
 
 /** Let the browser settle a touch or keyboard selection before the toolbar appears. */
 const SETTLE_MS = 180;
+/**
+ * Dragging a native selection handle emits selectionchange but no pointer events, so a touch
+ * screen waits longer for the selection to stop moving.
+ */
+const SETTLE_TOUCH_MS = 450;
+
+/** Is the primary pointer coarse (a finger)? Read per event, so a docked tablet is judged live. */
+function coarsePointer() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+}
 
 function selectionInBar() {
   const selection = window.getSelection();
@@ -107,6 +118,18 @@ export function useSelectionWatcher({
       outsidePress = false;
       settle(0);
     };
+    // A handle drag keeps changing the selection: hide the bar until it holds still.
+    const hideWhileChanging = () => {
+      const next = readSelection(prose, mapRef.current);
+      setPending((held) =>
+        held && next && held.start === next.start && held.end === next.end ? held : null,
+      );
+    };
+    const settleAfterChange = () => {
+      const touch = coarsePointer();
+      if (touch) hideWhileChanging();
+      settle(touch ? SETTLE_TOUCH_MS : SETTLE_MS);
+    };
     const onSelectionChange = () => {
       if (selectionOutsideProse(prose)) {
         window.clearTimeout(timer);
@@ -115,7 +138,7 @@ export function useSelectionWatcher({
         return;
       }
       if (document.activeElement?.closest('[data-selection-bar]')) return;
-      if (!pressed) settle(SETTLE_MS);
+      if (!pressed) settleAfterChange();
     };
     prose.addEventListener('mouseup', onRelease);
     prose.addEventListener('keyup', onRelease);
@@ -138,11 +161,14 @@ export function useSelectionWatcher({
   const active = pending !== null;
   useEffect(() => {
     if (!active) return;
-    const follow = () =>
-      setPending((held) => (held ? { ...held, rect: held.range.getBoundingClientRect() } : held));
+    const frame = frameThrottle(() =>
+      setPending((held) => (held ? { ...held, rect: held.range.getBoundingClientRect() } : held)),
+    );
+    const follow = frame.run;
     scroll?.addEventListener('scroll', follow, { passive: true });
     window.addEventListener('resize', follow);
     return () => {
+      frame.cancel();
       scroll?.removeEventListener('scroll', follow);
       window.removeEventListener('resize', follow);
     };

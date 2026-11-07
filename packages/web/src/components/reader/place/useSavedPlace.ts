@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReadingPositionJson } from '../../../api/types';
+import { frameThrottle } from '../../../lib/frameThrottle';
 import { blocked } from '../dock/keyGuards';
 import { paragraphSections } from '../highlights/paragraphs';
 import { useProseVersion } from './proseVersion';
@@ -53,18 +54,20 @@ export function useSavedPlace({
       previousBottom = rect.bottom;
     };
     measure();
-    const onScroll = () => {
+    const frame = frameThrottle(() => {
       const crossed = previousBottom >= scroll.getBoundingClientRect().top + 24;
       measure();
       if (crossed && bounds().bottom < scroll.getBoundingClientRect().top + 24 && saved)
         setDismissed(identity);
-    };
+    });
+    const onScroll = frame.run;
     scroll.addEventListener('scroll', onScroll, { passive: true });
     const observer = new ResizeObserver(measure);
     observer.observe(scroll);
     observer.observe(prose);
     return () => {
       scroll.removeEventListener('scroll', onScroll);
+      frame.cancel();
       observer.disconnect();
     };
   }, [block, saved, identity, scroll, prose]);

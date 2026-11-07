@@ -13,7 +13,7 @@ import { SelectionComposer } from './SelectionComposer';
 import { SelectionBarTools } from './SelectionTools';
 import type { SelectionAction } from './selectionActions';
 import { selectionContext } from './selectionContext';
-import { type SurfacePhase, surfacePlacement } from './selectionPlacement';
+import { type SurfacePhase, surfacePlacement, type TouchStrip } from './selectionPlacement';
 import { isProseRange } from './textMap';
 import { useAnswerActions } from './useAnswerActions';
 import { canRetainSelection, restoreSelection, useRetainedSelection } from './useRetainedSelection';
@@ -22,6 +22,22 @@ import type { PendingSelection } from './useSelectionWatcher';
 import { useTabIntoSurface } from './useTabIntoSurface';
 
 const TOAST_MS = 1400;
+
+/**
+ * On a touch screen the bar waits in a strip above the dock pill, away from the native Copy menu
+ * and the selection handles. Fine pointers return undefined and keep the bar by the selection.
+ */
+function touchStrip(): TouchStrip | undefined {
+  if (typeof window.matchMedia !== 'function' || !window.matchMedia('(pointer: coarse)').matches)
+    return undefined;
+  const pill = document.querySelector('.silo-reader-dock-pill')?.getBoundingClientRect();
+  const head = document.querySelector('.silo-reader-head')?.getBoundingClientRect();
+  return {
+    bottom: (pill?.top ?? window.innerHeight - 16) - 8,
+    headerBottom: head?.bottom ?? 0,
+    centerX: pill ? pill.left + pill.width / 2 : undefined,
+  };
+}
 
 function phaseOf(composer: boolean, answerAction: string | undefined): SurfacePhase {
   if (answerAction) return 'answer';
@@ -123,7 +139,7 @@ export function SelectionBar({
     pending !== null && phase !== 'bar' && canRetainSelection(),
     pending?.range,
   );
-  const where = pending && surfacePlacement(pending.rect, phase);
+  const where = pending && surfacePlacement(pending.rect, phase, touchStrip());
   const { root, shell, begin } = useSurfaceMotion(phase, where?.flip ? 'top' : 'bottom');
   /** Change phase: the surface remembers its old shape, then morphs into the new one. */
   const morph = (change: () => void) => {
@@ -216,6 +232,7 @@ export function SelectionBar({
           data-selection-bar
           data-reader-menu
           data-flip={where.flip}
+          data-strip={where.strip}
           data-phase={phase}
           role="toolbar"
           aria-label="Selection"

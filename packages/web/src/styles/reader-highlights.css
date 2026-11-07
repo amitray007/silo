@@ -577,3 +577,8 @@
     display: none;
   }
 }
+
+/* In the touch strip the bar points at nothing. */
+.silo-sb[data-strip="true"]::after {
+  display: none;
+}
