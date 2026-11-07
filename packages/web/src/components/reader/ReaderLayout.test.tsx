@@ -1361,6 +1361,26 @@ it('opens phone tag management from the collection menu and restores focus on cl
   expect(document.activeElement).toBe(collection);
 });
 
+it('opens the phone drawer from the sidebar button and returns focus to it on close', async () => {
+  const media = window.matchMedia;
+  vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+    ...media(query),
+    matches: query === layoutMedia.phone || query === layoutMedia.fullWindowReader,
+  }));
+  renderReader();
+  await screen.findByText('First link');
+  const button = screen.getByRole('button', { name: 'Open menu' });
+  fireEvent.click(button);
+  expect(screen.getByRole('navigation', { name: 'Sidebar' }).getAttribute('data-open')).toBe(
+    'true',
+  );
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.getByRole('navigation', { name: 'Sidebar' }).getAttribute('data-open')).toBe(
+    'false',
+  );
+  expect(document.activeElement).toBe(button);
+});
+
 it('opens the Type sheet from the dock, applies and persists settings, and closes on Escape', async () => {
   const { container } = renderReader({
     route: '/?link=a',
