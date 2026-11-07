@@ -1089,3 +1089,26 @@ button.silo-note-text {
     top: 17px;
   }
 }
+
+/* Touch: the remove control is 32px wide, with 4px more of hit area past the chip, so 40px in all. */
+@media not ((hover: hover) and (pointer: fine)) {
+  .silo-meta-tag button {
+    position: relative;
+    width: 32px;
+    margin-left: 0;
+  }
+  .silo-meta-tag button::before {
+    content: "";
+    position: absolute;
+    inset: 0 -4px;
+  }
+}
+/* No keyboard on a touch screen: the menu shows no shortcut hints and no pre-picked row. */
+@media (hover: none) {
+  .silo-menu-shortcut {
+    display: none;
+  }
+  .silo-menu-item:is(:focus, .is-current, [aria-current="true"]):not(:focus-visible):not(:active) {
+    background: none;
+  }
+}

@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent,
   useCallback,
   useEffect,
   useRef,
@@ -241,6 +242,20 @@ export function VideoPlayer({
   }, [video]);
   const { idle, wake } = useIdle(state.playing);
 
+  // A tap on hidden controls only shows them; it must not also play or pause.
+  const wokeByTap = useRef(false);
+  const onPointerDownCapture = (event: PointerEvent<HTMLElement>) => {
+    wokeByTap.current = idle && event.pointerType !== 'mouse';
+    wake();
+  };
+  const onVideoClick = () => {
+    if (wokeByTap.current) {
+      wokeByTap.current = false;
+      return;
+    }
+    toggle();
+  };
+
   const toggle = () => {
     if (!video) return;
     if (video.paused) void video.play().catch(() => {});
@@ -303,6 +318,7 @@ export function VideoPlayer({
       data-fullscreen={state.fullscreen}
       style={{ '--player-ratio': state.ratio } as CSSProperties}
       onPointerMove={wake}
+      onPointerDownCapture={onPointerDownCapture}
       onFocusCapture={wake}
       onKeyDown={onKeyDown}
     >
@@ -313,7 +329,7 @@ export function VideoPlayer({
         poster={poster}
         preload="metadata"
         playsInline
-        onClick={toggle}
+        onClick={onVideoClick}
         onDoubleClick={fullscreen}
       />
       {!state.started && !state.failed && (

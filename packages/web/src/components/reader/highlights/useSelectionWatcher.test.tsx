@@ -83,3 +83,60 @@ it('rejects native selections inside chat, across article boundaries, and withou
   expect(result.current.pending).toBeNull();
   expect(window.getSelection()?.toString()).toBe('Answer words here.');
 });
+
+function coarse(matches: boolean) {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string) => ({ matches: matches && query.includes('coarse') }) as MediaQueryList,
+  );
+}
+function selectWords(prose: HTMLElement, end: number) {
+  const text = prose.querySelector('p')!.firstChild!;
+  const range = document.createRange();
+  range.setStart(text, 0);
+  range.setEnd(text, end);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  fireEvent(document, new Event('selectionchange'));
+}
+
+it('waits 450ms on a coarse pointer and hides the bar while a handle drag keeps changing', () => {
+  coarse(true);
+  const { prose, result } = setup();
+  act(() => {
+    selectWords(prose, 7);
+    vi.advanceTimersByTime(449);
+  });
+  expect(result.current.pending).toBeNull();
+  act(() => {
+    vi.advanceTimersByTime(2);
+  });
+  expect(result.current.pending?.range.toString()).toBe('Article');
+  // The handle moves: the bar leaves at once and does not come back mid-drag.
+  act(() => {
+    selectWords(prose, 13);
+  });
+  expect(result.current.pending).toBeNull();
+  act(() => {
+    vi.advanceTimersByTime(300);
+    selectWords(prose, 16);
+    vi.advanceTimersByTime(300);
+  });
+  expect(result.current.pending).toBeNull();
+  act(() => {
+    vi.advanceTimersByTime(200);
+  });
+  expect(result.current.pending?.range.toString()).toBe('Article words he');
+  vi.unstubAllGlobals();
+});
+
+it('keeps the 180ms settle with a fine pointer', () => {
+  coarse(false);
+  const { prose, result } = setup();
+  act(() => {
+    selectWords(prose, 7);
+    vi.advanceTimersByTime(200);
+  });
+  expect(result.current.pending?.range.toString()).toBe('Article');
+  vi.unstubAllGlobals();
+});

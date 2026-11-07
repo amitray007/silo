@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { frameThrottle } from '../../../lib/frameThrottle';
 import { HIGHLIGHT_COLORS, HIGHLIGHT_NOTE_MAX, type HighlightColor } from '../../../lib/highlights';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { ReaderIcon } from '../ReaderIcon';
@@ -60,7 +61,8 @@ export function NotePopover({
     const el = field.current;
     el?.focus({ preventScroll: true });
     el?.setSelectionRange(el.value.length, el.value.length);
-    const follow = () => tick((value) => value + 1);
+    const frame = frameThrottle(() => tick((value) => value + 1));
+    const follow = frame.run;
     const outside = (event: MouseEvent) => {
       if (event.target instanceof Node && box.current?.contains(event.target)) return;
       // A press on the passage itself keeps the popover; the click that follows is a no-op.
@@ -74,6 +76,7 @@ export function NotePopover({
       scroll.removeEventListener('scroll', follow);
       window.removeEventListener('resize', follow);
       document.removeEventListener('mousedown', outside);
+      frame.cancel();
       // Save on close.
       const { draft: text, id, saved: before, onSetNote: save } = latest.current;
       if (text !== before) save(id, text);

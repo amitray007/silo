@@ -113,6 +113,7 @@ function PrimaryAction({
       <button
         type="button"
         className="silo-sb-btn"
+        data-action={action.id}
         title={unavailable ?? action.label}
         aria-label={action.label}
         aria-disabled={unavailable ? true : undefined}
@@ -126,7 +127,7 @@ function PrimaryAction({
           <ReaderIcon name={action.icon} size={17} />
           {hasColors && <i />}
         </span>
-        {!icons && <span>{action.label}</span>}
+        {!icons && <span className="silo-sb-label">{action.label}</span>}
       </button>
       {hasColors && picker && <ColorPicker color={color} blocked={blocked} onPick={onPick} />}
     </div>

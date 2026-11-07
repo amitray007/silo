@@ -567,3 +567,18 @@
     animation: none;
   }
 }
+
+/* Narrow screens: the bar never outgrows the window, and Listen keeps only its icon. */
+.silo-sb {
+  max-width: calc(100vw - 16px);
+}
+@media (max-width: 419px) {
+  .silo-sb-btn[data-action="listen"] .silo-sb-label {
+    display: none;
+  }
+}
+
+/* In the touch strip the bar points at nothing. */
+.silo-sb[data-strip="true"]::after {
+  display: none;
+}
