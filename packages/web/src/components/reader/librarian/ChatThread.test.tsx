@@ -716,3 +716,45 @@ it('pages saved versions of the last answer and selects the neighbour', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Previous version' }));
   expect(selectVersion).toHaveBeenCalledWith('a0');
 });
+
+it('keeps a pinned log at the end when its own height shrinks, but leaves an unpinned log alone', () => {
+  const callbacks: ResizeObserverCallback[] = [];
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  try {
+    const view = mount(fakeChat());
+    const log = screen.getByRole('log', { name: 'Messages' });
+    let height = 915;
+    Object.defineProperties(log, {
+      scrollHeight: { configurable: true, value: 1200 },
+      clientHeight: { configurable: true, get: () => height },
+    });
+    const resize = () =>
+      act(() => {
+        for (const callback of callbacks) callback([], {} as ResizeObserver);
+      });
+    resize();
+    log.scrollTop = 285;
+    fireEvent.scroll(log);
+    height = 520;
+    resize();
+    expect(log.scrollTop).toBe(1200);
+    expect(screen.queryByRole('button', { name: 'Jump to latest' })).toBeNull();
+    log.scrollTop = 100;
+    fireEvent.scroll(log);
+    height = 400;
+    resize();
+    expect(log.scrollTop).toBe(100);
+    view.unmount();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

@@ -2,7 +2,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Composer, ComposerBar, type QuickAction } from './Composer';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const quick: readonly QuickAction[] = [
   ['explain', 'Explain'],
@@ -122,4 +125,19 @@ it('puts the bar hint inside the bar, announced, and drops it when cleared', () 
   expect(bar.contains(hint)).toBe(true);
   rerender(<ComposerBar {...props} />);
   expect(screen.queryByRole('status')).toBeNull();
+});
+
+it.each([false, true])('Enter uses the primary pointer: coarse=%s', (coarse) => {
+  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: coarse }));
+  const onSend = vi.fn();
+  render(composer({ value: 'A question', onSend }));
+  const field = screen.getByRole('textbox', { name: 'Ask' });
+  expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(coarse);
+  expect(onSend).toHaveBeenCalledTimes(coarse ? 0 : 1);
+  onSend.mockClear();
+  expect(fireEvent.keyDown(field, { key: 'Enter', shiftKey: true })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: 'Enter', isComposing: true })).toBe(true);
+  expect(onSend).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(onSend).toHaveBeenCalledTimes(1);
 });

@@ -1925,8 +1925,17 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   }
 }
 
+@media (max-height: 420px) {
+  .silo-composer:has(textarea:focus) .silo-composer-chips {
+    display: none;
+  }
+}
+
 /* Touch: controls reach 40px (docs/rules/web-react.md). */
 @media (max-width: 640px), (pointer: coarse) {
+  .silo-composer textarea {
+    font-size: 16px;
+  }
   .silo-chat-actions {
     min-height: 40px;
   }
