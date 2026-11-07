@@ -1,6 +1,9 @@
 import { type RefObject, useEffect } from 'react';
 import { layoutMedia } from './breakpoints';
 
+/** Software keyboards are far taller; a smaller gap is a scrollbar or browser chrome. */
+const KEYBOARD_MIN_PX = 100;
+
 export function useChatViewport(frame: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const node = frame.current;
@@ -10,7 +13,7 @@ export function useChatViewport(frame: RefObject<HTMLElement | null>) {
       const keyboardOpen =
         matchMedia(layoutMedia.fullWindowReader).matches &&
         viewport.scale === 1 &&
-        viewport.height < window.innerHeight - 1;
+        viewport.height < window.innerHeight - KEYBOARD_MIN_PX;
       if (keyboardOpen) {
         node.style.setProperty('--silo-chat-viewport-height', `${viewport.height}px`);
         node.style.setProperty('--silo-chat-viewport-top', `${viewport.offsetTop}px`);

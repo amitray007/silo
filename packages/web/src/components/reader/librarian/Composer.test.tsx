@@ -127,13 +127,22 @@ it('puts the bar hint inside the bar, announced, and drops it when cleared', () 
   expect(screen.queryByRole('status')).toBeNull();
 });
 
-it.each([false, true])('Enter uses the primary pointer: coarse=%s', (coarse) => {
-  vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({ matches: coarse }));
+// A phone has only a coarse pointer; a touch laptop also has a trackpad, so Enter still sends there.
+it.each([
+  ['phone', false],
+  ['touch laptop', true],
+])('Enter on a %s: sends=%s', (_device, fine) => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === '(pointer: coarse)' || (fine && query === '(any-pointer: fine)'),
+    })),
+  );
   const onSend = vi.fn();
   render(composer({ value: 'A question', onSend }));
   const field = screen.getByRole('textbox', { name: 'Ask' });
-  expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(coarse);
-  expect(onSend).toHaveBeenCalledTimes(coarse ? 0 : 1);
+  expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(!fine);
+  expect(onSend).toHaveBeenCalledTimes(fine ? 1 : 0);
   onSend.mockClear();
   expect(fireEvent.keyDown(field, { key: 'Enter', shiftKey: true })).toBe(true);
   expect(fireEvent.keyDown(field, { key: 'Enter', isComposing: true })).toBe(true);

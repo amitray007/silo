@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { frameThrottle } from '../../../lib/frameThrottle';
+import { isCoarsePointer } from '../../../lib/pointer';
 import { isProseRange, offsetsFromRange, type TextMap } from './textMap';
 
 /** A text selection inside the prose, as offsets into the normalised text. */
@@ -19,11 +20,6 @@ const SETTLE_MS = 180;
  * screen waits longer for the selection to stop moving.
  */
 const SETTLE_TOUCH_MS = 450;
-
-/** Is the primary pointer coarse (a finger)? Read per event, so a docked tablet is judged live. */
-function coarsePointer() {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
-}
 
 function selectionInBar() {
   const selection = window.getSelection();
@@ -126,7 +122,7 @@ export function useSelectionWatcher({
       );
     };
     const settleAfterChange = () => {
-      const touch = coarsePointer();
+      const touch = isCoarsePointer();
       if (touch) hideWhileChanging();
       settle(touch ? SETTLE_TOUCH_MS : SETTLE_MS);
     };

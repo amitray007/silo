@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLibrarianActions } from '../../../api/librarian';
 import type { HighlightColor } from '../../../lib/highlights';
 import { isWord, passageChips } from '../../../lib/librarianActions';
+import { isCoarsePointer } from '../../../lib/pointer';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
 import { requestDock } from '../librarian/selectionStore';
@@ -28,9 +29,10 @@ const TOAST_MS = 1400;
  * and the selection handles. Fine pointers return undefined and keep the bar by the selection.
  */
 function touchStrip(): TouchStrip | undefined {
-  if (typeof window.matchMedia !== 'function' || !window.matchMedia('(pointer: coarse)').matches)
-    return undefined;
-  const pill = document.querySelector('.silo-reader-dock-pill')?.getBoundingClientRect();
+  if (!isCoarsePointer()) return undefined;
+  const shown = document.querySelector('.silo-reader-dock-pill')?.getBoundingClientRect();
+  // The pill is hidden while the dock chat is open; a zero rect would put the bar off screen.
+  const pill = shown?.height ? shown : undefined;
   const head = document.querySelector('.silo-reader-head')?.getBoundingClientRect();
   return {
     bottom: (pill?.top ?? window.innerHeight - 16) - 8,

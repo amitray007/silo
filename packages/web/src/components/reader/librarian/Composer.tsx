@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useRef,
 } from 'react';
+import { isTouchOnly } from '../../../lib/pointer';
 import { ReaderIcon } from '../ReaderIcon';
 
 /** The field stops growing here and scrolls: about four lines. */
@@ -20,7 +21,7 @@ export type QuickAction = readonly [id: string, label: string];
 /**
  * The one composer: a row of chips above one rounded autosizing field with the send arrow
  * inside it. While an answer streams, Stop takes the arrow's place as a small ink square. The selection surface, the dock and the Librarian page all use this, so a question
- * looks and behaves the same wherever it is typed. On touch, Enter adds a line; the button sends. With a fine pointer, Enter sends and Shift+Enter adds a line.
+ * looks and behaves the same wherever it is typed. On a phone, where a finger is the only pointer, Enter adds a line and the button sends. Otherwise Enter sends and Shift+Enter adds a line.
  */
 export function Composer({
   value,
@@ -74,12 +75,7 @@ export function Composer({
     input.style.height = `${Math.min(input.scrollHeight, MAX_FIELD)}px`;
   }, [value]);
   const send = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (
-      event.key !== 'Enter' ||
-      event.shiftKey ||
-      event.nativeEvent.isComposing ||
-      window.matchMedia('(pointer: coarse)').matches
-    )
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing || isTouchOnly())
       return;
     event.preventDefault();
     if (value.trim() && !sendDisabled) onSend();

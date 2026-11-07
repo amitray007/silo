@@ -37,6 +37,9 @@ it('tracks the viewport through blur and non-chat focus, and clears it on keyboa
   expect(frame.style.getPropertyValue('--silo-chat-viewport-top')).toBe('24px');
   fireEvent.change(field, { target: { value: 'Hello' } });
   expect(frame.style.getPropertyValue('--silo-chat-viewport-height')).toBe('470px');
+  viewport.height = window.innerHeight - 15;
+  act(() => viewport.dispatchEvent(new Event('resize')));
+  expect(frame.style.getPropertyValue('--silo-chat-viewport-height')).toBe('');
   viewport.height = window.innerHeight;
   act(() => viewport.dispatchEvent(new Event('resize')));
   expect(frame.style.getPropertyValue('--silo-chat-viewport-height')).toBe('');

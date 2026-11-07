@@ -12,3 +12,15 @@
 export function isHoverCapable(matchMediaFn: typeof matchMedia = matchMedia): boolean {
   return matchMediaFn('(hover: hover)').matches;
 }
+
+/** Is the primary pointer a finger? A phone's selection handles and native menus follow from it. */
+export function isCoarsePointer(
+  matchMediaFn: typeof matchMedia | undefined = globalThis.matchMedia,
+) {
+  return matchMediaFn?.('(pointer: coarse)').matches ?? false;
+}
+
+/** A finger is the only pointer (a phone). A touch laptop or a tablet with a trackpad is not. */
+export function isTouchOnly(matchMediaFn: typeof matchMedia | undefined = globalThis.matchMedia) {
+  return isCoarsePointer(matchMediaFn) && !matchMediaFn?.('(any-pointer: fine)').matches;
+}
