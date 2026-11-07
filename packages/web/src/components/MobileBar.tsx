@@ -66,7 +66,7 @@ export function MobileBar({ onSearch }: { onSearch: () => void }) {
       </button>
       <button
         type="button"
-        className="silo-mobile-bar-button"
+        className="silo-mobile-bar-button silo-mobile-bar-more"
         aria-label="More"
         aria-haspopup="menu"
         aria-expanded={open}

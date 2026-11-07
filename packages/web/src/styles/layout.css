@@ -2465,6 +2465,10 @@ div.silo-reader-notecard {
   width: 28px;
   height: 28px;
 }
+/* The dots are zero-length strokes, so the bar's hairline stroke shrinks them to specks. */
+.silo-mobile-bar-more .silo-reader-icon {
+  stroke-width: 3;
+}
 .silo-mobile-more.silo-menu-surface {
   position: absolute;
   bottom: calc(100% + 8px);
