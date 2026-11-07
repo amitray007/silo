@@ -55,7 +55,9 @@ const markdownComponents: NonNullable<React.ComponentProps<typeof Streamdown>['c
 const wordFade: AnimateOptions = { animation: 'fadeIn', duration: 250, sep: 'word' };
 
 /** Streamdown drops its word spans at finish; retain the block's plugin so selected text stays put. */
-function AnswerBlock({ animatePlugin, rehypePlugins = [], ...props }: BlockProps) {
+const NO_PLUGINS: NonNullable<BlockProps['rehypePlugins']> = [];
+
+function AnswerBlock({ animatePlugin, rehypePlugins = NO_PLUGINS, ...props }: BlockProps) {
   const animation = useRef(animatePlugin);
   if (animatePlugin) animation.current = animatePlugin;
   const retained = animation.current;

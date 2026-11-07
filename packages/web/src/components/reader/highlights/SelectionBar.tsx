@@ -26,10 +26,10 @@ const TOAST_MS = 1400;
 
 /**
  * On a touch screen the bar waits in a strip above the dock pill, away from the native Copy menu
- * and the selection handles. Fine pointers return undefined and keep the bar by the selection.
+ * and the selection handles. Fine pointers and the later phases keep the surface by the selection.
  */
-function touchStrip(): TouchStrip | undefined {
-  if (!isCoarsePointer()) return undefined;
+function touchStrip(phase: SurfacePhase): TouchStrip | undefined {
+  if (phase !== 'bar' || !isCoarsePointer()) return undefined;
   const shown = document.querySelector('.silo-reader-dock-pill')?.getBoundingClientRect();
   // The pill is hidden while the dock chat is open; a zero rect would put the bar off screen.
   const pill = shown?.height ? shown : undefined;
@@ -141,7 +141,7 @@ export function SelectionBar({
     pending !== null && phase !== 'bar' && canRetainSelection(),
     pending?.range,
   );
-  const where = pending && surfacePlacement(pending.rect, phase, touchStrip());
+  const where = pending && surfacePlacement(pending.rect, phase, touchStrip(phase));
   const { root, shell, begin } = useSurfaceMotion(phase, where?.flip ? 'top' : 'bottom');
   /** Change phase: the surface remembers its old shape, then morphs into the new one. */
   const morph = (change: () => void) => {

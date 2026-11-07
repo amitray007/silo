@@ -69,6 +69,8 @@ export function useSelectionWatcher({
   const [pending, setPending] = useState<PendingSelection | null>(null);
   const mapRef = useRef(map);
   mapRef.current = map;
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
   const clear = useCallback(() => setPending(null), []);
   const current = useCallback(() => (prose ? readSelection(prose, mapRef.current) : null), [prose]);
 
@@ -116,6 +118,7 @@ export function useSelectionWatcher({
     };
     // A handle drag keeps changing the selection: hide the bar until it holds still.
     const hideWhileChanging = () => {
+      if (!pendingRef.current) return;
       const next = readSelection(prose, mapRef.current);
       setPending((held) =>
         held && next && held.start === next.start && held.end === next.end ? held : null,

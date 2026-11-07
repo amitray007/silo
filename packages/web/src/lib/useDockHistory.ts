@@ -1,11 +1,10 @@
 import { useEffect, useRef } from 'react';
 
 const MARKER = 'siloDock';
-type CloseReason = 'back' | 'navigate';
 type DockEntry = {
   token: string;
   url: string;
-  close: (reason: CloseReason) => void;
+  close: () => void;
 };
 let current: DockEntry | undefined;
 let consuming: Promise<void> | undefined;
@@ -26,7 +25,7 @@ function onPopState(event: PopStateEvent) {
   if (current && !owns(current)) {
     const entry = current;
     current = undefined;
-    entry.close('back');
+    entry.close();
   }
   const token = window.history.state?.[MARKER];
   if (token && token !== current?.token && index !== undefined && previous !== undefined) {
@@ -77,7 +76,7 @@ export function afterDockHistory(navigate: () => void) {
   if (current) {
     const entry = current;
     consume(entry);
-    entry.close('navigate');
+    entry.close();
   }
   if (consuming) void consuming.then(navigate);
   else navigate();
@@ -91,11 +90,7 @@ export function clearArticleSelection(prose: HTMLElement | null) {
 }
 
 /** One same-URL entry protects the reader while any dock overlay is open. */
-export function useDockHistory(
-  open: boolean,
-  onClose: (reason: CloseReason) => void,
-  prose: HTMLElement | null,
-) {
+export function useDockHistory(open: boolean, onClose: () => void, prose: HTMLElement | null) {
   const close = useRef(onClose);
   close.current = onClose;
   useEffect(() => {
@@ -111,7 +106,7 @@ export function useDockHistory(
       entry = {
         token: crypto.randomUUID(),
         url: window.location.href,
-        close: (reason) => close.current(reason),
+        close: () => close.current(),
       };
       current = entry;
       const state = window.history.state;

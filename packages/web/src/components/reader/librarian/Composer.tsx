@@ -20,8 +20,10 @@ export type QuickAction = readonly [id: string, label: string];
 
 /**
  * The one composer: a row of chips above one rounded autosizing field with the send arrow
- * inside it. While an answer streams, Stop takes the arrow's place as a small ink square. The selection surface, the dock and the Librarian page all use this, so a question
- * looks and behaves the same wherever it is typed. On a phone, where a finger is the only pointer, Enter adds a line and the button sends. Otherwise Enter sends and Shift+Enter adds a line.
+ * inside it. While an answer streams, Stop takes the arrow's place as a small ink square. The
+ * selection surface, the dock and the Librarian page all use this, so a question looks and
+ * behaves the same wherever it is typed. On a phone, where a finger is the only pointer, Enter
+ * adds a line and the button sends. Otherwise Enter sends and Shift+Enter adds a line.
  */
 export function Composer({
   value,
