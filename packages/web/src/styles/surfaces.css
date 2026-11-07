@@ -683,23 +683,42 @@
     border-radius: 0;
     animation: siloSheetIn 0.24s var(--ease-drawer);
   }
+  /* Title and close share one 52px row; the close button sits in the flow
+     (not absolute) so it can never cover the tab strip below. */
   .silo-modal-panel-settings > .silo-modal-header {
-    position: static;
-    padding: calc(6px + env(safe-area-inset-top, 0px)) 6px 2px 18px;
+    position: relative;
+    min-height: 52px;
+    padding: calc(6px + env(safe-area-inset-top, 0px)) 8px 6px 18px;
     background: var(--bg);
   }
   .silo-modal-panel-settings > .silo-modal-header h2 {
     display: block;
     font-size: 17px;
+    line-height: 24px;
+  }
+  .silo-modal-panel-settings > .silo-modal-header .silo-settings-close {
+    position: static;
+    flex: none;
   }
   .silo-settings-tabs {
+    flex: none;
     width: 100%;
     flex-direction: row;
     overflow-x: auto;
     border-right: 0;
     border-bottom: 0.5px solid var(--line);
-    padding: 4px 8px 8px;
+    padding: 0 8px 8px;
     gap: 4px;
+    scroll-padding-inline: 8px;
+  }
+  /* The last tab fades out while more tabs wait off-screen, and the fade
+     lifts as the strip scrolls to its end. */
+  @supports (animation-timeline: scroll()) {
+    .silo-settings-tabs {
+      mask-image: linear-gradient(to right, #000 calc(100% - var(--silo-tabs-fade)), transparent);
+      animation: siloTabsFade linear both;
+      animation-timeline: scroll(self inline);
+    }
   }
   .silo-settings-nav-title {
     display: none;
@@ -710,6 +729,30 @@
   }
   .silo-settings-panel {
     padding: 20px 18px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  /* The divider above a field needs room below it. */
+  .silo-lc-try {
+    padding-top: 12px;
+  }
+  /* A select shrinks to its value so the row label keeps its width. */
+  .silo-settings-select-wrap {
+    min-width: 0;
+  }
+  /* Chat appearance: one 72px rhythm for every row, and a group gap of at
+     least twice the 4px inside the heading block. */
+  .silo-settings-panel .silo-chat-settings {
+    margin-top: 32px;
+  }
+  .silo-settings-panel .silo-chat-settings .silo-reader-settings-row {
+    box-sizing: border-box;
+    min-height: 72px;
+    padding: 12px 0;
+  }
+  .silo-settings-panel .silo-chat-settings > .silo-plugin-section-label {
+    margin: 0 0 4px;
+  }
+  .silo-settings-panel .silo-chat-settings > .silo-reader-settings-helper {
+    margin: 0 0 4px;
   }
   .silo-settings-panel :is(button, input, select),
   .silo-edit-fields :is(button, input),
@@ -753,6 +796,20 @@
   }
   .silo-centered-panel {
     padding: 48px 18px;
+  }
+}
+@property --silo-tabs-fade {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 32px;
+}
+@keyframes siloTabsFade {
+  0%,
+  90% {
+    --silo-tabs-fade: 32px;
+  }
+  100% {
+    --silo-tabs-fade: 0px;
   }
 }
 @keyframes siloSheetIn {
