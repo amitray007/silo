@@ -90,8 +90,9 @@ copy, regenerate and history delete are visible on touch; open and back keep lis
   the fallback for iOS, where the key is ignored. It now covers every text field, so the
   note popover and selection composer also stay above the keyboard.
 - `html, body { overscroll-behavior-y: none }`: no accidental pull-to-refresh.
-- Composer: 16px text, `enterKeyHint="send"`; on a coarse pointer Enter inserts a newline
-  and the send button sends.
+- Composer: 16px text. When a finger is the only pointer (a phone), Enter inserts a newline
+  and the send button sends; a touch laptop keeps Enter to send. No `enterKeyHint="send"`,
+  since Enter no longer sends there.
 - Dock chat: focus the field on open only when the chat is new or a passage or question was
   handed over. Reopening a stored chat to read it keeps the keyboard down.
 - `useStickyLog`: when the log's own height shrinks while pinned, scroll to the end, so the
