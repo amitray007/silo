@@ -2,7 +2,10 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Composer, ComposerBar, type QuickAction } from './Composer';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const quick: readonly QuickAction[] = [
   ['explain', 'Explain'],
@@ -122,4 +125,28 @@ it('puts the bar hint inside the bar, announced, and drops it when cleared', () 
   expect(bar.contains(hint)).toBe(true);
   rerender(<ComposerBar {...props} />);
   expect(screen.queryByRole('status')).toBeNull();
+});
+
+// A phone has only a coarse pointer; a touch laptop also has a trackpad, so Enter still sends there.
+it.each([
+  ['phone', false],
+  ['touch laptop', true],
+])('Enter on a %s: sends=%s', (_device, fine) => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === '(pointer: coarse)' || (fine && query === '(any-pointer: fine)'),
+    })),
+  );
+  const onSend = vi.fn();
+  render(composer({ value: 'A question', onSend }));
+  const field = screen.getByRole('textbox', { name: 'Ask' });
+  expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(!fine);
+  expect(onSend).toHaveBeenCalledTimes(fine ? 1 : 0);
+  onSend.mockClear();
+  expect(fireEvent.keyDown(field, { key: 'Enter', shiftKey: true })).toBe(true);
+  expect(fireEvent.keyDown(field, { key: 'Enter', isComposing: true })).toBe(true);
+  expect(onSend).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(onSend).toHaveBeenCalledTimes(1);
 });

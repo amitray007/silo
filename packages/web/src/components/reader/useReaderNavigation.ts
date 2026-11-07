@@ -2,6 +2,7 @@ import { useIsMutating } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import type { LinkJson } from '../../api/types';
+import { afterDockHistory } from '../../lib/useDockHistory';
 import { useHoverPreview } from '../HoverPreviewContext';
 
 /** Pick the next surviving neighbor, then the previous one, after a removal. */
@@ -43,16 +44,18 @@ export function useReaderNavigation({
 
   const replace = useCallback(
     (id: string | undefined) => {
-      if (currentKey.current !== location.key) return;
-      setParams(
-        (current) => {
-          const next = new URLSearchParams(current);
-          if (id) next.set('link', id);
-          else next.delete('link');
-          return next;
-        },
-        { replace: true },
-      );
+      afterDockHistory(() => {
+        if (currentKey.current !== location.key) return;
+        setParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            if (id) next.set('link', id);
+            else next.delete('link');
+            return next;
+          },
+          { replace: true },
+        );
+      });
     },
     [setParams, location.key],
   );
@@ -60,14 +63,17 @@ export function useReaderNavigation({
   const select = useCallback(
     (id: string) => {
       dismissAll();
-      setParams((current) => {
-        const next = new URLSearchParams(current);
-        next.set('link', id);
-        next.delete('chat');
-        return next;
+      afterDockHistory(() => {
+        if (currentKey.current !== location.key) return;
+        setParams((current) => {
+          const next = new URLSearchParams(current);
+          next.set('link', id);
+          next.delete('chat');
+          return next;
+        });
       });
     },
-    [setParams, dismissAll],
+    [setParams, dismissAll, location.key],
   );
   const removed = useCallback(() => {
     if (selectedId) replace(neighbor(links, selectedId, links)?.id);

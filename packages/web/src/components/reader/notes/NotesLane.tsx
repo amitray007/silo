@@ -1,6 +1,7 @@
 import { useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
+import { frameThrottle } from '../../../lib/frameThrottle';
 import type { HighlightsApi } from '../highlights/useHighlights';
 import { ReaderIcon } from '../ReaderIcon';
 import { hairlinePath } from './hairline';
@@ -287,9 +288,13 @@ export function NotesLane({
   // Scroll can jump by more than a buffer in one event. Commit the new window before paint.
   useLayoutEffect(() => {
     if (!stacked) return;
-    const update = () => flushSync(() => paintLayout.current());
-    scroll.addEventListener('scroll', update, { passive: true });
-    return () => scroll.removeEventListener('scroll', update);
+    // One commit per frame, before that frame paints.
+    const frame = frameThrottle(() => flushSync(() => paintLayout.current()));
+    scroll.addEventListener('scroll', frame.run, { passive: true });
+    return () => {
+      scroll.removeEventListener('scroll', frame.run);
+      frame.cancel();
+    };
   }, [stacked, scroll]);
 
   // Dev assertion: no two groups may overlap once the layout has settled.

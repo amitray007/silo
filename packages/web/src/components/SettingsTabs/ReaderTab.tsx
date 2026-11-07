@@ -40,7 +40,7 @@ function Row({
   const labelId = useId();
   return (
     <div style={settingsRowDivided}>
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: '1 1 96px' }}>
         <div id={labelId} style={rowLabel}>
           {label}
         </div>

@@ -44,6 +44,11 @@ beforeEach(() => {
   restore = [];
   blockTop = 20;
   geometry = () => ROOMY;
+  // The lane commits once per animation frame; the tests run each frame at once.
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
   // Blocks are 40px tall, 48px apart; a group's scroller shows 112px of them.
   stub(HTMLElement.prototype, 'offsetHeight', function () {
     return this.classList.contains('silo-lnote') ? BLOCK : 0;
@@ -85,6 +90,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   for (const undo of restore.reverse()) undo();
 });
 

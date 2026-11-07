@@ -1058,7 +1058,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   }
 }
 @media (max-width: 1023px) {
-  .silo-frame .silo-chatpage-head {
+  .silo-frame .silo-chatpage-head,
+  .silo-frame[data-collapsed="true"] .silo-chatpage-head {
     padding-left: 8px;
   }
   .silo-chatpage-back {
@@ -1925,8 +1926,41 @@ button.silo-reasoning-head[aria-expanded="true"] svg {
   }
 }
 
+@media (max-height: 420px) {
+  .silo-composer:has(textarea:focus) .silo-composer-chips {
+    display: none;
+  }
+}
+
 /* Touch: controls reach 40px (docs/rules/web-react.md). */
 @media (max-width: 640px), (pointer: coarse) {
+  .silo-composer textarea {
+    font-size: 16px;
+  }
+  .silo-panehead .silo-reader-iconbtn {
+    width: 40px;
+    height: 40px;
+  }
+  /* Small pills keep their look; an invisible layer takes the finger. */
+  .silo-sources-btn,
+  button.silo-reasoning-head,
+  .silo-chat-assistant a.silo-cite {
+    position: relative;
+  }
+  .silo-sources-btn::before,
+  button.silo-reasoning-head::before,
+  .silo-chat-jump::before,
+  .silo-chat-assistant a.silo-cite::before {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  button.silo-reasoning-head::before {
+    inset: -8px 0;
+  }
+  .silo-chat-assistant a.silo-cite::before {
+    inset: -10px -2px;
+  }
   .silo-chat-actions {
     min-height: 40px;
   }

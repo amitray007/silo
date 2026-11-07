@@ -131,10 +131,16 @@ export function DockChat({
     setHistoryOpen(false);
     titleButton.current?.focus();
   };
+  const focusedOnOpen = useRef(false);
   useEffect(() => {
-    if (active) field.current?.focus({ preventScroll: true });
-    else setHistoryOpen(false);
-  }, [field, active]);
+    if (!active) {
+      focusedOnOpen.current = false;
+      setHistoryOpen(false);
+    } else if (!chat.loading && !focusedOnOpen.current) {
+      focusedOnOpen.current = true;
+      if (chat.messages.length === 0) field.current?.focus({ preventScroll: true });
+    }
+  }, [field, active, chat.loading, chat.messages.length]);
   return (
     <ChatThread
       active={active}

@@ -210,6 +210,20 @@ function useStickyLog(
       followEnd(element, jumping);
     } else setAway(true);
   }, [messages, active, last, filled]);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!active || !element || typeof ResizeObserver === 'undefined') return;
+    let height = element.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const next = element.clientHeight;
+      if (next < height && pinned.current && performance.now() >= jumping.current) {
+        element.scrollTop = element.scrollHeight;
+      }
+      height = next;
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [active]);
   const onScroll = () => {
     const element = ref.current;
     if (!active || !element || performance.now() < jumping.current) return;

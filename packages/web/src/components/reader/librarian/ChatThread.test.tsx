@@ -716,3 +716,70 @@ it('pages saved versions of the last answer and selects the neighbour', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Previous version' }));
   expect(selectVersion).toHaveBeenCalledWith('a0');
 });
+
+it('keeps a pinned log at the end when its own height shrinks, but leaves an unpinned log alone', () => {
+  const callbacks: ResizeObserverCallback[] = [];
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        callbacks.push(callback);
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  try {
+    const view = mount(fakeChat());
+    const log = screen.getByRole('log', { name: 'Messages' });
+    let height = 915;
+    Object.defineProperties(log, {
+      scrollHeight: { configurable: true, value: 1200 },
+      clientHeight: { configurable: true, get: () => height },
+    });
+    const resize = () =>
+      act(() => {
+        for (const callback of callbacks) callback([], {} as ResizeObserver);
+      });
+    resize();
+    log.scrollTop = 285;
+    fireEvent.scroll(log);
+    height = 520;
+    resize();
+    expect(log.scrollTop).toBe(1200);
+    expect(screen.queryByRole('button', { name: 'Jump to latest' })).toBeNull();
+    log.scrollTop = 100;
+    fireEvent.scroll(log);
+    height = 400;
+    resize();
+    expect(log.scrollTop).toBe(100);
+    view.unmount();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it('retains answer text nodes across stream completion and a persisted assistant id', () => {
+  const thread = (busy: boolean, id: string) => (
+    <ChatThread
+      chat={fakeChat({
+        busy,
+        messages: [text('question', 'user', 'Why?'), text(id, 'assistant', 'A stable answer.')],
+      })}
+      composer={composer()}
+      actions={[]}
+      emptyText="Empty"
+      header={null}
+    />
+  );
+  const view = render(thread(true, 'streamed'));
+  const answer = view.container.querySelector('.silo-chat-answer');
+  if (!answer) throw new Error('Answer missing');
+  const walker = document.createTreeWalker(answer, NodeFilter.SHOW_TEXT);
+  const node = walker.nextNode();
+  if (!node) throw new Error('Answer text missing');
+  view.rerender(thread(false, 'stored'));
+  expect(node.isConnected).toBe(true);
+  expect(view.container.querySelector('.silo-chat-answer')).toBe(answer);
+  expect(screen.getByRole('button', { name: 'Copy answer' })).toBeTruthy();
+});

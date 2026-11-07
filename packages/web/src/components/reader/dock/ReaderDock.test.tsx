@@ -1,10 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
+import { BrowserRouter, Link, useLocation } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { makeLink, twitterSourceData } from '../../../test/fixtures';
 import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
+import { HoverPreviewProvider } from '../../HoverPreviewContext';
 import { ReaderContent } from '../ReaderContent';
+import { useReaderNavigation } from '../useReaderNavigation';
 import { DockHostContext } from './DockHostContext';
 import { ReaderDock } from './ReaderDock';
 
@@ -53,8 +56,16 @@ function renderContent(
   );
 }
 
-beforeEach(() => localStorage.clear());
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => {
+  localStorage.clear();
+  window.history.replaceState({ idx: 0, key: 'list' }, '', '/');
+  window.history.pushState({ idx: 1, key: 'article' }, '', '/?link=dock');
+});
+afterEach(async () => {
+  cleanup();
+  await waitFor(() => expect(window.history.state?.siloDock).toBeUndefined());
+  vi.unstubAllGlobals();
+});
 
 const prose = { capturedAt: null, contentHtml: '<p>Body text</p>', contentImages: [] };
 
@@ -326,4 +337,203 @@ it('folds on an outside press, retains the chat, and returns focus only from ins
   expect(document.activeElement).toBe(outside);
   expect(screen.getByRole('button', { name: 'Ask' })).toBe(ask);
   outside.remove();
+});
+
+it.each(['Type', 'Ask'])('clears only article selections when opening %s', async (name) => {
+  renderContent(makeLink({ id: `selection-${name}` }), prose, true);
+  const body = await screen.findByText('Body text');
+  const button = await screen.findByRole('button', { name });
+  const selection = window.getSelection();
+  if (!selection) throw new Error('Selection API missing');
+  const range = document.createRange();
+  range.selectNodeContents(body);
+  selection?.removeAllRanges();
+  selection.addRange(range);
+  const clear = vi.spyOn(selection, 'removeAllRanges');
+  fireEvent.click(button);
+  expect(clear).toHaveBeenCalled();
+  expect(selection.toString()).toBe('');
+  clear.mockRestore();
+});
+
+it('leaves a selection outside the article alone when a sheet opens', async () => {
+  renderContent(undefined, prose);
+  const button = await screen.findByRole('button', { name: 'Type' });
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(button);
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.click(button);
+  expect(selection?.rangeCount).toBe(1);
+  selection?.removeAllRanges();
+});
+
+const historyLinks = [makeLink({ id: 'dock' }), makeLink({ id: 'next' })];
+
+function HistoryReader() {
+  const { pathname } = useLocation();
+  const nav = useReaderNavigation({
+    links: historyLinks,
+    loading: false,
+    hasNextPage: false,
+    fetchNextPage: undefined,
+  });
+  const link = historyLinks.find((link) => link.id === nav.selectedId);
+  return (
+    <>
+      <output data-testid="article">{pathname === '/' ? (nav.selectedId ?? 'list') : 'tag'}</output>
+      <Link to="/tags/test">Tag</Link>
+      <button type="button" onClick={() => void nav.step(1)}>
+        Next article
+      </button>
+      {pathname === '/' && link && (
+        <Host>
+          <TestArticlePrefs key={link.id} link={link}>
+            <ReaderContent link={link} />
+          </TestArticlePrefs>
+        </Host>
+      )}
+    </>
+  );
+}
+
+function renderHistoryReader() {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) =>
+      String(input).endsWith('/api/ai')
+        ? json({ status: { features: { librarian: { ready: true } } } })
+        : String(input).includes('/librarian/chats?')
+          ? json({ chats: [], nextCursor: null })
+          : String(input).endsWith('/reader')
+            ? json(prose)
+            : json({ error: 'not_found', message: 'none' }, 404),
+    ),
+  );
+  return render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <BrowserRouter>
+        <HoverPreviewProvider>
+          <HistoryReader />
+        </HoverPreviewProvider>
+      </BrowserRouter>
+    </QueryClientProvider>,
+  );
+}
+
+async function travel(direction: 'back' | 'forward') {
+  await act(async () => {
+    const arrived = new Promise<void>((resolve) =>
+      window.addEventListener('popstate', () => resolve(), { once: true }),
+    );
+    window.history[direction]();
+    await arrived;
+  });
+}
+
+it('folds the real Ask on Back, keeps the article URL, then leaves on a second Back', async () => {
+  renderHistoryReader();
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
+  await screen.findByRole('textbox', { name: 'Ask the Librarian' });
+  await travel('back');
+  expect(screen.queryByRole('textbox', { name: 'Ask the Librarian' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Ask' })).toBeDefined();
+  expect(window.location.search).toBe('?link=dock');
+  await travel('back');
+  expect(screen.getByTestId('article').textContent).toBe('list');
+});
+
+it('switches real tool sheets without adding or replacing their history entry', async () => {
+  renderHistoryReader();
+  fireEvent.click(await screen.findByRole('button', { name: 'Type' }));
+  const length = window.history.length;
+  const token = window.history.state.siloDock;
+  fireEvent.click(screen.getByRole('button', { name: 'Pencil settings' }));
+  expect(await screen.findByRole('dialog', { name: 'Pencil' })).toBeDefined();
+  expect(window.history.length).toBe(length);
+  expect(window.history.state.siloDock).toBe(token);
+  await travel('back');
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(window.location.search).toBe('?link=dock');
+});
+
+it('closes the real Ask before opening the next article', async () => {
+  renderHistoryReader();
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
+  await screen.findByRole('textbox', { name: 'Ask the Librarian' });
+  fireEvent.click(screen.getByRole('button', { name: 'Next article' }));
+  await waitFor(() => expect(screen.getByTestId('article').textContent).toBe('next'));
+  expect(window.location.search).toBe('?link=next');
+  expect(screen.queryByRole('textbox', { name: 'Ask the Librarian' })).toBeNull();
+  expect(window.history.state.siloDock).toBeUndefined();
+  await travel('back');
+  expect(screen.getByTestId('article').textContent).toBe('dock');
+});
+
+it('returns from a terminal orphan on Forward so one Back still leaves the article', async () => {
+  renderHistoryReader();
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
+  await screen.findByRole('textbox', { name: 'Ask the Librarian' });
+  await travel('back');
+  await travel('forward');
+  expect(window.history.state.siloDock).toBeUndefined();
+  expect(window.location.search).toBe('?link=dock');
+  expect(screen.queryByRole('textbox', { name: 'Ask the Librarian' })).toBeNull();
+  await travel('back');
+  expect(screen.getByTestId('article').textContent).toBe('list');
+});
+
+it('skips an orphan beneath a router link in both directions', async () => {
+  renderHistoryReader();
+  fireEvent.click(await screen.findByRole('button', { name: 'Type' }));
+  fireEvent.click(screen.getByRole('link', { name: 'Tag' }));
+  expect(screen.getByTestId('article').textContent).toBe('tag');
+  await travel('back');
+  expect(window.history.state.siloDock).toBeUndefined();
+  expect(window.location.search).toBe('?link=dock');
+  expect(screen.getByTestId('article').textContent).toBe('dock');
+  await travel('forward');
+  expect(window.location.pathname).toBe('/tags/test');
+  expect(screen.getByTestId('article').textContent).toBe('tag');
+  await travel('back');
+  await travel('back');
+  expect(screen.getByTestId('article').textContent).toBe('list');
+});
+
+it('closes the real Notes lane and Ask together on Back', async () => {
+  renderContent(
+    makeLink({
+      id: 'dock',
+      highlights: [
+        {
+          id: 'orphan',
+          quote: 'Missing passage',
+          prefix: '',
+          suffix: '',
+          startOffset: 0,
+          endOffset: 15,
+          color: 'yellow',
+          note: 'Saved note',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+    }),
+    prose,
+    true,
+  );
+  const notes = await screen.findByRole('button', { name: /^Notes/ });
+  fireEvent.click(notes);
+  expect(notes.getAttribute('aria-pressed')).toBe('true');
+  const token = window.history.state.siloDock;
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  await screen.findByRole('textbox', { name: 'Ask the Librarian' });
+  expect(window.history.state.siloDock).toBe(token);
+  await travel('back');
+  expect(screen.queryByRole('textbox', { name: 'Ask the Librarian' })).toBeNull();
+  expect(notes.getAttribute('aria-pressed')).toBe('false');
+  expect(window.location.search).toBe('?link=dock');
 });

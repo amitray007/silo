@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { ChunkErrorBoundary } from './ChunkErrorBoundary';
 import { ModalHeader, ModalShell } from './ModalShell';
 import { type SettingsTab, useSettings } from './SettingsContext';
@@ -44,6 +44,12 @@ function SettingsTabStrip({
   tab: SettingsTab;
   onSelect: (t: SettingsTab) => void;
 }) {
+  // On a phone the strip scrolls sideways; keep the selected tab in view.
+  useEffect(() => {
+    document
+      .getElementById(`settings-tab-${tab}`)
+      ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [tab]);
   return (
     <div role="tablist" aria-label="Settings sections" className="silo-settings-tabs">
       <span className="silo-settings-nav-title">Settings</span>

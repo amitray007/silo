@@ -232,7 +232,12 @@ it('dismisses the pill when scrolling past the saved first line', () => {
   mount();
   expect(screen.getByRole('button', { name: 'Continue reading at 50%' })).toBeTruthy();
   tops[1] = -80;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
   fireEvent.scroll(scroll);
+  vi.unstubAllGlobals();
   expect(screen.queryByRole('button', { name: 'Continue reading at 50%' })).toBeNull();
 });
 

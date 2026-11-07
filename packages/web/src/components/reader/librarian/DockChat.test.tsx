@@ -63,7 +63,9 @@ afterEach(() => {
 });
 it('focuses the composer, posts only the quick action message and renders the stream', async () => {
   const { fetcher } = setup();
-  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Ask the Librarian' }));
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Ask the Librarian' })),
+  );
   const summarize = screen.getByRole('button', { name: 'Summarize' });
   await waitFor(() => expect(summarize.hasAttribute('disabled')).toBe(false));
   fireEvent.click(summarize);
@@ -504,3 +506,15 @@ it.each(['new', 'empty', 'history'])(
     forgetChat(id);
   },
 );
+
+it('keeps the keyboard down when opening or reopening stored messages', async () => {
+  const { setActive } = setup(true);
+  await screen.findByText('Stored question');
+  const field = screen.getByRole('textbox', { name: 'Ask the Librarian' });
+  expect(document.activeElement).not.toBe(field);
+  setActive(false);
+  setActive(true);
+  expect(document.activeElement).not.toBe(field);
+  fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
+  expect(document.activeElement).toBe(field);
+});

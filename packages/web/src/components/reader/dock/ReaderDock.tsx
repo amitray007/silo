@@ -16,6 +16,7 @@ import { useHasLibrarianChat } from '../../../api/librarian';
 import type { LinkJson } from '../../../api/types';
 import { isFeedPost } from '../../../lib/isFeedPost';
 import { deriveTitleFromUrl } from '../../../lib/url';
+import { clearArticleSelection, useDockHistory } from '../../../lib/useDockHistory';
 import { useReaderPrefs } from '../../../lib/useReaderPrefs';
 import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
@@ -414,6 +415,7 @@ export function ReaderDock({
         link={link}
         host={host}
         panel={panel}
+        prose={prose}
         askReady={askReady}
         features={{ pencil, highlights, lane, listen, hasChats }}
         onHighlighting={setHighlighting}
@@ -428,6 +430,7 @@ function DockSurface({
   link,
   host,
   panel,
+  prose,
   askReady,
   features,
   onHighlighting,
@@ -435,16 +438,24 @@ function DockSurface({
   link: LinkJson;
   host: HTMLElement;
   panel: HTMLElement | null;
+  prose: HTMLElement | null;
   askReady: boolean;
   features: Omit<DockApi, 'closeSheet' | 'openSheet'>;
   onHighlighting: (active: boolean) => void;
 }) {
   const { highlights, lane, listen } = features;
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, updateOpenId] = useState<string | null>(null);
+  const setOpenId = useCallback(
+    (id: string | null) => {
+      if (id) clearArticleSelection(prose);
+      updateOpenId(id);
+    },
+    [prose],
+  );
   const selectionRequest = useDockRequest(link.id);
   useEffect(() => {
     if (selectionRequest) setOpenId('ask');
-  }, [selectionRequest]);
+  }, [selectionRequest, setOpenId]);
   const sheetId = useId();
   const chatOpen = isChatOpen(openId, askReady);
   const { mounted: mountedChat, prepare: prepareChat } = useRetainedChat(
@@ -472,6 +483,15 @@ function DockSurface({
     returnChatFocus.current = !!host.querySelector('.silo-chat')?.contains(document.activeElement);
     setOpenId(null);
   };
+  useDockHistory(
+    openId !== null || lane.open,
+    () => {
+      lane.close();
+      if (openId === 'ask') foldChat();
+      else setOpenId(null);
+    },
+    prose,
+  );
   useRecede(panel, 'chat', chatOpen);
   const wasListening = useRef(false);
   useEffect(() => {
@@ -482,10 +502,13 @@ function DockSurface({
   }, [listening]);
   // Stopping Listen closes its sheet with it.
   useEffect(() => {
-    if (!listening) setOpenId((id) => (id === 'listen' ? null : id));
+    if (!listening) updateOpenId((id) => (id === 'listen' ? null : id));
   }, [listening]);
   const closeSheet = () => setOpenId(null);
   const api: DockApi = { ...features, closeSheet, openSheet: setOpenId };
+  const prepareTool = (tool: DockTool) => {
+    if (tool.id === 'notes' && !lane.open) clearArticleSelection(prose);
+  };
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return (
@@ -552,6 +575,7 @@ function DockSurface({
                 const toggle = () => {
                   if (tool.press) {
                     setOpenId(null);
+                    prepareTool(tool);
                     tool.press.toggle(api);
                   } else setOpenId(openId === tool.id ? null : tool.id);
                 };

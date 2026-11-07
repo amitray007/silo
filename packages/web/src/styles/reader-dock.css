@@ -280,3 +280,10 @@
     min-width: 40px;
   }
 }
+
+/* Landscape phones: keep a sheet's last row reachable above the pill. */
+@media (max-height: 480px) {
+  .silo-type-sheet.silo-menu-surface {
+    max-height: calc(100dvh - 130px);
+  }
+}

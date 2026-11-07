@@ -120,6 +120,9 @@ export function AppFrame() {
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const drawerWasOpen = useRef(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  // On a phone the drawer also opens from the collection menu's Manage tags; focus returns to
+  // whichever control opened it.
+  const openedByButton = useRef(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const previousPath = useRef(location.pathname);
@@ -232,11 +235,12 @@ export function AppFrame() {
   useEffect(() => {
     if (!drawerOpen) {
       if (drawerWasOpen.current && !document.querySelector('[role="dialog"], [role="alertdialog"]'))
-        (matchMedia(layoutMedia.phone).matches
-          ? document.querySelector<HTMLElement>('.silo-collection-trigger')
-          : menuButtonRef.current
+        (openedByButton.current || !matchMedia(layoutMedia.phone).matches
+          ? menuButtonRef.current
+          : document.querySelector<HTMLElement>('.silo-collection-trigger')
         )?.focus();
       drawerWasOpen.current = false;
+      openedByButton.current = false;
       return;
     }
     drawerWasOpen.current = true;
@@ -292,7 +296,10 @@ export function AppFrame() {
                       aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
                       aria-expanded={drawerOpen}
                       aria-controls={DRAWER_ID}
-                      onClick={showSidebar}
+                      onClick={() => {
+                        openedByButton.current = true;
+                        showSidebar();
+                      }}
                     >
                       <ReaderIcon name="sidebar" />
                     </button>
