@@ -2571,3 +2571,51 @@ div.silo-reader-notecard {
   color: var(--ink);
   text-underline-offset: 2px;
 }
+
+/* Touch fit: 40px hit areas on phones and coarse pointers. Hit areas grow; the look stays. */
+@media (max-width: 640px), (pointer: coarse) {
+  .silo-reader-head .silo-reader-iconbtn {
+    width: 40px;
+    height: 40px;
+  }
+  .silo-reader-segment button::before {
+    content: "";
+    position: absolute;
+    inset: -7px -1px;
+  }
+  .silo-player-button,
+  .silo-player-speed {
+    height: 40px;
+  }
+  .silo-player-button {
+    width: 40px;
+  }
+  .silo-player-speed {
+    min-width: 40px;
+  }
+  .silo-player-seek {
+    height: 40px;
+  }
+}
+/* A finger has no hover, so the volume track never opens. */
+@media (pointer: coarse) {
+  .silo-player-level {
+    display: none;
+  }
+}
+/* Idle controls are invisible, so they must not catch a tap meant for the video. */
+.silo-player[data-idle="true"]:not(:focus-within) .silo-player-bar {
+  pointer-events: none;
+}
+
+/* Chapter timestamps in a YouTube description: the link grows a 40px hit area, not its text. */
+@media (max-width: 640px), (pointer: coarse) {
+  .silo-reader a[href*="youtube.com/watch"][href*="t="] {
+    position: relative;
+  }
+  .silo-reader a[href*="youtube.com/watch"][href*="t="]::before {
+    content: "";
+    position: absolute;
+    inset: -7px -6px;
+  }
+}
