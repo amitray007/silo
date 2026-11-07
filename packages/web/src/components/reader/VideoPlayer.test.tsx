@@ -127,12 +127,27 @@ describe('VideoPlayer', () => {
     });
     expect(figure.dataset.idle).toBe('true');
     // First tap: wakes the controls, playback keeps going.
-    fireEvent.pointerDown(video);
+    fireEvent.pointerDown(video, { pointerType: 'touch' });
     fireEvent.click(video);
     expect(figure.dataset.idle).toBe('false');
     expect(video.pause).not.toHaveBeenCalled();
     // Second tap with the controls shown: toggles as before.
-    fireEvent.pointerDown(video);
+    fireEvent.pointerDown(video, { pointerType: 'touch' });
+    fireEvent.click(video);
+    expect(video.pause).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('pauses on a mouse click even while the controls are idle', () => {
+    vi.useFakeTimers();
+    const { video, container } = show();
+    fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+    const figure = container.querySelector('figure') as HTMLElement;
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(figure.dataset.idle).toBe('true');
+    fireEvent.pointerDown(video, { pointerType: 'mouse' });
     fireEvent.click(video);
     expect(video.pause).toHaveBeenCalledTimes(1);
     vi.useRealTimers();

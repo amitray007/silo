@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   type KeyboardEvent,
+  type PointerEvent,
   useCallback,
   useEffect,
   useRef,
@@ -243,8 +244,8 @@ export function VideoPlayer({
 
   // A tap on hidden controls only shows them; it must not also play or pause.
   const wokeByTap = useRef(false);
-  const onPointerDownCapture = () => {
-    wokeByTap.current = idle;
+  const onPointerDownCapture = (event: PointerEvent<HTMLElement>) => {
+    wokeByTap.current = idle && event.pointerType !== 'mouse';
     wake();
   };
   const onVideoClick = () => {
