@@ -217,6 +217,24 @@ describe('LibraryView paste-capture button', () => {
     }
   });
 
+  it('renders outside the header so a narrow list column cannot clip it', () => {
+    renderLibraryView();
+    const add = screen.getByRole('button', { name: 'Add link' });
+    fireEvent.click(add);
+    const dialog = screen.getByRole('dialog', { name: 'Paste to save' });
+    expect(add.closest('.silo-capture')?.contains(dialog)).toBe(false);
+    fireEvent.mouseDown(screen.getByRole('textbox'));
+    expect(screen.getByRole('dialog', { name: 'Paste to save' })).toBeTruthy();
+  });
+
+  it('stays open when the phone keyboard resizes the page while typing', () => {
+    renderLibraryView();
+    fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
+    expect(document.activeElement).toBe(screen.getByRole('textbox'));
+    fireEvent(window, new Event('resize'));
+    expect(screen.getByRole('dialog', { name: 'Paste to save' })).toBeTruthy();
+  });
+
   it('closes on an outside click', () => {
     renderLibraryView();
     fireEvent.click(screen.getByRole('button', { name: 'Add link' }));
