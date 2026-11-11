@@ -1,5 +1,6 @@
 import {
   type ComponentType,
+  type CSSProperties,
   lazy,
   type ReactNode,
   Suspense,
@@ -509,6 +510,7 @@ function DockSurface({
   const prepareTool = (tool: DockTool) => {
     if (tool.id === 'notes' && !lane.open) clearArticleSelection(prose);
   };
+  const shownTools = tools.filter((tool) => (tool.id !== 'ask' || askReady) && !tool.hidden?.(api));
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return (
@@ -553,6 +555,7 @@ function DockSurface({
           className="silo-reader-dock-pill"
           data-mode={listen.active ? 'player' : 'tools'}
           data-ask={askReady}
+          style={{ '--dock-tools': shownTools.length } as CSSProperties}
           role="toolbar"
           aria-label="Reader tools"
           onPointerEnter={askReady ? prepareChat : undefined}
@@ -569,37 +572,35 @@ function DockSurface({
               }}
             />
           ) : (
-            tools
-              .filter((tool) => (tool.id !== 'ask' || askReady) && !tool.hidden?.(api))
-              .map((tool) => {
-                const toggle = () => {
-                  if (tool.press) {
-                    setOpenId(null);
-                    prepareTool(tool);
-                    tool.press.toggle(api);
-                  } else setOpenId(openId === tool.id ? null : tool.id);
-                };
-                return tool.split ? (
-                  <SplitDockButton
-                    key={tool.id}
-                    tool={tool}
-                    split={tool.split}
-                    api={api}
-                    open={openId === tool.id}
-                    sheetId={sheetId}
-                    onToggle={toggle}
-                  />
-                ) : (
-                  <DockButton
-                    key={tool.id}
-                    tool={tool}
-                    api={api}
-                    open={openId === tool.id}
-                    sheetId={sheetId}
-                    onToggle={toggle}
-                  />
-                );
-              })
+            shownTools.map((tool) => {
+              const toggle = () => {
+                if (tool.press) {
+                  setOpenId(null);
+                  prepareTool(tool);
+                  tool.press.toggle(api);
+                } else setOpenId(openId === tool.id ? null : tool.id);
+              };
+              return tool.split ? (
+                <SplitDockButton
+                  key={tool.id}
+                  tool={tool}
+                  split={tool.split}
+                  api={api}
+                  open={openId === tool.id}
+                  sheetId={sheetId}
+                  onToggle={toggle}
+                />
+              ) : (
+                <DockButton
+                  key={tool.id}
+                  tool={tool}
+                  api={api}
+                  open={openId === tool.id}
+                  sheetId={sheetId}
+                  onToggle={toggle}
+                />
+              );
+            })
           )}
         </div>
         <MenuPresence>

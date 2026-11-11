@@ -264,6 +264,14 @@ it('leaves the Highlight and Notes tools out for a feed post', async () => {
   expect(document.querySelector('[data-tool="type"]')).not.toBeNull();
 });
 
+it('sizes the pill to the tools it shows', async () => {
+  renderContent(makeLink({ id: 'dock', feedId: 'feed-1' }), prose);
+  const pill = await screen.findByRole('toolbar', { name: 'Reader tools' });
+  const shown = pill.children.length;
+  expect(pill.style.getPropertyValue('--dock-tools')).toBe(String(shown));
+  expect(shown).toBe(3);
+});
+
 it('keeps the Highlight and Notes tools for a library link with highlight data', async () => {
   renderContent(makeLink({ id: 'dock', highlights: [] }), prose);
   await screen.findByText('Body text');
