@@ -1897,11 +1897,11 @@ div.silo-reader-notecard {
   height: 32px;
   border-radius: 8px;
 }
-.silo-capture .silo-capture-popover {
-  position: absolute;
-  z-index: 21;
-  right: 0;
-  top: 36px;
+/* Portaled by RowPopover: the wrapper takes the popover's width, so its edge clamp stays on screen. */
+.silo-row-menu-portal:has(.silo-capture-popover) {
+  width: max-content;
+}
+.silo-row-menu-portal .silo-capture-popover.silo-menu-surface {
   width: 280px;
   max-width: calc(100vw - 32px);
   max-height: calc(100dvh - 80px);
