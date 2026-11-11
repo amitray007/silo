@@ -99,7 +99,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Install Chromium for worker integration tests
         if: matrix.group.name == 'core + worker'
-        run: pnpm --filter @silo/worker exec playwright-core install --with-deps chromium
+        # No --with-deps: the runner image already has Chrome's system libraries, and apt mirror
+        # outages on the runner would otherwise fail this step before any test runs.
+        run: pnpm --filter @silo/worker exec playwright-core install chromium
       # `--test-timeout=20000` (CI only) gives slow shared runners headroom over
       # vitest's 5s default — a normally-sub-second test (e.g. the mcp-http 401
       # check) was flaking on the overloaded single-job runner; it never needs
