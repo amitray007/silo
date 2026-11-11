@@ -191,8 +191,18 @@ function mount(ready = false) {
 }
 
 /** A button in the floating selection toolbar, not the dock's own Highlight and Notes. */
-async function toolbarButton(name: RegExp | string) {
+/**
+ * The bar can be found before React runs its effects, such as the reset for a new selection and
+ * the resize listener. Flushing them first keeps a slow runner from clicking or resizing too early.
+ */
+async function findSelectionBar() {
   const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  return toolbar;
+}
+
+async function toolbarButton(name: RegExp | string) {
+  const toolbar = await findSelectionBar();
   return within(toolbar).getByRole('button', { name });
 }
 
@@ -203,7 +213,9 @@ async function openLane() {
 }
 const laneEl = () => document.querySelector('[data-notes-lane]') as HTMLElement;
 
-function select(text: string) {
+/** The dock listens for mouseup only once its lazy chunk mounts; selecting earlier is lost. */
+async function select(text: string) {
+  await screen.findByRole('toolbar', { name: 'Reader tools' });
   const prose = document.querySelector('.silo-reader-prose') as HTMLElement;
   const walker = document.createTreeWalker(prose, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -284,7 +296,7 @@ it('lists highlights in the notes lane and counts them', async () => {
 it('shows the selection toolbar for a selection and saves a highlight with offsets and context', async () => {
   mount();
   await screen.findByText(/Alpha beta/);
-  select('brown fox');
+  await select('brown fox');
   fireEvent.click(await toolbarButton(/Highlight/));
   await waitFor(() => expect(posts).toHaveLength(1));
   const start = TEXT.indexOf('brown fox');
@@ -304,7 +316,7 @@ it('gives an overlapping new highlight the next free colour', async () => {
   serverLink = makeLink({ id: 'hl', highlights: [highlight({ quote: 'quick brown fox' })] });
   mount();
   await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
-  select('brown fox jumps');
+  await select('brown fox jumps');
   fireEvent.click(await toolbarButton(/Highlight/));
   await waitFor(() => expect(posts).toHaveLength(1));
   expect(posts[0]?.color).toBe('green');
@@ -314,10 +326,10 @@ it('gives an overlapping new highlight the next free colour', async () => {
 it('highlights a selection at once while the Highlight sheet is open', async () => {
   mount();
   await screen.findByText(/Alpha beta/);
-  const dock = screen.getByRole('toolbar', { name: 'Reader tools' });
+  const dock = await screen.findByRole('toolbar', { name: 'Reader tools' });
   fireEvent.click(dock.querySelector('button[title="Highlight"]') as Element);
   fireEvent.click(screen.getByRole('button', { name: 'pink' }));
-  select('lazy dog');
+  await select('lazy dog');
   await waitFor(() => expect(posts).toHaveLength(1));
   expect(posts[0]).toMatchObject({ quote: 'lazy dog', color: 'pink' });
   expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
@@ -326,7 +338,7 @@ it('highlights a selection at once while the Highlight sheet is open', async () 
 it('Note highlights and opens the note popover on the new highlight', async () => {
   mount();
   await screen.findByText(/Alpha beta/);
-  select('Alpha beta');
+  await select('Alpha beta');
   fireEvent.click(await toolbarButton(/Note/));
   const field = await screen.findByRole('textbox', { name: 'Note' });
   fireEvent.change(field, { target: { value: 'first thoughts' } });
@@ -364,7 +376,7 @@ it('does not offer a toolbar when the link has no highlight data yet (a list row
   Reflect.deleteProperty(serverLink, 'highlights');
   mount();
   await screen.findByText(/Alpha beta/);
-  select('Alpha beta');
+  await select('Alpha beta');
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
@@ -385,7 +397,7 @@ it('opens the note popover for the highlight under a click, not for empty space'
 it('does not highlight a selection that was already there when the Highlight sheet opened', async () => {
   mount();
   await screen.findByText(/Alpha beta/);
-  select('brown fox');
+  await select('brown fox');
   await toolbarButton(/Highlight/);
   const dock = screen.getByRole('toolbar', { name: 'Reader tools' });
   fireEvent.click(dock.querySelector('button[title="Highlight"]') as Element);
@@ -393,7 +405,7 @@ it('does not highlight a selection that was already there when the Highlight she
     await new Promise((resolve) => setTimeout(resolve, 60));
   });
   expect(posts).toHaveLength(0);
-  select('lazy dog');
+  await select('lazy dog');
   await waitFor(() => expect(posts).toHaveLength(1));
   expect(posts[0]).toMatchObject({ quote: 'lazy dog' });
 });
@@ -405,7 +417,7 @@ it('keeps a new highlight on screen when the link refetches before the server an
   holdPost = new Promise<void>((resolve) => {
     release = resolve;
   });
-  select('brown fox');
+  await select('brown fox');
   fireEvent.click(await toolbarButton(/Highlight/));
   await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
   // A refetch lands with a list that does not have the new row yet.
@@ -432,8 +444,8 @@ it('closes one layer per Escape: toolbar, then note popover, then the sheet', as
     clientY: 20,
   });
   await screen.findByRole('dialog', { name: 'Note' });
-  select('Alpha beta');
-  await screen.findByRole('toolbar', { name: 'Selection' });
+  await select('Alpha beta');
+  await findSelectionBar();
   fireEvent.keyDown(document.body, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull());
   expect(screen.queryByRole('dialog', { name: 'Note' })).not.toBeNull();
@@ -448,8 +460,8 @@ it('closes one layer per Escape: toolbar, then note popover, then the sheet', as
 it('moves the toolbar with the selection when the window resizes', async () => {
   mount();
   await screen.findByText(/Alpha beta/);
-  select('brown fox');
-  const bar = await screen.findByRole('toolbar', { name: 'Selection' });
+  await select('brown fox');
+  const bar = await findSelectionBar();
   const before = bar.style.getPropertyValue('--selection-left');
   stubGlobal(Range.prototype, 'getBoundingClientRect', () => ({
     left: 300,
@@ -472,8 +484,8 @@ it('turns off, in the toolbar picker, colours used by highlights the selection o
   });
   mount();
   await waitFor(() => expect(registry.get('silo-hl-green')).toBeDefined());
-  select('brown fox jumps');
-  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  await select('brown fox jumps');
+  const toolbar = await findSelectionBar();
   fireEvent.keyDown(within(toolbar).getByRole('button', { name: /Highlight/ }), { key: 'ArrowUp' });
   const picker = within(toolbar).getByRole('group', { name: 'Highlight colour' });
   const green = within(picker).getByRole('button', { name: 'green' }) as HTMLButtonElement;
@@ -755,7 +767,7 @@ it('closes the lane before the pencil turns off when Escape is pressed', async (
   serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'my note' })] });
   mount();
   await screen.findByText(/Alpha beta/);
-  const pencil = screen.getByRole('button', { name: 'Pencil' });
+  const pencil = await screen.findByRole('button', { name: 'Pencil' });
   fireEvent.click(pencil);
   await waitFor(() => expect(pencil.getAttribute('aria-pressed')).toBe('true'));
   await openLane();
@@ -798,9 +810,9 @@ it('shows an orphan with its label, quote and note, and lets the note be edited 
 it('saves a quick answer through the normal highlight create path with its note', async () => {
   mount(true);
   await screen.findByText('Alpha beta gamma delta.');
-  select('quick brown fox');
+  await select('quick brown fox');
   fireEvent.click(await toolbarButton('Ask'));
-  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Explain' }));
   await screen.findByText('An answer saved on the passage.');
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
@@ -822,9 +834,9 @@ it('saves a quick answer through the normal highlight create path with its note'
 it('continues the temporary answer in a new dock chat after importing it', async () => {
   mount(true);
   await screen.findByText('Alpha beta gamma delta.');
-  select('quick brown fox');
+  await select('quick brown fox');
   fireEvent.click(await toolbarButton('Ask'));
-  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Explain' }));
   await screen.findByText('An answer saved on the passage.');
   await waitFor(() =>
     expect(
@@ -841,8 +853,8 @@ it('offers only Ask on a feed post when the Librarian is ready', async () => {
   serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
   mount(true);
   await screen.findByText('Alpha beta gamma delta.');
-  select('quick brown fox');
-  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  await select('quick brown fox');
+  const toolbar = await findSelectionBar();
   expect(within(toolbar).getByRole('button', { name: 'Ask' })).toBeDefined();
   expect(within(toolbar).queryByRole('button', { name: /Highlight/ })).toBeNull();
   expect(within(toolbar).queryByRole('button', { name: /Note/ })).toBeNull();
@@ -852,9 +864,9 @@ it('answers a feed post passage without offering to save it as a note', async ()
   serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
   mount(true);
   await screen.findByText('Alpha beta gamma delta.');
-  select('quick brown fox');
+  await select('quick brown fox');
   fireEvent.click(await toolbarButton('Ask'));
-  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Explain' }));
   await screen.findByText('An answer saved on the passage.');
   expect(screen.queryByRole('button', { name: 'Save as note' })).toBeNull();
   await waitFor(() =>
@@ -871,8 +883,8 @@ it('keeps the reading tools on a feed post when the Librarian is not ready', asy
   serverLink = makeLink({ id: 'hl', feedId: 'feed-1' });
   mount(false);
   await screen.findByRole('toolbar', { name: 'Reader tools' }, { timeout: 5000 });
-  select('quick brown fox');
-  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  await select('quick brown fox');
+  const toolbar = await findSelectionBar();
   expect(within(toolbar).queryByRole('button', { name: 'Ask' })).toBeNull();
   expect(within(toolbar).queryByRole('button', { name: /Highlight/ })).toBeNull();
   expect(within(toolbar).getByRole('button', { name: 'More' })).toBeDefined();
@@ -881,8 +893,8 @@ it('keeps the reading tools on a feed post when the Librarian is not ready', asy
 it('keeps the full toolbar on a library link when the Librarian is ready', async () => {
   mount(true);
   await screen.findByText('Alpha beta gamma delta.');
-  select('quick brown fox');
-  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  await select('quick brown fox');
+  const toolbar = await findSelectionBar();
   expect(within(toolbar).getByRole('button', { name: /Highlight/ })).toBeDefined();
   expect(within(toolbar).getByRole('button', { name: /Note/ })).toBeDefined();
   expect(within(toolbar).getByRole('button', { name: 'Ask' })).toBeDefined();
@@ -913,17 +925,17 @@ it('keeps native answer selection in dock chat without the article toolbar, then
   expect(registry.has('silo-librarian-selection')).toBe(false);
   expect(window.getSelection()?.toString()).toBe('An answer saved on the passage.');
   fireEvent.click(screen.getByRole('button', { name: 'Fold chat' }));
-  select('quick brown fox');
+  await select('quick brown fox');
   expect(await toolbarButton('Ask')).toBeTruthy();
 });
 
 it('keeps the passage answer open for native selection and removes the retained article highlight', async () => {
   mount(true);
   await screen.findByText('Alpha beta gamma delta.');
-  select('quick brown fox');
+  await select('quick brown fox');
   fireEvent.click(await toolbarButton('Ask'));
   expect(registry.has('silo-librarian-selection')).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Explain' }));
   const card = await screen.findByRole('region', { name: 'Passage answer' });
   await within(card).findByText('An answer saved on the passage.');
   await waitFor(() =>
@@ -948,7 +960,7 @@ it('keeps the passage answer open for native selection and removes the retained 
 it('does not retain the article highlight while text is selected in the passage composer', async () => {
   mount(true);
   await screen.findByText('Alpha beta gamma delta.');
-  select('quick brown fox');
+  await select('quick brown fox');
   fireEvent.click(await toolbarButton('Ask'));
   const field = (await screen.findByRole('textbox', {
     name: 'Ask about this passage',
