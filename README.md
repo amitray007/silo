@@ -1,73 +1,80 @@
-<div align="center">
+<p align="center">
+  <img src="docs/design/app-icon/app-icon.svg" width="80" height="80" alt="silo logo: an orange tile with three white bars">
+</p>
 
-# silo
+<h1 align="center">silo</h1>
 
-**An agent-native personal link store.**
+<p align="center">A self-hosted link store that you and your AI agent share.</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A524-3c873a.svg)](package.json)
-[![MCP](https://img.shields.io/badge/protocol-MCP-6c5ce7.svg)](https://modelcontextprotocol.io)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-555?style=flat-square" alt="License: MIT"></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/node-%E2%89%A524-555?style=flat-square" alt="Node 24 or later"></a>
+  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-35_tools-ff6a13?style=flat-square" alt="MCP: 35 tools"></a>
+</p>
 
-Feed in web material (links, Twitter/X posts, HN posts, videos), captured with rich
-metadata and full text, organized by tags and one note field, searchable, and served
-over **MCP** so an external agent does the intelligence.
+<p align="center">
+  <img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: a highlighted passage above a diagram, beside the agents tag list" width="880">
+</p>
 
-**AI is optional.** silo is the substrate; the mind sits on top, over MCP. You can turn on small AI
-features, such as the Librarian chat or short titles for saved X posts, with your own Anthropic,
-OpenAI, Fireworks, or Vercel AI Gateway key. They are off by default, and silo works fully without
-them.
+silo is a reading library you host yourself.
 
-<img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: a highlighted passage above a diagram, beside the agents tag list" width="880">
+- **Save** links, X posts, Hacker News threads, and videos, with their full text.
+- **Read, tag, and search** them in a clean web app.
+- **Let an AI agent use it.** Claude or ChatGPT connects over MCP (Model Context Protocol) and
+  can search, tag, and save for you.
+- **AI inside silo is optional** and off by default. Add your own Anthropic, OpenAI, Fireworks,
+  or Vercel AI Gateway key to turn on the Librarian chat and short titles for X posts.
+
+Install the CLI:
 
 ```sh
 brew install amitray007/tap/silo
 ```
 
-</div>
+## What you can do
 
-## What it does
+### Save
+- Paste a URL, or send one from the CLI, the Chrome extension, or Raycast.
+- silo drops duplicates and strips tracking parameters such as `utm_source`. You choose which.
+- A background worker keeps the page's title, description, image, and full text.
+- Hacker News, GitHub, YouTube, and X links also get points, stars, channel, or post text.
 
-- **Capture** a URL → silo canonicalizes and dedups it, then a background worker fetches it
-  (SSRF-safe), extracts a readable card (title, description, site, image, full text via
-  Readability), and files it.
-- **Search & browse**: full-text search across title, description, extracted text, notes,
-  **and** tags; open one link's full detail; browse newest-first, filtered by tag or capture
-  status; all paginated.
-- **Organize**: edit the note, add/remove tags (case-insensitive), trash and restore, and
-  retry a degraded capture.
-- **Read** in a clean reader with type settings, a pace guide that remembers where you stopped,
-  and colored highlights with notes. The **Live** tab shows the original page. Pages behind a
-  bot check or a paywall keep whatever text silo can get, and say why the rest is missing.
-- **Listen** to any article. Read-aloud runs in your browser with open voice models (Kokoro and
-  Phonon) that silo downloads once and serves itself, so no text goes to a speech service.
-- **Ask the Librarian** (optional AI) about one article, a passage, or the whole library. It
-  answers with the same MCP tools an outside agent uses, so it can search, tag, and save. It
-  asks you first before it deletes anything or overwrites a note.
-- **Quick actions** put common questions one click away: explain, simplify, or argue against a
-  passage; define a word; summarize an article, list its claims, or find related links; recap
-  your week or your highlights. Add your own actions in **Settings → AI**.
-- **Follow feeds**: subscribe to RSS or Atom. Posts land in the feed, and you save the good ones
-  to the library.
-- **Rich per-source previews**: Hacker News, GitHub, YouTube, and X links get source-specific
-  data (points/comments, stars/forks/language, channel/thumbnail, author/post text) via a small
-  plugin registry; each source is togglable in Settings. With AI on, saved X posts get a short
-  title written by your model.
-- **Clean links**: tracking parameters such as `utm_source` are stripped before a link is shown,
-  copied, or served over MCP. You choose which parameters count, for every site or per site.
-- **Import and export** your library as JSON. Imported links land at once and enrich in the
-  background.
-- **Runs itself**: scheduled jobs purge old trash on a cycle, re-enqueue any capture stranded
-  mid-enrichment, and alert on the dead-letter queue.
-- **Two front doors, one core**: everything an agent can do over **MCP**, a human can do in
-  the web UI over HTTP. Both call one core, so they can never drift.
+### Read and listen
+- Open any link in a clean reader with your own type settings.
+- Highlight passages in color and add notes. silo remembers where you stopped.
+- The Live tab shows the original page.
+- Behind a bot check or paywall? silo keeps the text it can get and says what is missing.
+- Play any article aloud. The voices run in your browser, so your text stays private.
 
-It's single-user, self-hosted, and private. Deliberately **not** a file store, not a content
-archive, not multi-user. It never summarizes or classifies on its own: that's the agent's job,
-or the Librarian's when you turn it on.
+### Find and organize
+- Search full text, titles, notes, and tags. Press ⌘K to search from anywhere.
+- Filter by tag or by capture status. Retry a capture that failed.
+- Add tags and one note per link.
+- Trash and restore links. Old trash empties after 7, 30, or 90 days.
+- Import and export the whole library as JSON.
+
+### Follow feeds
+- Subscribe to RSS or Atom feeds and save the good posts to your library.
+
+### Let an agent use it
+- Connect Claude, ChatGPT, or any MCP client.
+- The agent gets 35 tools: save, search, tag, highlight, and manage feeds.
+- Anything you can do in the web UI, the agent can do too.
+
+### Ask the Librarian (optional AI)
+- Turn on AI with your own key.
+- Ask about one article, a passage, or the whole library.
+- The Librarian asks you before it deletes anything or overwrites a note.
+- One-click actions: explain, simplify, argue against, define, summarize.
+- Add your own actions in **Settings → AI**.
+
+> silo is for one person, on a server you run. It is not a file store, a web archive, or a team
+> tool. It never summarizes or classifies links by itself. Your agent does that, or the
+> Librarian if you turn AI on.
 
 ## Screenshots
 
-The web UI (`@silo/web`, React + Vite in the "Oat" design system), seeded with real articles by
+Captured from a library seeded with real articles by
 [`scripts/screenshots/run.sh`](scripts/screenshots/run.sh).
 
 <table>
@@ -87,40 +94,49 @@ The web UI (`@silo/web`, React + Vite in the "Oat" design system), seeded with r
 
 ## How it works
 
-One core holds every operation; thin adapters expose it. **Anything an agent can do over MCP, a
-human can do in the web UI. They call the same core, so the two views never drift.**
+One `core` package holds every operation. The MCP server and the HTTP API are thin adapters over
+it, so the agent and the web UI always have the same features.
 
 ```
           agent  ──MCP──┐                 ┌── stdio  (local subprocess)
                         ├──▶  core  ◀──────┤── HTTP + token
-          human  ──HTTP─┘   (the brain)    └── HTTP + OAuth  (Claude / ChatGPT connectors)
+          human  ──HTTP─┘   (all logic)    └── HTTP + OAuth  (Claude / ChatGPT connectors)
                                 │
                         background worker  ── enrich · purge · sweep · retry
 ```
 
-An agent operates silo through **35 MCP tools**:
+The background worker:
 
-- **Links:** `capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` ·
-  `find_related` · `refresh_reader` · `clean_url` · `retry_capture` · `export_links`
-- **Tags:** `list_tags` · `create_tag` · `rename_tag` · `delete_tag` · `add_link_tag` ·
-  `remove_link_tag`
-- **Trash:** `trash_link` · `restore_link` · `list_trash` · `hard_delete_link`
-- **Reading:** `list_highlights` · `add_highlight` · `edit_highlight` · `delete_highlight` ·
-  `list_reading_positions`
-- **Feeds:** `list_feeds` · `subscribe_feed` · `unsubscribe_feed` · `rename_feed` ·
-  `refresh_feed` · `list_feed_posts` · `search_feed_posts` · `save_feed_post` ·
-  `archive_feed_post` · `unarchive_feed_post`
+- fetches new captures
+- empties old trash
+- retries captures that stalled
+- alerts when a job fails for good
 
-A background worker runs alongside: it enriches new captures, purges old trash on a cycle
-(7 / 30 / 90 days), re-enqueues anything stranded mid-enrichment, and watches the dead-letter
-queue. Theme, purge cycle, and per-source plugin toggles are stored server-side.
+Settings such as theme, trash cycle, and per-source toggles live on the server.
 
-Full scope map and anti-scope: [`docs/product/scope.html`](docs/product/scope.html).
+### MCP tools
 
-## Getting started
+An agent gets 35 tools:
 
-You need **Node 24+**, **pnpm 10+**, and Postgres with the `pgvector` extension (Docker gives you
-that in one command).
+| Group | Tools |
+|---|---|
+| Links | `capture_link` `get_link` `search_links` `list_links` `edit_link` `find_related` `refresh_reader` `clean_url` `retry_capture` `export_links` |
+| Tags | `list_tags` `create_tag` `rename_tag` `delete_tag` `add_link_tag` `remove_link_tag` |
+| Trash | `trash_link` `restore_link` `list_trash` `hard_delete_link` |
+| Reading | `list_highlights` `add_highlight` `edit_highlight` `delete_highlight` `list_reading_positions` |
+| Feeds | `list_feeds` `subscribe_feed` `unsubscribe_feed` `rename_feed` `refresh_feed` `list_feed_posts` `search_feed_posts` `save_feed_post` `archive_feed_post` `unarchive_feed_post` |
+
+What is in scope and what is not: [`docs/product/scope.html`](docs/product/scope.html).
+
+## Run it locally
+
+You need:
+
+- Node 24 or later
+- pnpm 10 or later
+- Postgres with the `pgvector` extension (`pnpm db:up` starts one in Docker)
+
+Set up:
 
 ```bash
 pnpm install          # deps + git hooks
@@ -129,27 +145,34 @@ cp .env.example .env  # DATABASE_URL - defaults already match db:up
 pnpm db:migrate       # apply the schema
 ```
 
-Now run **one** of two ways, depending on who's using it:
+Then start one of two modes:
 
-```bash
-pnpm dev     # for a human: API + web UI + worker → open http://localhost:5173
-pnpm start   # for an agent: the MCP server (stdio) + worker, no web UI
-```
+| Command | For | Runs |
+|---|---|---|
+| `pnpm dev` | you, in a browser | API + web UI + worker at http://localhost:5173 |
+| `pnpm start` | an agent | MCP server (stdio) + worker, no web UI |
 
-- **`pnpm dev`** serves the React web UI (Vite proxies `/api/*` to the API, so it's same-origin,
-  no CORS). The API binds to loopback with no auth; it's a single-user localhost surface. Renders
-  light or dark.
-- **`pnpm start`** speaks MCP over stdio and enriches in-process. Point an MCP client at it (below).
+Notes:
 
-> Not using Docker? Any Postgres works if the `vector` extension is available (the first migration
-> runs `CREATE EXTENSION vector`). Set `DATABASE_URL` to your instance and skip `pnpm db:up`.
+- In `pnpm dev`, Vite proxies `/api/*` to the API, so there is no CORS setup.
+- The local API listens on loopback only and has no login. It is for you alone.
+- No Docker? Any Postgres with the `vector` extension works. Set `DATABASE_URL` and skip
+  `pnpm db:up`. The first migration runs `CREATE EXTENSION vector`.
 
 ## Connect an agent (MCP)
 
-silo speaks MCP over three transports. Pick the one that matches where your agent runs.
+Pick the option that matches where your agent runs:
 
-**1 · Local subprocess (stdio)**: Claude Desktop / Claude Code on the same machine. No network,
-no auth: the process boundary is the trust boundary. Add to your MCP config:
+| Option | Use it when | Auth |
+|---|---|---|
+| 1. Local (stdio) | The agent runs on the same machine | None |
+| 2. Remote with a token | The agent reaches your server over the network | Bearer token |
+| 3. Connector URL | You use Claude or ChatGPT hosted connectors | OAuth sign-in |
+
+### 1. Local (stdio)
+
+For Claude Desktop or Claude Code on the same machine. There is no network and no auth. Add this
+to your MCP config:
 
 ```json
 {
@@ -163,10 +186,12 @@ no auth: the process boundary is the trust boundary. Add to your MCP config:
 }
 ```
 
-**2 · Remote, with a token (HTTP)**: a self-hosted silo an agent reaches over the network. Run
-the MCP endpoint (`SILO_MCP_HTTP_PORT` + `SILO_API_TOKEN`; see [Deploy](#deploy)) on whatever host
-you choose, then point the agent at its `/mcp` URL with a bearer token. Mint one in
-**Settings → Access**, where the **Copy config** button generates exactly this:
+### 2. Remote with a token
+
+1. Run the MCP endpoint on your server with `SILO_MCP_HTTP_PORT` and `SILO_API_TOKEN` set (see
+   [Deploy](#deploy)).
+2. Create a token in **Settings → Access**.
+3. Click **Copy config**. It gives you this:
 
 ```json
 {
@@ -179,90 +204,106 @@ you choose, then point the agent at its `/mcp` URL with a bearer token. Mint one
 }
 ```
 
-Or, for Claude Code, one line:
+For Claude Code, one command does the same:
 
 ```sh
 claude mcp add --transport http silo https://<your-mcp-host>/mcp \
   --header "Authorization: Bearer <YOUR_SILO_API_TOKEN>"
 ```
 
-**3 · URL-only connector (OAuth)**: **Claude** and **ChatGPT** hosted connectors. No token to
-copy: paste the URL into "Add custom connector" and sign in. silo implements OAuth 2.1 + PKCE,
-Dynamic Client Registration, and discovery, so the whole flow is URL-only.
+### 3. Connector URL (OAuth)
+
+For Claude and ChatGPT hosted connectors. There is no token to copy:
+
+1. Open "Add custom connector".
+2. Paste your MCP URL.
+3. Sign in.
 
 ```text
 https://<your-mcp-host>/mcp
 ```
 
-> `<your-mcp-host>` is any host you point at the MCP endpoint; pick the name you like. The one
-> rule: make it a **single-level** subdomain (e.g. `mcp-links.example.com`), **not** a nested one
-> like `mcp.links.example.com`. Many wildcard TLS certs don't cover a second level, and the OAuth
-> discovery flow then fails at the proxy. Details:
+silo supports OAuth 2.1 with PKCE, Dynamic Client Registration, and discovery.
+
+> [!IMPORTANT]
+> Use a single-level subdomain for `<your-mcp-host>`, such as `mcp-links.example.com`. A nested
+> name such as `mcp.links.example.com` often falls outside wildcard TLS certificates, and the
+> OAuth discovery then fails at the proxy. Details:
 > [`docs/methods/mcp-oauth.md`](docs/methods/mcp-oauth.md).
 
 ## Deploy
 
-silo ships as **one Docker image** run as two roles, `api` (web UI + REST + worker) and `mcp`
-(the HTTP MCP endpoint), over a pgvector Postgres. Run the whole stack locally:
+silo ships as one Docker image that runs in two roles, with a pgvector Postgres:
+
+- `api`: web UI + REST + worker
+- `mcp`: the HTTP MCP endpoint
+
+Run the whole stack locally:
 
 ```bash
 docker compose -f docker-compose.prod.yml up --build
 ```
 
-The env vars that matter for a real deployment:
+Environment variables for a real deployment:
 
 | Var | Role | What |
 |---|---|---|
 | `DATABASE_URL` | both | `postgres://silo:<pw>@postgres:5432/silo` (service name, not localhost) |
-| `SILO_API_TOKEN` | both | bearer the HTTP MCP requires: `openssl rand -hex 32` |
-| `SILO_APP_PASSWORD` | api | web-UI login password (≥16 chars); set it, or the UI is open |
-| `SILO_SESSION_SECRET` | api | cookie-signing secret (falls back to `SILO_APP_PASSWORD`) |
-| `SILO_PUBLIC_MCP_URL` | api | the exact MCP URL the "Copy config" button hands out |
-| `SILO_MCP_ALLOWED_HOSTS` | mcp | your mcp hostname(s), comma-separated, **required behind a proxy** |
-| `SILO_SECRET_KEY` | api | encrypts stored AI provider keys: `openssl rand -base64 32`. Needed only for AI features |
-| `SILO_DATA_DIR` | api | where read-aloud voice models are cached (about 0.6 GB); mount a volume here in Docker |
-| `SILO_BROWSER_WS_ENDPOINT` | api | optional headless browser for pages a plain fetch cannot read (`browser` compose profile) |
+| `SILO_API_TOKEN` | both | Bearer token for the HTTP MCP: `openssl rand -hex 32` |
+| `SILO_APP_PASSWORD` | api | Web UI password, 16+ characters. Without it, the UI is open |
+| `SILO_SESSION_SECRET` | api | Cookie-signing secret. Falls back to `SILO_APP_PASSWORD` |
+| `SILO_PUBLIC_MCP_URL` | api | The MCP URL that **Copy config** hands out |
+| `SILO_MCP_ALLOWED_HOSTS` | mcp | Your MCP hostnames, comma-separated. **Required behind a proxy** |
+| `SILO_SECRET_KEY` | api | Encrypts stored AI keys: `openssl rand -base64 32`. Only for AI features |
+| `SILO_DATA_DIR` | api | Cache for read-aloud voice models (about 0.6 GB). Mount a volume here |
+| `SILO_BROWSER_WS_ENDPOINT` | api | Optional headless browser for pages a plain fetch cannot read (`browser` compose profile) |
 
-Behind a reverse proxy, `SILO_MCP_ALLOWED_HOSTS` is the one that bites: the MCP SDK's
-DNS-rebinding guard rejects any `Host` it wasn't told to trust. Full walkthrough (Dokploy +
-Traefik, TLS, the MCP-URL resolution order): **[`docs/deploy.md`](docs/deploy.md)**.
+> [!WARNING]
+> Behind a reverse proxy, set `SILO_MCP_ALLOWED_HOSTS`. The MCP SDK rejects any `Host` header
+> that is not on that list.
+
+Full walkthrough (Dokploy, Traefik, TLS, how the MCP URL is chosen): [`docs/deploy.md`](docs/deploy.md).
 
 ### Embed the web UI
 
-Serve Silo over HTTPS to sign in inside another site's iframe. Embedded login uses an
-HTTP-only partitioned cookie (`SameSite=None; Secure; Partitioned`). Modern browsers keep
-that session separate for each top-level site. Sign in separately in the embed and in a
-normal Silo tab. Signing out clears the sessions available in the current browser context;
-it cannot clear a session stored under another top-level site. Normal tabs keep the existing
-`SameSite=Lax` cookie. Browsers that cannot retain the embedded session show an explanation
-and an **Open Silo directly** link.
+You can sign in to silo inside another site's iframe, over HTTPS.
 
-Login, logout, and cookie-authenticated API writes require `X-Silo-CSRF: 1`; the web UI adds
-it automatically. Bearer-token clients keep their existing request format. A separate web
-frontend must be listed in `SILO_ALLOWED_ORIGINS` to pass the CORS preflight. The iframe's
-parent does not need that access when Silo's UI and API share an origin. Deploy the API and
-web bundle together, then reload existing tabs so they send the new header.
+- The embed uses its own HTTP-only partitioned cookie (`SameSite=None; Secure; Partitioned`).
+  Normal tabs keep the `SameSite=Lax` cookie.
+- Browsers keep the embedded session separate for each top-level site, so you sign in once in
+  the embed and once in a normal tab.
+- Signing out clears sessions in the current browser context only. It cannot clear a session
+  stored under another top-level site.
+- If a browser cannot keep the embedded session, silo explains why and shows an
+  **Open Silo directly** link.
+
+For API clients:
+
+- Login, logout, and cookie-authenticated API writes need the `X-Silo-CSRF: 1` header. The web
+  UI adds it for you.
+- Bearer-token clients need no change.
+- A web frontend on another origin must be listed in `SILO_ALLOWED_ORIGINS`. The iframe's parent
+  does not need this when silo's UI and API share an origin.
+- Deploy the API and web bundle together, then reload open tabs so they send the new header.
 
 ## Clients
 
-Reach silo from outside the app. Each client is released independently
-([`docs/releasing.md`](docs/releasing.md)). Point any client at your silo's base URL + an API token
-(mint one in **Settings → Access**).
+Each client points at your silo URL with an API token from **Settings → Access**. Each one has its
+own release ([`docs/releasing.md`](docs/releasing.md)).
 
-- **CLI**: capture / search / list / open from the terminal: `brew install amitray007/tap/silo`
-  (or a tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases)).
-- **Chrome extension**: `silo-capture-*.zip` from the latest
-  [`chrome-v*` release](https://github.com/amitray007/silo/releases), loaded unpacked.
-- **Raycast extension**: from the Raycast Store (search "silo").
+| Client | What it does | Install |
+|---|---|---|
+| CLI | Capture, search, list, and open from the terminal | `brew install amitray007/tap/silo`, or a tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases) |
+| Chrome extension | Capture from the browser toolbar | `silo-capture-*.zip` from the latest [`chrome-v*` release](https://github.com/amitray007/silo/releases), loaded unpacked |
+| Raycast extension | Capture and search from Raycast | Search "silo" in the Raycast Store |
 
 ## Architecture
 
-A TypeScript monorepo. Every operation goes through one core; adapters only translate to core
-calls, so the web UI and the agent can never drift.
+A TypeScript monorepo. Adapters only translate requests into core calls.
 
 ```
 packages/
-  core/        the brain - all operations + data access
+  core/        all operations and data access
   db/          Postgres schema, migrations, queries (Drizzle)
   worker/      background enrichment + scheduled jobs (purge / sweep / DLQ) ─▶ core
   queue/       pg-boss setup shared by the worker and API                   ─▶ core
@@ -277,7 +318,7 @@ extensions/
   raycast/     capture and search from Raycast
 ```
 
-The core/adapter boundary is mechanically enforced
+The import-boundary check in `pnpm quality` enforces the core/adapter boundary
 ([`docs/rules/architecture.md`](docs/rules/architecture.md)).
 
 ## Development
@@ -287,11 +328,13 @@ pnpm turbo run check-types test
 pnpm quality      # Biome + import boundaries + jscpd + knip
 ```
 
-Pre-push runs typecheck and quality. CI also runs tests and builds; `main` must pass the full
-gate. Tests hit a real Postgres via disposable databases. Conventions live in
-[`docs/rules/`](docs/rules/README.md).
+- Pre-push runs typecheck and quality.
+- CI also runs tests and builds. `main` must pass the full gate.
+- Tests use a real Postgres with throwaway databases.
+- Code conventions live in [`docs/rules/`](docs/rules/README.md).
 
-## Contributing & license
+## Contributing and license
 
-Contributions welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md). Report vulnerabilities via
-[`SECURITY.md`](SECURITY.md). Licensed [MIT](LICENSE) © 2026 Amit Ray.
+- Contributions are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- Report security issues through [`SECURITY.md`](SECURITY.md).
+- Licensed [MIT](LICENSE) © 2026 Amit Ray.
