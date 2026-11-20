@@ -37,7 +37,9 @@ async function setTheme(theme) {
 
 async function open(route, theme) {
   await setTheme(theme);
-  await page.goto(`${BASE_URL}${route}`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE_URL}${route}`, { waitUntil: 'load' });
+  // Embeds such as YouTube keep the network busy, so idle is best effort.
+  await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(1500);
 }
 
@@ -62,20 +64,32 @@ async function scrollToText(text) {
   await page.waitForTimeout(600);
 }
 
+/** Opens the reader dock's Ask sheet, which reopens the article's newest chat. */
+async function openAsk() {
+  await page
+    .locator('[aria-label="Reader tools"] button', { hasText: 'Ask' })
+    .first()
+    .click()
+    .catch(() => console.warn('[capture] Ask button not found'));
+  await page.waitForTimeout(1500);
+}
+
 const reader = manifest.heroLinkId ? `/tags/agents?link=${manifest.heroLinkId}` : null;
+const { localFirst, transformer } = manifest.shotLinkIds ?? {};
 
 if (reader) {
   await open(reader, 'dark');
+  await scrollToText('The basic building block');
   await shoot('01-reader-dark.png');
   await open(reader, 'light');
-  await scrollToText('The basic building block');
-  await shoot('02-reader-light.png');
+  await openAsk();
+  await shoot('02-reader-ask-light.png');
 }
 
-await open('/', 'light');
+await open(transformer ? `/?link=${transformer}` : '/', 'light');
+if (transformer) await scrollToText('A High-Level Look');
 await shoot('03-library-light.png');
-const second = manifest.secondLinkId ? `/?link=${manifest.secondLinkId}` : '/';
-await open(second, 'dark');
+await open(localFirst ? `/?link=${localFirst}` : '/', 'dark');
 await shoot('04-library-dark.png');
 
 if (manifest.heroChatId) {
@@ -85,6 +99,12 @@ if (manifest.heroChatId) {
 
 if (manifest.feedId) {
   await open(`/feeds/${manifest.feedId}`, 'light');
+  const postId = await page
+    .locator('[data-link-id]')
+    .first()
+    .getAttribute('data-link-id')
+    .catch(() => null);
+  if (postId) await open(`/feeds/${manifest.feedId}?link=${postId}`, 'light');
   await shoot('06-feed.png');
 }
 

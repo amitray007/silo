@@ -17,7 +17,7 @@ features, such as the Librarian chat or short titles for saved X posts, with you
 OpenAI, Fireworks, or Vercel AI Gateway key. They are off by default, and silo works fully without
 them.
 
-<img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: an article with a note and a highlight, beside the agents tag list" width="880">
+<img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: a highlighted passage above a diagram, beside the agents tag list" width="880">
 
 ```sh
 brew install amitray007/tap/silo
@@ -60,15 +60,15 @@ The web UI (`@silo/web`, React + Vite in the "Oat" design system), seeded with r
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/design/app/shots/02-reader-light.png" alt="Reader in light theme with a blue highlight beside a diagram"><br><sub><b>Reader</b>: highlights, notes, and the reading tools dock.</sub></td>
-    <td width="50%"><img src="docs/design/app/shots/05-librarian.png" alt="Librarian chat answering a question about a saved article"><br><sub><b>Librarian</b>: ask about an article or the whole library.</sub></td>
+    <td width="50%"><img src="docs/design/app/shots/02-reader-ask-light.png" alt="The Librarian chat open over an article in the reader"><br><sub><b>Ask</b>: the Librarian answers about the article you are reading.</sub></td>
+    <td width="50%"><img src="docs/design/app/shots/05-librarian.png" alt="Librarian page with recent chats and one conversation"><br><sub><b>Librarian</b>: every chat, about one article or the whole library.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/design/app/shots/03-library-light.png" alt="Library list grouped by day"><br><sub><b>Library</b>: grouped by day, with notes marked.</sub></td>
+    <td><img src="docs/design/app/shots/03-library-light.png" alt="Library list beside The Illustrated Transformer with its diagrams"><br><sub><b>Library</b>: grouped by day, images and embeds kept in the reader.</sub></td>
     <td><img src="docs/design/app/shots/04-library-dark.png" alt="Library in dark theme with an essay open in the reader"><br><sub><b>Library</b> in dark, an essay open beside the list.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/design/app/shots/06-feed.png" alt="A subscribed feed with its recent posts"><br><sub><b>Feeds</b>: RSS and Atom posts, saved to the library in one click.</sub></td>
+    <td><img src="docs/design/app/shots/06-feed.png" alt="A Julia Evans feed post open in the reader"><br><sub><b>Feeds</b>: read RSS and Atom posts, and save the good ones.</sub></td>
     <td><img src="docs/design/app/shots/07-command-palette.png" alt="Command palette searching for agents"><br><sub><b>Command palette</b> (⌘K): full-text search across everything.</sub></td>
   </tr>
 </table>

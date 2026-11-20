@@ -28,8 +28,11 @@ export interface SeedLink {
 /** The article the reader screenshots open. It also carries the highlights and a chat. */
 export const HERO_URL = 'https://www.anthropic.com/engineering/building-effective-agents';
 
-/** A second article the library screenshot opens in the reader. */
-export const SECOND_URL = 'https://www.inkandswitch.com/essay/local-first/';
+/** Articles the library screenshots open in the reader, keyed by manifest name. */
+export const SHOT_URLS = {
+  localFirst: 'https://www.inkandswitch.com/essay/local-first/',
+  transformer: 'https://jalammar.github.io/illustrated-transformer/',
+} as const;
 
 export const SEED_LINKS: SeedLink[] = [
   // ── Today ──────────────────────────────────────────────────────────────
@@ -74,7 +77,7 @@ export const SEED_LINKS: SeedLink[] = [
     bucket: 'yesterday',
   },
   {
-    url: SECOND_URL,
+    url: SHOT_URLS.localFirst,
     tags: ['local-first', 'essays'],
     note: 'the seven ideals; silo lives in #4 and #7',
     bucket: 'yesterday',
@@ -160,9 +163,195 @@ export const SEED_LINKS: SeedLink[] = [
     tags: ['essays'],
     bucket: 'earlier',
   },
+  // ── More reading, so every list and tag fills the screen ───────────────
   {
-    url: 'https://news.ycombinator.com/item?id=42575537',
+    url: 'https://www.anthropic.com/engineering/writing-tools-for-agents',
+    tags: ['agents', 'mcp'],
+    bucket: 'today',
+  },
+  {
+    url: 'https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents',
+    tags: ['agents', 'llm'],
+    note: 'context is a budget; spend it on what the next step needs',
+    bucket: 'today',
+  },
+  {
+    url: 'https://www.anthropic.com/engineering/multi-agent-research-system',
+    tags: ['agents', 'research'],
+    addedByClaude: true,
+    bucket: 'today',
+  },
+  {
+    url: SHOT_URLS.transformer,
+    tags: ['llm', 'explorables'],
+    bucket: 'today',
+  },
+  {
+    url: 'https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/',
+    tags: ['agents', 'security'],
+    note: 'private data + untrusted content + a way out = exfiltration',
+    bucket: 'today',
+  },
+  {
+    url: 'https://www.anthropic.com/engineering/claude-think-tool',
+    tags: ['agents', 'llm'],
+    bucket: 'yesterday',
+  },
+  {
+    url: 'https://huyenchip.com/2025/01/07/agents.html',
+    tags: ['agents', 'essays'],
+    bucket: 'yesterday',
+  },
+  {
+    url: 'https://hamel.dev/blog/posts/evals/',
+    tags: ['evals', 'llm'],
+    bucket: 'yesterday',
+  },
+  {
+    url: 'https://github.com/microsoft/playwright-mcp',
+    tags: ['mcp', 'open-source', 'tools'],
+    addedByClaude: true,
+    bucket: 'yesterday',
+  },
+  {
+    url: 'https://www.anthropic.com/research/tracing-thoughts-language-model',
+    tags: ['llm', 'research'],
+    bucket: 'yesterday',
+  },
+  {
+    url: 'https://ciechanow.ski/bicycle/',
+    tags: ['explorables', 'design'],
+    bucket: 'yesterday',
+  },
+  {
+    url: 'https://eugeneyan.com/writing/llm-patterns/',
+    tags: ['llm', 'evals'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://github.com/openai/codex',
+    tags: ['agents', 'open-source', 'tools'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://lilianweng.github.io/posts/2024-07-07-hallucination/',
+    tags: ['llm', 'research'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://modelcontextprotocol.io/specification/2025-06-18',
+    tags: ['mcp'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://www.figma.com/blog/introducing-figma-mcp-server/',
+    tags: ['mcp', 'design'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://maggieappleton.com/ai-dark-forest',
+    tags: ['essays', 'llm'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://www.joshwcomeau.com/react/server-components/',
+    tags: ['frontend', 'explorables'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://ciechanow.ski/airfoil/',
+    tags: ['explorables'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://martinfowler.com/articles/exploring-gen-ai.html',
+    tags: ['agents', 'engineering'],
+    bucket: 'this_week',
+  },
+  {
+    url: 'https://karpathy.github.io/2015/05/21/rnn-effectiveness/',
+    tags: ['llm', 'research'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://paulgraham.com/ds.html',
+    tags: ['essays'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://stripe.com/blog/canonical-log-lines',
     tags: ['engineering'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://brandur.org/idempotency-keys',
+    tags: ['engineering'],
+    note: 'store the key and the response in one transaction',
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://github.com/ollama/ollama',
+    tags: ['llm', 'open-source', 'tools'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://github.com/tldraw/tldraw',
+    tags: ['open-source', 'design'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://react.dev/blog/2024/12/05/react-19',
+    tags: ['frontend'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://tailwindcss.com/blog/tailwindcss-v4',
+    tags: ['frontend', 'tools'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://overreacted.io/a-complete-guide-to-useeffect/',
+    tags: ['frontend', 'essays'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://web.dev/articles/vitals',
+    tags: ['frontend', 'engineering'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://www.inkandswitch.com/upwelling/',
+    tags: ['local-first', 'research'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://danluu.com/look-stupid/',
+    tags: ['essays'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://bun.sh/blog/bun-v1.0',
+    tags: ['tools', 'open-source'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://sre.google/sre-book/embracing-risk/',
+    tags: ['engineering'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://astral.sh/blog/uv',
+    tags: ['tools', 'open-source'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://antirez.com/news/145',
+    tags: ['essays', 'engineering'],
+    bucket: 'earlier',
+  },
+  {
+    url: 'https://lethain.com/staff-engineer/',
+    tags: ['engineering', 'essays'],
     bucket: 'earlier',
   },
 ];
@@ -198,8 +387,8 @@ export const HERO_HIGHLIGHTS: SeedHighlight[] = [
 
 /** RSS / Atom feeds, subscribed through the real `POST /api/feeds` endpoint. */
 export const SEED_FEEDS: string[] = [
-  'https://simonwillison.net/atom/everything/',
   'https://jvns.ca/atom.xml',
+  'https://simonwillison.net/atom/everything/',
   'https://ciechanow.ski/atom.xml',
   'https://overreacted.io/rss.xml',
 ];
@@ -218,6 +407,28 @@ export interface SeedChat {
 }
 
 export const SEED_CHATS: SeedChat[] = [
+  {
+    title: 'What is the lethal trifecta?',
+    ageHours: 0.5,
+    messages: [
+      { role: 'user', text: 'Explain the lethal trifecta from my saved Simon Willison post.' },
+      {
+        role: 'assistant',
+        text: 'An agent is at risk when it has all three: access to **private data**, exposure to **untrusted content**, and a way to **send data out**. A prompt injection in the untrusted content can then make the agent leak your data. Remove any one of the three and the attack fails.',
+      },
+    ],
+  },
+  {
+    title: 'Saved this week',
+    ageHours: 3,
+    messages: [
+      { role: 'user', text: 'What did I save this week?' },
+      {
+        role: 'assistant',
+        text: "Most of this week's saves are about **agents** and **LLM evals**: Hamel Husain on evals, Eugene Yan on LLM patterns, and the Codex repository. You also saved two explorables: Airfoil and the guide to React Server Components.",
+      },
+    ],
+  },
   {
     title: 'Workflows or agents?',
     hero: true,

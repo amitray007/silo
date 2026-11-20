@@ -11,7 +11,7 @@
 import { randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import type { Pool } from 'pg';
-import { HERO_HIGHLIGHTS, HERO_URL, SECOND_URL, SEED_CHATS, SEED_FEEDS } from './seed-data.js';
+import { HERO_HIGHLIGHTS, HERO_URL, SEED_CHATS, SEED_FEEDS, SHOT_URLS } from './seed-data.js';
 
 export interface ShowcaseContext {
   pool: Pool;
@@ -21,7 +21,7 @@ export interface ShowcaseContext {
 
 export interface Manifest {
   heroLinkId: string | null;
-  secondLinkId: string | null;
+  shotLinkIds: Record<keyof typeof SHOT_URLS, string | null>;
   heroChatId: string | null;
   feedId: string | null;
 }
@@ -50,6 +50,13 @@ async function linkIdFor(pool: Pool, url: string): Promise<string | null> {
     [url],
   );
   return rows[0]?.id ?? null;
+}
+
+async function shotLinkIds(pool: Pool): Promise<Manifest['shotLinkIds']> {
+  const entries = await Promise.all(
+    Object.entries(SHOT_URLS).map(async ([name, url]) => [name, await linkIdFor(pool, url)]),
+  );
+  return Object.fromEntries(entries) as Manifest['shotLinkIds'];
 }
 
 async function seedHighlights(ctx: ShowcaseContext, linkId: string): Promise<void> {
@@ -132,7 +139,7 @@ export async function seedShowcase(ctx: ShowcaseContext, manifestPath: string): 
 
   const manifest: Manifest = {
     heroLinkId: linkId,
-    secondLinkId: await linkIdFor(ctx.pool, SECOND_URL),
+    shotLinkIds: await shotLinkIds(ctx.pool),
     heroChatId,
     feedId,
   };
