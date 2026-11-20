@@ -1,0 +1,112 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>silo social preview</title>
+<style>
+@font-face { font-family: Inter; src: url(inter.woff2) format("woff2"); font-weight: 100 900; }
+:root {
+  --bg: #0a0a0a; --panel: #111111; --raise: #171717; --line: #222222; --line-2: #2e2e2e;
+  --sel: #1f1f1f; --ink: #f3f3f2; --mut: #a3a3a0; --fnt: #8a8a86; --ghost: #5a5a57;
+  --a: #ffb23f; --b: #ff6a13; --accent-ink: #ff9a52;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1280px; height: 640px; background: var(--bg); overflow: hidden; }
+body { font-family: Inter, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01"; position: relative; }
+
+/* left column */
+.left { position: absolute; left: 80px; top: 72px; bottom: 64px; width: 560px;
+  display: flex; flex-direction: column; }
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand svg { width: 40px; height: 40px; display: block; }
+.brand span { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; }
+h1 { margin-top: auto; font-size: 58px; line-height: 1.04; font-weight: 600; letter-spacing: -0.045em; }
+h1 em { font-style: normal; color: var(--fnt); display: block; }
+.sub { margin-top: 24px; font-size: 20px; line-height: 1.5; color: var(--mut); letter-spacing: -0.01em; max-width: 440px; }
+.foot { margin-top: auto; display: flex; gap: 10px; align-items: center; font-size: 16px; color: var(--fnt); }
+.foot b { font-weight: 500; color: var(--mut); }
+.dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ghost); }
+
+/* product crop, bleeds off the right and bottom edges */
+.win { position: absolute; left: 650px; top: 72px; width: 700px; height: 640px;
+  background: var(--panel); border-radius: 14px 0 0 0;
+  box-shadow: 0 0 0 0.5px #2e2e2e, 0 24px 48px -12px #000; }
+.bar { height: 52px; display: flex; align-items: center; padding: 0 20px; gap: 12px; border-bottom: 0.5px solid var(--line-2); }
+.search { flex: 0 0 360px; height: 32px; border-radius: 8px; background: var(--raise); display: flex; align-items: center; gap: 8px;
+  padding: 0 12px; font-size: 14px; color: var(--fnt); box-shadow: 0 0 0 0.5px var(--line-2); }
+.search svg { width: 15px; height: 15px; }
+.kbd { margin-left: auto; font-size: 12px; color: var(--ghost); }
+.list { padding: 14px 12px; }
+.day { font-size: 12.5px; font-weight: 500; color: var(--ghost); padding: 10px 12px 6px 50px; }
+.row { display: flex; align-items: center; gap: 14px; height: 42px; padding: 0 12px; border-radius: 9px; }
+.row.on { background: var(--sel); box-shadow: inset 0 0 0 0.5px var(--line-2); }
+.fav { width: 24px; height: 24px; padding: 4px; border-radius: 6px; background: #f3f3f2; flex: none; object-fit: contain; box-shadow: inset 0 0 0 0.5px #0002; }
+.t { font-size: 15.5px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; }
+.d { font-size: 15.5px; color: var(--fnt); white-space: nowrap; }
+.tag { font-size: 12px; color: var(--mut); padding: 3px 9px; border-radius: 99px; background: var(--raise); box-shadow: inset 0 0 0 0.5px var(--line-2); }
+
+/* agent call card, overlaps the crop */
+.agent { position: absolute; left: 610px; top: 478px; width: 400px; padding: 16px 20px 18px;
+  background: #161616; border-radius: 14px;
+  box-shadow: 0 0 0 0.5px #3a3a3a, inset 0 0.5px 0 #ffffff1a, 0 2px 4px -1px #0008, 0 16px 40px -8px #000; }
+.ah { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--mut); font-weight: 500; }
+.ah i { width: 7px; height: 7px; border-radius: 50%; background: var(--b); box-shadow: 0 0 0 3px #ff6a1326; }
+.ah .r { margin-left: auto; color: var(--ghost); font-weight: 400; }
+pre { margin-top: 12px; font: 14.5px/1.6 "SF Mono", ui-monospace, Menlo, monospace; color: var(--mut); white-space: pre; }
+pre .fn { color: var(--ink); }
+pre .s { color: var(--accent-ink); }
+.res { margin-top: 12px; padding-top: 12px; border-top: 0.5px solid var(--line-2); font-size: 14px; color: var(--mut); display: flex; gap: 8px; align-items: center; }
+.res b { color: var(--ink); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<section class="left">
+  <div class="brand">
+    <svg viewBox="0 0 26 26" aria-hidden="true">
+      <defs>
+        <linearGradient id="tile" x1="0.28" y1="-0.1" x2="0.72" y2="1.1"><stop offset="0" stop-color="#ffb23f"/><stop offset="1" stop-color="#ff6a13"/></linearGradient>
+        <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".12" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      </defs>
+      <rect width="26" height="26" rx="7" fill="url(#tile)"/>
+      <rect x=".5" y=".5" width="25" height="25" rx="6.5" fill="none" stroke="url(#edge)"/>
+      <g fill="#fff"><rect x="6" y="6.5" width="14" height="4" rx="3"/><rect x="6" y="11" width="14" height="4" rx="3" opacity=".72"/><rect x="6" y="15.5" width="14" height="4" rx="3" opacity=".46"/></g>
+    </svg>
+    <span>silo</span>
+  </div>
+
+  <h1>Save the web.<em>Your agent reads it.</em></h1>
+  <p class="sub">A self-hosted link store. Full text, tags and notes, served over MCP.</p>
+
+  <div class="foot"><b>github.com/amitray007/silo</b><span class="dot"></span>MIT</div>
+</section>
+
+<div class="win">
+  <div class="bar">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+      Paste a link or search
+      <span class="kbd">⌘K</span>
+    </div>
+  </div>
+  <div class="list">
+    <div class="day">Today</div>
+    <div class="row"><img class="fav" src="icons/arxiv.png"><span class="t">Attention Is All You Need</span><span class="d">arxiv.org</span><span class="tag">ml</span></div>
+    <div class="row on"><img class="fav" src="icons/pg.png"><span class="t">Maker's Schedule, Manager's Schedule</span><span class="d">paulgraham.com</span></div>
+    <div class="row"><img class="fav" src="icons/wbw.png"><span class="t">The Tail End</span><span class="d">waitbutwhy.com</span><span class="tag">life</span></div>
+    <div class="day">Yesterday</div>
+    <div class="row"><img class="fav" src="icons/yt.png"><span class="t">Steve Jobs' 2005 Stanford Commencement Address</span><span class="d">youtube.com</span></div>
+    <div class="row"><img class="fav" src="icons/mcf.png"><span class="t">Choose Boring Technology</span><span class="d">mcfunley.com</span></div>
+    <div class="row"><img class="fav" src="icons/kk.png"><span class="t">1,000 True Fans</span><span class="d">kk.org</span></div>
+  </div>
+</div>
+
+<div class="agent">
+  <div class="ah"><i></i>Agent · MCP<span class="r">silo</span></div>
+<pre><span class="fn">search_links</span>({ query: <span class="s">"maker schedule"</span> })</pre>
+  <div class="res"><b>1 link</b><span class="dot"></span>full text, tags and note</div>
+</div>
+
+</body>
+</html>
