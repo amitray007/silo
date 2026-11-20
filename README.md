@@ -16,14 +16,14 @@
   <img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: a highlighted passage above a diagram, beside the agents tag list" width="880">
 </p>
 
-silo saves links, X posts, Hacker News threads, and videos. For each one it keeps the metadata
-and the full text. You add tags and a note, search everything, and read in a clean reader. An
-agent such as Claude reaches the same library over MCP (Model Context Protocol), so it can
-search, tag, and save links for you.
+silo is a reading library you host yourself.
 
-AI features are optional and off by default. With your own Anthropic, OpenAI, Fireworks, or
-Vercel AI Gateway key, you can turn on the Librarian chat and short titles for saved X posts.
-silo works fully without them.
+- **Save** links, X posts, Hacker News threads, and videos, with their full text.
+- **Read, tag, and search** them in a clean web app.
+- **Let an AI agent use it.** Claude or ChatGPT connects over MCP (Model Context Protocol) and
+  can search, tag, and save for you.
+- **AI inside silo is optional** and off by default. Add your own Anthropic, OpenAI, Fireworks,
+  or Vercel AI Gateway key to turn on the Librarian chat and short titles for X posts.
 
 Install the CLI:
 
