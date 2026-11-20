@@ -51,7 +51,9 @@ describe('TweetCard single post', () => {
     expect(container.querySelector('ol, .silo-thread-post')).toBeNull();
     expect(queryByText(/^Thread/)).toBeNull();
     expect(queryByText('Saved post')).toBeNull();
-    expect(container.querySelector('.silo-reader-who')?.textContent).toBe('Amit Ray @amitray007');
+    expect(container.querySelector('.silo-reader-who')?.textContent).toBe(
+      'Ada Lovelace @adalovelace',
+    );
     expect(container.querySelector('.silo-reader-who img.silo-reader-avatar')).not.toBeNull();
     expect(container.querySelectorAll('time.silo-reader-posted')).toHaveLength(1);
     const stats = [...container.querySelectorAll('.silo-post-stat')].map((item) =>
@@ -112,7 +114,9 @@ describe('TweetCard thread', () => {
     const rows = [...container.querySelectorAll('li.silo-thread-post')];
     expect(rows).toHaveLength(4);
     expect(container.querySelectorAll('.silo-reader-who')).toHaveLength(1);
-    expect(rows[0]?.querySelector('.silo-reader-who')?.textContent).toBe('Amit Ray @amitray007');
+    expect(rows[0]?.querySelector('.silo-reader-who')?.textContent).toBe(
+      'Ada Lovelace @adalovelace',
+    );
     expect(rows.map((row) => row.querySelector('p')?.textContent ?? null)).toEqual([
       'First of the thread',
       twitterSourceData.text,

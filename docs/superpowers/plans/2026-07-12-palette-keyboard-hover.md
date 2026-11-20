@@ -15,7 +15,7 @@
 - **Do not regress the mouse path.** `PaletteLinkRow`'s `handleEnter`/`handleLeave` and the `{ suppress }` option stay exactly as they are. The keyboard path is additive.
 - **Design tokens only**; no hardcoded colors/sizes. Privacy: reuse the `/api/preview-image` proxy card (automatic — same card).
 - **Commit trailer** on every commit: `Co-Authored-By: Claude <noreply@anthropic.com>`. Branch: `feat/palette-rich-rows` (never `main`).
-- **Done-gate:** `pnpm turbo run check-types test` + `pnpm quality` green. Local DB: `DATABASE_URL=postgres://maverick@localhost:5432/silo` (native Homebrew Postgres on 5432).
+- **Done-gate:** `pnpm turbo run check-types test` + `pnpm quality` green. Local DB: `DATABASE_URL=postgres://silo:silo@localhost:5432/silo` (native Homebrew Postgres on 5432).
 
 ---
 
@@ -159,7 +159,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 - [ ] **Step 1: Bring up the app + seed enriched rows**
 
-With `DATABASE_URL=postgres://maverick@localhost:5432/silo`, ensure `pnpm dev` is running (web 5173, api 8787). Seed one twitter, one HN, one youtube, one github, and rely on existing plain links for a generic row (SQL insert as in the palette-rich-rows QA).
+With `DATABASE_URL=postgres://silo:silo@localhost:5432/silo`, ensure `pnpm dev` is running (web 5173, api 8787). Seed one twitter, one HN, one youtube, one github, and rely on existing plain links for a generic row (SQL insert as in the palette-rich-rows QA).
 
 - [ ] **Step 2: Drive keyboard nav with playwright-core (headless chromium cache)**
 
@@ -242,7 +242,7 @@ Match the existing `CommandPalette.test.tsx` conventions (the `settingsWithPlugi
 
 - [ ] **Step 2: Whole-tree gate**
 
-Run: `DATABASE_URL=postgres://maverick@localhost:5432/silo pnpm turbo run check-types test` + `pnpm quality`
+Run: `DATABASE_URL=postgres://silo:silo@localhost:5432/silo pnpm turbo run check-types test` + `pnpm quality`
 Expected: GREEN (attribute any unrelated RED per CLAUDE.md's done-gate rules).
 
 - [ ] **Step 3: Commit**

@@ -9,7 +9,7 @@ import { ReaderContent } from './ReaderContent';
 
 function renderPost(postedAt?: string) {
   const link = makeLink({
-    url: 'https://x.com/amitray007/status/1',
+    url: 'https://x.com/adalovelace/status/1',
     sourceData: { ...twitterSourceData, ...(postedAt && { postedAt }) },
   });
   return render(
@@ -38,7 +38,7 @@ describe('TweetCard', () => {
     const post = (id: string) =>
       makeLink({
         id,
-        url: 'https://x.com/amitray007/status/1',
+        url: 'https://x.com/adalovelace/status/1',
         sourceData: {
           ...twitterSourceData,
           mediaUrls: ['https://video.twimg.com/amplify_video/1/vid/clip.mp4'],
@@ -59,7 +59,7 @@ describe('TweetCard', () => {
 
   it("shows the author's picture through silo's proxy, never X directly", () => {
     const link = makeLink({
-      url: 'https://x.com/amitray007/status/1',
+      url: 'https://x.com/adalovelace/status/1',
       sourceData: {
         ...twitterSourceData,
         authorAvatarUrl: 'https://pbs.twimg.com/profile_images/1/face_200x200.jpg',
@@ -243,7 +243,7 @@ describe('Live Reader', () => {
 
   it('does not ask for a Reader for an X post or a trashed link', async () => {
     const post = makeLink({
-      url: 'https://x.com/amitray007/status/1',
+      url: 'https://x.com/adalovelace/status/1',
       sourceData: twitterSourceData,
     });
     const first = show(() => json(reader), post);

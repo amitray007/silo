@@ -26,7 +26,7 @@
 - **Commit trailer** on every commit: `Co-Authored-By: Claude <noreply@anthropic.com>`.
   Branch: `feat/delete-tag` (off main; never commit to `main`).
 - **Done-gate:** `pnpm turbo run check-types test` + `pnpm quality` green. Local DB:
-  `DATABASE_URL=postgres://maverick@localhost:5432/silo` (native Postgres on 5432).
+  `DATABASE_URL=postgres://silo:silo@localhost:5432/silo` (native Postgres on 5432).
 
 ---
 
@@ -86,7 +86,7 @@ from `@silo/core` or the module under test) — match its existing imports.
 
 - [ ] **Step 2: Run the tests — verify they fail**
 
-Run: `DATABASE_URL=postgres://maverick@localhost:5432/silo pnpm --filter @silo/core test -- tags`
+Run: `DATABASE_URL=postgres://silo:silo@localhost:5432/silo pnpm --filter @silo/core test -- tags`
 Expected: FAIL ("deleteTag is not a function" / import error).
 
 - [ ] **Step 3: Implement `deleteTag`**
@@ -126,7 +126,7 @@ In `packages/core/src/index.ts`, add `deleteTag` to the export that already list
 
 - [ ] **Step 5: Run the tests — verify they pass**
 
-Run: `DATABASE_URL=postgres://maverick@localhost:5432/silo pnpm --filter @silo/core test -- tags`
+Run: `DATABASE_URL=postgres://silo:silo@localhost:5432/silo pnpm --filter @silo/core test -- tags`
 Expected: PASS. Also `pnpm --filter @silo/core check-types` PASS.
 
 - [ ] **Step 6: Commit**
@@ -527,7 +527,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 - [ ] **Step 1: Whole-tree gate**
 
-Run: `DATABASE_URL=postgres://maverick@localhost:5432/silo pnpm turbo run check-types test` + `pnpm quality`
+Run: `DATABASE_URL=postgres://silo:silo@localhost:5432/silo pnpm turbo run check-types test` + `pnpm quality`
 Expected: GREEN.
 
 - [ ] **Step 2: Browser QA (orchestrator does this)**

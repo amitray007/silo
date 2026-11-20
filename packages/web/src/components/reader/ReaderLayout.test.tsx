@@ -540,7 +540,7 @@ describe('reader content', () => {
   it.each([
     [hackerNewsSourceData, '342'],
     [githubSourceData, '58100'],
-    [twitterSourceData, 'Amit Ray'],
+    [twitterSourceData, 'Ada Lovelace'],
     [youtubeSourceData, 'Fireship'],
   ] as const)('renders captured %s data', async (sourceData, text) => {
     renderReader({ live: [makeLink({ ...a, sourceData })], route: '/?link=a' });

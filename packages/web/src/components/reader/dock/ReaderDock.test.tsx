@@ -107,7 +107,7 @@ it('does not render for an X post and never asks for Reader prose', async () => 
   renderContent(
     makeLink({
       id: 'post',
-      url: 'https://x.com/amitray007/status/1',
+      url: 'https://x.com/adalovelace/status/1',
       sourceData: twitterSourceData,
     }),
     prose,

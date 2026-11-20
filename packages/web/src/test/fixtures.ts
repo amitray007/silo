@@ -74,8 +74,8 @@ export const youtubeSourceData: Extract<SourceData, { kind: 'youtube' }> = {
 export const twitterSourceData: Extract<SourceData, { kind: 'twitter' }> = {
   kind: 'twitter',
   text: 'Just shipped a new feature — thrilled with how it turned out.',
-  authorHandle: 'amitray007',
-  authorName: 'Amit Ray',
+  authorHandle: 'adalovelace',
+  authorName: 'Ada Lovelace',
   likes: 512,
   reposts: 48,
   replies: 23,

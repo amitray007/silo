@@ -294,7 +294,7 @@ describe('Sepia reader theme', () => {
   it('stays on the app theme for an X post, which never loads Reader prose', async () => {
     const post = makeLink({
       id: 'post',
-      url: 'https://x.com/amitray007/status/1',
+      url: 'https://x.com/adalovelace/status/1',
       sourceData: twitterSourceData,
     });
     const { container, fetchMock } = show(post);

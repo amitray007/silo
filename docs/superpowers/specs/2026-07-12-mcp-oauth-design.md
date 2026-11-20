@@ -15,7 +15,7 @@ connector" flow works end to end, while preserving silo's **single-owner** postu
 client name**, show granted/last-used/active-token-count, and allow revoke (per-app + revoke-all).
 
 This is a **full vertical slice**: connect + list + dedup + revoke + edge cases. The reference
-implementation is `/Users/maverick/code/projects/stash` (`docs/MCP.md` + `lib/auth/oauth.ts`);
+implementation is [stash](https://github.com/amitray007/stash) (`docs/MCP.md` + `lib/auth/oauth.ts`);
 we mirror its design and its edge-case handling. There is **no Claude- or ChatGPT-specific
 branching** — a spec-pure server serves both.
 

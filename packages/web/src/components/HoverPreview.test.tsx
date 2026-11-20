@@ -325,13 +325,13 @@ describe('HoverPreview', () => {
     it('renders the Twitter variant: author name/handle, tweet text, and engagement counts (icon + number)', () => {
       renderPreview(
         makeLink({
-          title: 'Amit Ray on X',
+          title: 'Ada Lovelace on X',
           sourceData: twitterSourceData,
-          url: 'https://x.com/amitray007/status/1',
+          url: 'https://x.com/adalovelace/status/1',
         }),
       );
-      expect(screen.getByText('Amit Ray')).toBeDefined();
-      expect(screen.getByText('@amitray007')).toBeDefined();
+      expect(screen.getByText('Ada Lovelace')).toBeDefined();
+      expect(screen.getByText('@adalovelace')).toBeDefined();
       expect(
         screen.getByText('Just shipped a new feature — thrilled with how it turned out.'),
       ).toBeDefined();
@@ -343,27 +343,27 @@ describe('HoverPreview', () => {
       expect(screen.getByRole('link', { name: 'Open' })).toBeDefined();
     });
 
-    it('does NOT render the redundant page-title header ("Amit Ray on X") — only the author line + tweet text', () => {
+    it('does NOT render the redundant page-title header ("Ada Lovelace on X") — only the author line + tweet text', () => {
       renderPreview(
         makeLink({
-          title: 'Amit Ray (@amitray007) on X',
+          title: 'Ada Lovelace (@adalovelace) on X',
           sourceData: twitterSourceData,
-          url: 'https://x.com/amitray007/status/1',
+          url: 'https://x.com/adalovelace/status/1',
         }),
       );
       // The author name appears exactly once (the author line), not also as
       // a page-title header repeating the same name.
-      expect(screen.getAllByText('Amit Ray')).toHaveLength(1);
-      expect(screen.queryByText('Amit Ray (@amitray007) on X')).toBeNull();
+      expect(screen.getAllByText('Ada Lovelace')).toHaveLength(1);
+      expect(screen.queryByText('Ada Lovelace (@adalovelace) on X')).toBeNull();
       expect(screen.queryByText(/on X$/)).toBeNull();
     });
 
     it('the engagement row uses one consistent SVG icon set (heart/repost/reply), not mismatched emoji', () => {
       renderPreview(
         makeLink({
-          title: 'Amit Ray on X',
+          title: 'Ada Lovelace on X',
           sourceData: twitterSourceData,
-          url: 'https://x.com/amitray007/status/1',
+          url: 'https://x.com/adalovelace/status/1',
         }),
       );
       // Three matched inline SVGs (14x14, same stroke/viewBox), no emoji glyph.
@@ -386,7 +386,7 @@ describe('HoverPreview', () => {
     it('Twitter variant never renders a raw <img> (no third-party twimg.com calls) even with an avatar url present', () => {
       renderPreview(
         makeLink({
-          title: 'Amit Ray on X',
+          title: 'Ada Lovelace on X',
           sourceData: { ...twitterSourceData, authorAvatarUrl: 'https://pbs.twimg.com/a.jpg' },
         }),
       );
@@ -397,7 +397,7 @@ describe('HoverPreview', () => {
       renderPreview(
         makeLink({
           id: 'link-with-media',
-          title: 'Amit Ray on X',
+          title: 'Ada Lovelace on X',
           sourceData: {
             ...twitterSourceData,
             thumbnailUrl: 'https://pbs.twimg.com/ext_tw_video_thumb/1/thumb.jpg',
@@ -412,7 +412,7 @@ describe('HoverPreview', () => {
     it('omits the image entirely for a text-only tweet (no thumbnailUrl)', () => {
       renderPreview(
         makeLink({
-          title: 'Amit Ray on X',
+          title: 'Ada Lovelace on X',
           sourceData: twitterSourceData, // fixture has no thumbnailUrl
         }),
       );
@@ -536,40 +536,40 @@ describe('HoverPreview', () => {
     it('twitter: hover:false falls back to the generic variant (TwitterVariant absent)', () => {
       renderPreview(
         makeLink({
-          title: 'Amit Ray on X',
+          title: 'Ada Lovelace on X',
           sourceData: twitterSourceData,
-          url: 'https://x.com/amitray007/status/1',
+          url: 'https://x.com/adalovelace/status/1',
         }),
         { ...allOn, twitter: { enabled: true, inline: false, hover: false, palette: true } },
       );
-      expect(screen.queryByText('@amitray007')).toBeNull();
+      expect(screen.queryByText('@adalovelace')).toBeNull();
       expect(screen.queryByText('♥ 512')).toBeNull();
-      expect(screen.getByText('Amit Ray on X')).toBeDefined();
+      expect(screen.getByText('Ada Lovelace on X')).toBeDefined();
     });
 
     it('twitter: enabled:false (master off) also falls back to the generic variant', () => {
       renderPreview(
         makeLink({
-          title: 'Amit Ray on X',
+          title: 'Ada Lovelace on X',
           sourceData: twitterSourceData,
-          url: 'https://x.com/amitray007/status/1',
+          url: 'https://x.com/adalovelace/status/1',
         }),
         { ...allOn, twitter: { enabled: false, inline: true, hover: true, palette: true } },
       );
-      expect(screen.queryByText('@amitray007')).toBeNull();
-      expect(screen.getByText('Amit Ray on X')).toBeDefined();
+      expect(screen.queryByText('@adalovelace')).toBeNull();
+      expect(screen.getByText('Ada Lovelace on X')).toBeDefined();
     });
 
     it('twitter: enabled:true && hover:true renders the TwitterVariant', () => {
       renderPreview(
         makeLink({
-          title: 'Amit Ray on X',
+          title: 'Ada Lovelace on X',
           sourceData: twitterSourceData,
-          url: 'https://x.com/amitray007/status/1',
+          url: 'https://x.com/adalovelace/status/1',
         }),
         allOn,
       );
-      expect(screen.getByText('@amitray007')).toBeDefined();
+      expect(screen.getByText('@adalovelace')).toBeDefined();
       expect(screen.getByText('512')).toBeDefined();
     });
 

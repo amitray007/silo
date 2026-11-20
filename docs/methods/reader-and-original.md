@@ -249,7 +249,7 @@ URL with curl and in the browser.
 
 1. `pnpm turbo run check-types test` for the touched packages, plus
    `pnpm quality` and `pnpm --filter @silo/web build`. DB-backed suites run
-   against local Postgres (`DATABASE_URL=postgres://maverick@localhost:5432/...`);
+   against local Postgres (`DATABASE_URL=postgres://silo:silo@localhost:5432/...`);
    report unrelated failures, do not fix them.
 2. One commit per unit, staged by explicit path, ending with
    `Co-Authored-By: Claude <noreply@anthropic.com>`.
