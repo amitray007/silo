@@ -13,10 +13,11 @@ metadata and full text, organized by tags and one note field, searchable, and se
 over **MCP** so an external agent does the intelligence.
 
 **AI is optional.** silo is the substrate; the mind sits on top, over MCP. You can turn on small AI
-features, such as short titles for saved X posts, with your own Anthropic, OpenAI, or Vercel AI
-Gateway key. They are off by default, and silo works fully without them.
+features, such as the Librarian chat or short titles for saved X posts, with your own Anthropic,
+OpenAI, Fireworks, or Vercel AI Gateway key. They are off by default, and silo works fully without
+them.
 
-<img src="docs/design/app/shots/01-library-dark.png" alt="silo's library — day-grouped, searchable, in the Oat design" width="820">
+<img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: an article with a note and a highlight, beside the agents tag list" width="880">
 
 ```sh
 brew install amitray007/tap/silo
@@ -34,6 +35,12 @@ brew install amitray007/tap/silo
   status; all paginated.
 - **Organize** — edit the note, add/remove tags (case-insensitive), trash and restore, and
   retry a degraded capture.
+- **Read** in a clean reader with type settings, a pace guide that remembers where you stopped,
+  colored highlights with notes, and read-aloud. The **Live** tab shows the original page.
+- **Ask the Librarian** (optional AI) about one article, a passage, or the whole library. It
+  answers with the same MCP tools an outside agent uses, so it can search, tag, and save.
+- **Follow feeds**: subscribe to RSS or Atom. Posts land in the feed, and you save the good ones
+  to the library.
 - **Rich per-source previews** — Hacker News, GitHub, and YouTube links get source-specific
   data (points/comments, stars/forks/language, channel/thumbnail) via a small plugin registry;
   each source is togglable in Settings.
@@ -43,25 +50,26 @@ brew install amitray007/tap/silo
   the web UI over HTTP. Both call one core, so they can never drift.
 
 It's single-user, self-hosted, and private. Deliberately **not** a file store, not a content
-archive, not multi-user — and it never summarizes or classifies on its own. That's the agent's
-job.
+archive, not multi-user. It never summarizes or classifies on its own: that's the agent's job,
+or the Librarian's when you turn it on.
 
 ## Screenshots
 
-The web UI (`@silo/web`, React + Vite in the "Oat" design system) in light and dark.
+The web UI (`@silo/web`, React + Vite in the "Oat" design system), seeded with real articles by
+[`scripts/screenshots/run.sh`](scripts/screenshots/run.sh).
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/design/app/shots/02-library-light.png" alt="Library, light theme"><br><sub><b>Library</b> — day-grouped, live-enriching, light.</sub></td>
-    <td width="50%"><img src="docs/design/app/shots/01-library-dark.png" alt="Library, dark theme"><br><sub><b>Library</b> — the same list in dark.</sub></td>
+    <td width="50%"><img src="docs/design/app/shots/02-reader-light.png" alt="Reader in light theme with a blue highlight beside a diagram"><br><sub><b>Reader</b>: highlights, notes, and the reading tools dock.</sub></td>
+    <td width="50%"><img src="docs/design/app/shots/05-librarian.png" alt="Librarian chat answering a question about a saved article"><br><sub><b>Librarian</b>: ask about an article or the whole library.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/design/app/shots/07-command-palette.png" alt="Command palette"><br><sub><b>Command palette</b> (⌘K) — full-text find across everything.</sub></td>
-    <td><img src="docs/design/app/shots/03-tag-mcp.png" alt="Tag view"><br><sub><b>Tag view</b> — filtered to one tag, grouped by time.</sub></td>
+    <td><img src="docs/design/app/shots/03-library-light.png" alt="Library list grouped by day"><br><sub><b>Library</b>: grouped by day, with notes marked.</sub></td>
+    <td><img src="docs/design/app/shots/04-library-dark.png" alt="Library in dark theme with an essay open in the reader"><br><sub><b>Library</b> in dark, an essay open beside the list.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/design/app/shots/06-settings-mcp.png" alt="Settings, API and MCP"><br><sub><b>API / MCP</b> — mint tokens, toggle agent access.</sub></td>
-    <td><img src="docs/design/app/shots/05-settings-plugins.png" alt="Settings, plugins"><br><sub><b>Plugins</b> — per-source enrichment, togglable.</sub></td>
+    <td><img src="docs/design/app/shots/06-feed.png" alt="A subscribed feed with its recent posts"><br><sub><b>Feeds</b>: RSS and Atom posts, saved to the library in one click.</sub></td>
+    <td><img src="docs/design/app/shots/07-command-palette.png" alt="Command palette searching for agents"><br><sub><b>Command palette</b> (⌘K): full-text search across everything.</sub></td>
   </tr>
 </table>
 
@@ -78,11 +86,18 @@ human can do in the web UI — they call the same core, so the two views never d
                         background worker  ── enrich · purge · sweep · retry
 ```
 
-An agent operates silo through **18 MCP tools**:
+An agent operates silo through **35 MCP tools**:
 
-`capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` · `create_tag` ·
-`add_link_tag` · `remove_link_tag` · `delete_tag` · `trash_link` · `restore_link` · `retry_capture` ·
-`export_links` · `find_related` · `refresh_reader` · `list_tags` · `list_trash` · `hard_delete_link`
+- **Links:** `capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` ·
+  `find_related` · `refresh_reader` · `clean_url` · `retry_capture` · `export_links`
+- **Tags:** `list_tags` · `create_tag` · `rename_tag` · `delete_tag` · `add_link_tag` ·
+  `remove_link_tag`
+- **Trash:** `trash_link` · `restore_link` · `list_trash` · `hard_delete_link`
+- **Reading:** `list_highlights` · `add_highlight` · `edit_highlight` · `delete_highlight` ·
+  `list_reading_positions`
+- **Feeds:** `list_feeds` · `subscribe_feed` · `unsubscribe_feed` · `rename_feed` ·
+  `refresh_feed` · `list_feed_posts` · `search_feed_posts` · `save_feed_post` ·
+  `archive_feed_post` · `unarchive_feed_post`
 
 A background worker runs alongside: it enriches new captures, purges old trash on a cycle
 (7 / 30 / 90 days), re-enqueues anything stranded mid-enrichment, and watches the dead-letter
