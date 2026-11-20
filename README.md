@@ -33,40 +33,44 @@ brew install amitray007/tap/silo
 
 ## What you can do
 
-**Save.** Paste a URL, or send one from the CLI, the Chrome extension, or Raycast. silo removes
-duplicates and strips tracking parameters such as `utm_source` (you choose which). A background worker then fetches the
-page and keeps its title, description, image, and full text. Hacker News, GitHub, YouTube, and X
-links also get source details, such as points, stars, channel, or post text.
+### Save
+- Paste a URL, or send one from the CLI, the Chrome extension, or Raycast.
+- silo drops duplicates and strips tracking parameters such as `utm_source`. You choose which.
+- A background worker keeps the page's title, description, image, and full text.
+- Hacker News, GitHub, YouTube, and X links also get points, stars, channel, or post text.
 
-**Read.** Open any link in a clean reader. Pick your type settings, highlight passages in color,
-and add notes. silo remembers where you stopped. The Live tab shows the original page. If a page
-sits behind a bot check or a paywall, silo keeps the text it can get and tells you what is
-missing.
+### Read and listen
+- Open any link in a clean reader with your own type settings.
+- Highlight passages in color and add notes. silo remembers where you stopped.
+- The Live tab shows the original page.
+- Behind a bot check or paywall? silo keeps the text it can get and says what is missing.
+- Play any article aloud. The voices run in your browser, so your text stays private.
 
-**Listen.** Play any article aloud. The voice models (Kokoro and Phonon) run in your browser, so
-your text never goes to a speech service.
+### Find and organize
+- Search full text, titles, notes, and tags. Press ⌘K to search from anywhere.
+- Filter by tag or by capture status. Retry a capture that failed.
+- Add tags and one note per link.
+- Trash and restore links. Old trash empties after 7, 30, or 90 days.
+- Import and export the whole library as JSON.
 
-**Find.** Search the full text, titles, notes, and tags. Filter the list by tag or by capture
-status, or press ⌘K to search from anywhere.
+### Follow feeds
+- Subscribe to RSS or Atom feeds and save the good posts to your library.
 
-**Organize.** Add tags and one note per link. Retry a capture that failed. Trash a link and restore it later; silo empties
-old trash on a schedule you pick (7, 30, or 90 days). Import and export the whole library as JSON.
+### Let an agent use it
+- Connect Claude, ChatGPT, or any MCP client.
+- The agent gets 35 tools: save, search, tag, highlight, and manage feeds.
+- Anything you can do in the web UI, the agent can do too.
 
-**Follow feeds.** Subscribe to RSS or Atom feeds, read new posts, and save the good ones to your
-library.
+### Ask the Librarian (optional AI)
+- Turn on AI with your own key.
+- Ask about one article, a passage, or the whole library.
+- The Librarian asks you before it deletes anything or overwrites a note.
+- One-click actions: explain, simplify, argue against, define, summarize.
+- Add your own actions in **Settings → AI**.
 
-**Let an agent use it.** Connect Claude, ChatGPT, or any MCP client. The agent gets 35 tools and
-can do everything you can do in the web UI: save, search, tag, highlight, and manage feeds.
-
-**Ask the Librarian (optional AI).** Turn on AI with your own key and ask questions about one
-article, a passage, or the whole library. The Librarian uses the same tools as an outside agent,
-and it asks you before it deletes anything or overwrites a note. One-click actions explain,
-simplify, or argue against a passage, define a word, or summarize an article or your week. You
-can add your own actions in **Settings → AI**.
-
-silo is for one person, on a server you run. It is not a file store, a web archive, or a team
-tool. It never summarizes or classifies links by itself. Your agent does that, or the Librarian
-if you turn AI on.
+> silo is for one person, on a server you run. It is not a file store, a web archive, or a team
+> tool. It never summarizes or classifies links by itself. Your agent does that, or the
+> Librarian if you turn AI on.
 
 ## Screenshots
 
