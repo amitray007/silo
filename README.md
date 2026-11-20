@@ -36,14 +36,26 @@ brew install amitray007/tap/silo
 - **Organize** — edit the note, add/remove tags (case-insensitive), trash and restore, and
   retry a degraded capture.
 - **Read** in a clean reader with type settings, a pace guide that remembers where you stopped,
-  colored highlights with notes, and read-aloud. The **Live** tab shows the original page.
+  and colored highlights with notes. The **Live** tab shows the original page. Pages behind a
+  bot check or a paywall keep whatever text silo can get, and say why the rest is missing.
+- **Listen** to any article. Read-aloud runs in your browser with open voice models (Kokoro and
+  Phonon) that silo downloads once and serves itself, so no text goes to a speech service.
 - **Ask the Librarian** (optional AI) about one article, a passage, or the whole library. It
-  answers with the same MCP tools an outside agent uses, so it can search, tag, and save.
+  answers with the same MCP tools an outside agent uses, so it can search, tag, and save. It
+  asks you first before it deletes anything or overwrites a note.
+- **Quick actions** put common questions one click away: explain, simplify, or argue against a
+  passage; define a word; summarize an article, list its claims, or find related links; recap
+  your week or your highlights. Add your own actions in **Settings → AI**.
 - **Follow feeds**: subscribe to RSS or Atom. Posts land in the feed, and you save the good ones
   to the library.
-- **Rich per-source previews** — Hacker News, GitHub, and YouTube links get source-specific
-  data (points/comments, stars/forks/language, channel/thumbnail) via a small plugin registry;
-  each source is togglable in Settings.
+- **Rich per-source previews** — Hacker News, GitHub, YouTube, and X links get source-specific
+  data (points/comments, stars/forks/language, channel/thumbnail, author/post text) via a small
+  plugin registry; each source is togglable in Settings. With AI on, saved X posts get a short
+  title written by your model.
+- **Clean links**: tracking parameters such as `utm_source` are stripped before a link is shown,
+  copied, or served over MCP. You choose which parameters count, for every site or per site.
+- **Import and export** your library as JSON. Imported links land at once and enrich in the
+  background.
 - **Runs itself** — scheduled jobs purge old trash on a cycle, re-enqueue any capture stranded
   mid-enrichment, and alert on the dead-letter queue.
 - **Two front doors, one core** — everything an agent can do over **MCP**, a human can do in
@@ -154,7 +166,7 @@ no auth: the process boundary is the trust boundary. Add to your MCP config:
 **2 · Remote, with a token (HTTP)** — a self-hosted silo an agent reaches over the network. Run
 the MCP endpoint (`SILO_MCP_HTTP_PORT` + `SILO_API_TOKEN`; see [Deploy](#deploy)) on whatever host
 you choose, then point the agent at its `/mcp` URL with a bearer token — mint one in
-**Settings → API / MCP**, where the **Copy config** button generates exactly this:
+**Settings → Access**, where the **Copy config** button generates exactly this:
 
 ```json
 {
@@ -207,6 +219,9 @@ The env vars that matter for a real deployment:
 | `SILO_SESSION_SECRET` | api | cookie-signing secret (falls back to `SILO_APP_PASSWORD`) |
 | `SILO_PUBLIC_MCP_URL` | api | the exact MCP URL the "Copy config" button hands out |
 | `SILO_MCP_ALLOWED_HOSTS` | mcp | your mcp hostname(s), comma-separated — **required behind a proxy** |
+| `SILO_SECRET_KEY` | api | encrypts stored AI provider keys: `openssl rand -base64 32`. Needed only for AI features |
+| `SILO_DATA_DIR` | api | where read-aloud voice models are cached (about 0.6 GB); mount a volume here in Docker |
+| `SILO_BROWSER_WS_ENDPOINT` | api | optional headless browser for pages a plain fetch cannot read (`browser` compose profile) |
 
 Behind a reverse proxy, `SILO_MCP_ALLOWED_HOSTS` is the one that bites: the MCP SDK's
 DNS-rebinding guard rejects any `Host` it wasn't told to trust. Full walkthrough (Dokploy +
@@ -232,7 +247,7 @@ web bundle together, then reload existing tabs so they send the new header.
 
 Reach silo from outside the app — each released independently
 ([`docs/releasing.md`](docs/releasing.md)). Point any client at your silo's base URL + an API token
-(mint one in **Settings → API / MCP**).
+(mint one in **Settings → Access**).
 
 - **CLI** — capture / search / list / open from the terminal: `brew install amitray007/tap/silo`
   (or a tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases)).
@@ -251,10 +266,15 @@ packages/
   db/          Postgres schema, migrations, queries (Drizzle)
   worker/      background enrichment + scheduled jobs (purge / sweep / DLQ) ─▶ core
   queue/       pg-boss setup shared by the worker and API                   ─▶ core
-  mcp/server/  MCP adapter — 18 tools                                       ─▶ core
+  mcp/server/  MCP adapter — 35 tools                                       ─▶ core
   api/         HTTP adapter (Hono) — REST + OAuth server                    ─▶ core
   web/         React SPA (Vite, "Oat" design) — talks to the API over HTTP
   app/         composition root — runs the MCP server + worker as `silo`
+  cli/         the `silo` terminal client (capture / search / list / open)
+  release/     release tooling for the CLI and extensions
+extensions/
+  chrome/      capture from the browser toolbar
+  raycast/     capture and search from Raycast
 ```
 
 The core/adapter boundary is mechanically enforced
