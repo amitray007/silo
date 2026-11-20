@@ -3,8 +3,9 @@
  * (`seed-data.ts`) via the REAL `POST /api/ingest` endpoint, so silo's own
  * enrichment worker fetches live metadata + cover images exactly as
  * production does. After ingest + enrichment settle, backfills the fields
- * ingest cannot set (created_at date buckets, added_by='agent', a couple of
- * deliberately-incomplete rows) directly via SQL, keyed by link id.
+ * ingest cannot set (created_at date buckets, added_by='agent') directly via
+ * SQL, keyed by link id. Then `showcase.ts` adds highlights, feeds, and
+ * Librarian chats, and writes the id manifest that `capture.mjs` reads.
  *
  * Run: `npx tsx scripts/screenshots/seed.ts` (from the repo root, with a
  * throwaway Postgres + silo API server already running).
@@ -13,6 +14,7 @@
  *   DATABASE_URL   — required. Points at the throwaway Postgres.
  *   INGEST_URL     — optional, default `http://127.0.0.1:8788`.
  *   SILO_API_TOKEN — required. Must match the running API's SILO_API_TOKEN.
+ *   MANIFEST       — optional, default `shots-manifest.json` in the cwd.
  *
  * Idempotent: `POST /api/ingest` dedups by canonical URL (re-ingesting
  * merges, never duplicates), and the SQL backfill is an UPDATE keyed by
@@ -25,9 +27,16 @@
  * script keys the backfill on `link.id`, not on a canonical URL match.
  */
 
-import { Pool } from 'pg';
+import { createRequire } from 'node:module';
+import type { Pool as PgPool } from 'pg';
 import type { SeedLink } from './seed-data.js';
 import { SEED_LINKS } from './seed-data.js';
+import { seedShowcase } from './showcase.js';
+
+// pnpm does not hoist `pg` to the root, so resolve it from the db package.
+const requireFromDb = createRequire(new URL('../../packages/db/package.json', import.meta.url));
+const { Pool } = requireFromDb('pg') as typeof import('pg');
+type Pool = PgPool;
 
 const DATABASE_URL = requireEnv('DATABASE_URL');
 const SILO_API_TOKEN = requireEnv('SILO_API_TOKEN');
@@ -77,20 +86,6 @@ function toIngestBody(seed: SeedLink): Record<string, unknown> {
     tags: seed.tags,
   };
   if (seed.note !== undefined) body.note = seed.note;
-  if (seed.twitter !== undefined) {
-    body.sourceKind = 'twitter';
-    // twitterSourceData (packages/core/src/links/source-data.ts) requires
-    // reposts/quotes/bookmarks alongside likes/replies — seed-data.ts's
-    // TwitterSourceData only curates likes/replies, so default the rest to
-    // zero rather than widening the seed dataset's type for values the
-    // screenshots don't need to vary.
-    body.sourceData = {
-      ...seed.twitter,
-      reposts: 0,
-      quotes: 0,
-      bookmarks: 0,
-    };
-  }
   return body;
 }
 
@@ -186,9 +181,8 @@ function createdAtExpr(seed: SeedLink, indexInBucket: number): string {
 
 /**
  * Backfills the fields ingest cannot set: created_at date buckets,
- * added_by='agent' for the addedByClaude rows, and capture_status='partial'
- * for the incomplete rows. Runs AFTER enrichment settles, since enrichment
- * would otherwise flip a freshly-set 'partial' back to 'full'. Keyed by
+ * and added_by='agent' for the addedByClaude rows. Runs AFTER enrichment
+ * settles, since enrichment rewrites the row. Keyed by
  * `id` (parameterized UPDATEs) — safe to re-run.
  */
 async function backfill(pool: Pool, results: IngestResult[]): Promise<void> {
@@ -209,10 +203,6 @@ async function backfill(pool: Pool, results: IngestResult[]): Promise<void> {
 
     if (seed.addedByClaude) {
       await pool.query(`update links set added_by = 'agent' where id = $1`, [id]);
-    }
-
-    if (seed.incomplete) {
-      await pool.query(`update links set capture_status = 'partial' where id = $1`, [id]);
     }
   }
 }
@@ -300,6 +290,12 @@ async function main(): Promise<void> {
     await backfill(pool, results);
 
     await printSummary(pool);
+
+    console.log('[seed] adding highlights, feeds, and chats...');
+    await seedShowcase(
+      { pool, baseUrl: INGEST_URL, token: SILO_API_TOKEN },
+      process.env.MANIFEST ?? 'shots-manifest.json',
+    );
 
     if (failures.length > 0) {
       console.warn(`[seed] done, with ${failures.length} ingest failure(s) — see above.`);

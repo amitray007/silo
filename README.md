@@ -13,10 +13,11 @@ metadata and full text, organized by tags and one note field, searchable, and se
 over **MCP** so an external agent does the intelligence.
 
 **AI is optional.** silo is the substrate; the mind sits on top, over MCP. You can turn on small AI
-features, such as short titles for saved X posts, with your own Anthropic, OpenAI, or Vercel AI
-Gateway key. They are off by default, and silo works fully without them.
+features, such as the Librarian chat or short titles for saved X posts, with your own Anthropic,
+OpenAI, Fireworks, or Vercel AI Gateway key. They are off by default, and silo works fully without
+them.
 
-<img src="docs/design/app/shots/01-library-dark.png" alt="silo's library — day-grouped, searchable, in the Oat design" width="820">
+<img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: a highlighted passage above a diagram, beside the agents tag list" width="880">
 
 ```sh
 brew install amitray007/tap/silo
@@ -34,34 +35,53 @@ brew install amitray007/tap/silo
   status; all paginated.
 - **Organize** — edit the note, add/remove tags (case-insensitive), trash and restore, and
   retry a degraded capture.
-- **Rich per-source previews** — Hacker News, GitHub, and YouTube links get source-specific
-  data (points/comments, stars/forks/language, channel/thumbnail) via a small plugin registry;
-  each source is togglable in Settings.
+- **Read** in a clean reader with type settings, a pace guide that remembers where you stopped,
+  and colored highlights with notes. The **Live** tab shows the original page. Pages behind a
+  bot check or a paywall keep whatever text silo can get, and say why the rest is missing.
+- **Listen** to any article. Read-aloud runs in your browser with open voice models (Kokoro and
+  Phonon) that silo downloads once and serves itself, so no text goes to a speech service.
+- **Ask the Librarian** (optional AI) about one article, a passage, or the whole library. It
+  answers with the same MCP tools an outside agent uses, so it can search, tag, and save. It
+  asks you first before it deletes anything or overwrites a note.
+- **Quick actions** put common questions one click away: explain, simplify, or argue against a
+  passage; define a word; summarize an article, list its claims, or find related links; recap
+  your week or your highlights. Add your own actions in **Settings → AI**.
+- **Follow feeds**: subscribe to RSS or Atom. Posts land in the feed, and you save the good ones
+  to the library.
+- **Rich per-source previews** — Hacker News, GitHub, YouTube, and X links get source-specific
+  data (points/comments, stars/forks/language, channel/thumbnail, author/post text) via a small
+  plugin registry; each source is togglable in Settings. With AI on, saved X posts get a short
+  title written by your model.
+- **Clean links**: tracking parameters such as `utm_source` are stripped before a link is shown,
+  copied, or served over MCP. You choose which parameters count, for every site or per site.
+- **Import and export** your library as JSON. Imported links land at once and enrich in the
+  background.
 - **Runs itself** — scheduled jobs purge old trash on a cycle, re-enqueue any capture stranded
   mid-enrichment, and alert on the dead-letter queue.
 - **Two front doors, one core** — everything an agent can do over **MCP**, a human can do in
   the web UI over HTTP. Both call one core, so they can never drift.
 
 It's single-user, self-hosted, and private. Deliberately **not** a file store, not a content
-archive, not multi-user — and it never summarizes or classifies on its own. That's the agent's
-job.
+archive, not multi-user. It never summarizes or classifies on its own: that's the agent's job,
+or the Librarian's when you turn it on.
 
 ## Screenshots
 
-The web UI (`@silo/web`, React + Vite in the "Oat" design system) in light and dark.
+The web UI (`@silo/web`, React + Vite in the "Oat" design system), seeded with real articles by
+[`scripts/screenshots/run.sh`](scripts/screenshots/run.sh).
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/design/app/shots/02-library-light.png" alt="Library, light theme"><br><sub><b>Library</b> — day-grouped, live-enriching, light.</sub></td>
-    <td width="50%"><img src="docs/design/app/shots/01-library-dark.png" alt="Library, dark theme"><br><sub><b>Library</b> — the same list in dark.</sub></td>
+    <td width="50%"><img src="docs/design/app/shots/02-reader-ask-light.png" alt="The Librarian chat open over an article in the reader"><br><sub><b>Ask</b>: the Librarian answers about the article you are reading.</sub></td>
+    <td width="50%"><img src="docs/design/app/shots/05-librarian.png" alt="Librarian page with recent chats and one conversation"><br><sub><b>Librarian</b>: every chat, about one article or the whole library.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/design/app/shots/07-command-palette.png" alt="Command palette"><br><sub><b>Command palette</b> (⌘K) — full-text find across everything.</sub></td>
-    <td><img src="docs/design/app/shots/03-tag-mcp.png" alt="Tag view"><br><sub><b>Tag view</b> — filtered to one tag, grouped by time.</sub></td>
+    <td><img src="docs/design/app/shots/03-library-light.png" alt="Library list beside The Illustrated Transformer with its diagrams"><br><sub><b>Library</b>: grouped by day, images and embeds kept in the reader.</sub></td>
+    <td><img src="docs/design/app/shots/04-library-dark.png" alt="Library in dark theme with an essay open in the reader"><br><sub><b>Library</b> in dark, an essay open beside the list.</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/design/app/shots/06-settings-mcp.png" alt="Settings, API and MCP"><br><sub><b>API / MCP</b> — mint tokens, toggle agent access.</sub></td>
-    <td><img src="docs/design/app/shots/05-settings-plugins.png" alt="Settings, plugins"><br><sub><b>Plugins</b> — per-source enrichment, togglable.</sub></td>
+    <td><img src="docs/design/app/shots/06-feed.png" alt="A Julia Evans feed post open in the reader"><br><sub><b>Feeds</b>: read RSS and Atom posts, and save the good ones.</sub></td>
+    <td><img src="docs/design/app/shots/07-command-palette.png" alt="Command palette searching for agents"><br><sub><b>Command palette</b> (⌘K): full-text search across everything.</sub></td>
   </tr>
 </table>
 
@@ -78,11 +98,18 @@ human can do in the web UI — they call the same core, so the two views never d
                         background worker  ── enrich · purge · sweep · retry
 ```
 
-An agent operates silo through **18 MCP tools**:
+An agent operates silo through **35 MCP tools**:
 
-`capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` · `create_tag` ·
-`add_link_tag` · `remove_link_tag` · `delete_tag` · `trash_link` · `restore_link` · `retry_capture` ·
-`export_links` · `find_related` · `refresh_reader` · `list_tags` · `list_trash` · `hard_delete_link`
+- **Links:** `capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` ·
+  `find_related` · `refresh_reader` · `clean_url` · `retry_capture` · `export_links`
+- **Tags:** `list_tags` · `create_tag` · `rename_tag` · `delete_tag` · `add_link_tag` ·
+  `remove_link_tag`
+- **Trash:** `trash_link` · `restore_link` · `list_trash` · `hard_delete_link`
+- **Reading:** `list_highlights` · `add_highlight` · `edit_highlight` · `delete_highlight` ·
+  `list_reading_positions`
+- **Feeds:** `list_feeds` · `subscribe_feed` · `unsubscribe_feed` · `rename_feed` ·
+  `refresh_feed` · `list_feed_posts` · `search_feed_posts` · `save_feed_post` ·
+  `archive_feed_post` · `unarchive_feed_post`
 
 A background worker runs alongside: it enriches new captures, purges old trash on a cycle
 (7 / 30 / 90 days), re-enqueues anything stranded mid-enrichment, and watches the dead-letter
@@ -139,7 +166,7 @@ no auth: the process boundary is the trust boundary. Add to your MCP config:
 **2 · Remote, with a token (HTTP)** — a self-hosted silo an agent reaches over the network. Run
 the MCP endpoint (`SILO_MCP_HTTP_PORT` + `SILO_API_TOKEN`; see [Deploy](#deploy)) on whatever host
 you choose, then point the agent at its `/mcp` URL with a bearer token — mint one in
-**Settings → API / MCP**, where the **Copy config** button generates exactly this:
+**Settings → Access**, where the **Copy config** button generates exactly this:
 
 ```json
 {
@@ -192,6 +219,9 @@ The env vars that matter for a real deployment:
 | `SILO_SESSION_SECRET` | api | cookie-signing secret (falls back to `SILO_APP_PASSWORD`) |
 | `SILO_PUBLIC_MCP_URL` | api | the exact MCP URL the "Copy config" button hands out |
 | `SILO_MCP_ALLOWED_HOSTS` | mcp | your mcp hostname(s), comma-separated — **required behind a proxy** |
+| `SILO_SECRET_KEY` | api | encrypts stored AI provider keys: `openssl rand -base64 32`. Needed only for AI features |
+| `SILO_DATA_DIR` | api | where read-aloud voice models are cached (about 0.6 GB); mount a volume here in Docker |
+| `SILO_BROWSER_WS_ENDPOINT` | api | optional headless browser for pages a plain fetch cannot read (`browser` compose profile) |
 
 Behind a reverse proxy, `SILO_MCP_ALLOWED_HOSTS` is the one that bites: the MCP SDK's
 DNS-rebinding guard rejects any `Host` it wasn't told to trust. Full walkthrough (Dokploy +
@@ -217,7 +247,7 @@ web bundle together, then reload existing tabs so they send the new header.
 
 Reach silo from outside the app — each released independently
 ([`docs/releasing.md`](docs/releasing.md)). Point any client at your silo's base URL + an API token
-(mint one in **Settings → API / MCP**).
+(mint one in **Settings → Access**).
 
 - **CLI** — capture / search / list / open from the terminal: `brew install amitray007/tap/silo`
   (or a tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases)).
@@ -236,10 +266,15 @@ packages/
   db/          Postgres schema, migrations, queries (Drizzle)
   worker/      background enrichment + scheduled jobs (purge / sweep / DLQ) ─▶ core
   queue/       pg-boss setup shared by the worker and API                   ─▶ core
-  mcp/server/  MCP adapter — 18 tools                                       ─▶ core
+  mcp/server/  MCP adapter — 35 tools                                       ─▶ core
   api/         HTTP adapter (Hono) — REST + OAuth server                    ─▶ core
   web/         React SPA (Vite, "Oat" design) — talks to the API over HTTP
   app/         composition root — runs the MCP server + worker as `silo`
+  cli/         the `silo` terminal client (capture / search / list / open)
+  release/     release tooling for the CLI and extensions
+extensions/
+  chrome/      capture from the browser toolbar
+  raycast/     capture and search from Raycast
 ```
 
 The core/adapter boundary is mechanically enforced
