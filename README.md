@@ -1,73 +1,76 @@
-<div align="center">
+<p align="center">
+  <img src="docs/design/app-icon/app-icon.svg" width="80" height="80" alt="silo logo: an orange tile with three white bars">
+</p>
 
-# silo
+<h1 align="center">silo</h1>
 
-**An agent-native personal link store.**
+<p align="center">A self-hosted link store that you and your AI agent share.</p>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%E2%89%A524-3c873a.svg)](package.json)
-[![MCP](https://img.shields.io/badge/protocol-MCP-6c5ce7.svg)](https://modelcontextprotocol.io)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-555?style=flat-square" alt="License: MIT"></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/node-%E2%89%A524-555?style=flat-square" alt="Node 24 or later"></a>
+  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-35_tools-ff6a13?style=flat-square" alt="MCP: 35 tools"></a>
+</p>
 
-Feed in web material (links, Twitter/X posts, HN posts, videos), captured with rich
-metadata and full text, organized by tags and one note field, searchable, and served
-over **MCP** so an external agent does the intelligence.
+<p align="center">
+  <img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: a highlighted passage above a diagram, beside the agents tag list" width="880">
+</p>
 
-**AI is optional.** silo is the substrate; the mind sits on top, over MCP. You can turn on small AI
-features, such as the Librarian chat or short titles for saved X posts, with your own Anthropic,
-OpenAI, Fireworks, or Vercel AI Gateway key. They are off by default, and silo works fully without
-them.
+silo saves links, X posts, Hacker News threads, and videos. For each one it keeps the metadata
+and the full text. You add tags and a note, search everything, and read in a clean reader. An
+agent such as Claude reaches the same library over MCP (Model Context Protocol), so it can
+search, tag, and save links for you.
 
-<img src="docs/design/app/shots/01-reader-dark.png" alt="silo's reader: a highlighted passage above a diagram, beside the agents tag list" width="880">
+AI features are optional and off by default. With your own Anthropic, OpenAI, Fireworks, or
+Vercel AI Gateway key, you can turn on the Librarian chat and short titles for saved X posts.
+silo works fully without them.
+
+Install the CLI:
 
 ```sh
 brew install amitray007/tap/silo
 ```
 
-</div>
+## What you can do
 
-## What it does
+**Save.** Paste a URL, or send one from the CLI, the Chrome extension, or Raycast. silo removes
+duplicates and strips tracking parameters such as `utm_source` (you choose which). A background worker then fetches the
+page and keeps its title, description, image, and full text. Hacker News, GitHub, YouTube, and X
+links also get source details, such as points, stars, channel, or post text.
 
-- **Capture** a URL → silo canonicalizes and dedups it, then a background worker fetches it
-  (SSRF-safe), extracts a readable card (title, description, site, image, full text via
-  Readability), and files it.
-- **Search & browse**: full-text search across title, description, extracted text, notes,
-  **and** tags; open one link's full detail; browse newest-first, filtered by tag or capture
-  status; all paginated.
-- **Organize**: edit the note, add/remove tags (case-insensitive), trash and restore, and
-  retry a degraded capture.
-- **Read** in a clean reader with type settings, a pace guide that remembers where you stopped,
-  and colored highlights with notes. The **Live** tab shows the original page. Pages behind a
-  bot check or a paywall keep whatever text silo can get, and say why the rest is missing.
-- **Listen** to any article. Read-aloud runs in your browser with open voice models (Kokoro and
-  Phonon) that silo downloads once and serves itself, so no text goes to a speech service.
-- **Ask the Librarian** (optional AI) about one article, a passage, or the whole library. It
-  answers with the same MCP tools an outside agent uses, so it can search, tag, and save. It
-  asks you first before it deletes anything or overwrites a note.
-- **Quick actions** put common questions one click away: explain, simplify, or argue against a
-  passage; define a word; summarize an article, list its claims, or find related links; recap
-  your week or your highlights. Add your own actions in **Settings → AI**.
-- **Follow feeds**: subscribe to RSS or Atom. Posts land in the feed, and you save the good ones
-  to the library.
-- **Rich per-source previews**: Hacker News, GitHub, YouTube, and X links get source-specific
-  data (points/comments, stars/forks/language, channel/thumbnail, author/post text) via a small
-  plugin registry; each source is togglable in Settings. With AI on, saved X posts get a short
-  title written by your model.
-- **Clean links**: tracking parameters such as `utm_source` are stripped before a link is shown,
-  copied, or served over MCP. You choose which parameters count, for every site or per site.
-- **Import and export** your library as JSON. Imported links land at once and enrich in the
-  background.
-- **Runs itself**: scheduled jobs purge old trash on a cycle, re-enqueue any capture stranded
-  mid-enrichment, and alert on the dead-letter queue.
-- **Two front doors, one core**: everything an agent can do over **MCP**, a human can do in
-  the web UI over HTTP. Both call one core, so they can never drift.
+**Read.** Open any link in a clean reader. Pick your type settings, highlight passages in color,
+and add notes. silo remembers where you stopped. The Live tab shows the original page. If a page
+sits behind a bot check or a paywall, silo keeps the text it can get and tells you what is
+missing.
 
-It's single-user, self-hosted, and private. Deliberately **not** a file store, not a content
-archive, not multi-user. It never summarizes or classifies on its own: that's the agent's job,
-or the Librarian's when you turn it on.
+**Listen.** Play any article aloud. The voice models (Kokoro and Phonon) run in your browser, so
+your text never goes to a speech service.
+
+**Find.** Search the full text, titles, notes, and tags. Filter the list by tag or by capture
+status, or press ⌘K to search from anywhere.
+
+**Organize.** Add tags and one note per link. Trash a link and restore it later; silo empties
+old trash on a schedule you pick (7, 30, or 90 days). Import and export the whole library as JSON.
+
+**Follow feeds.** Subscribe to RSS or Atom feeds, read new posts, and save the good ones to your
+library.
+
+**Let an agent use it.** Connect Claude, ChatGPT, or any MCP client. The agent gets 35 tools and
+can do everything you can do in the web UI: save, search, tag, highlight, and manage feeds.
+
+**Ask the Librarian (optional AI).** Turn on AI with your own key and ask questions about one
+article, a passage, or the whole library. The Librarian uses the same tools as an outside agent,
+and it asks you before it deletes anything or overwrites a note. One-click actions explain,
+simplify, or argue against a passage, define a word, or summarize an article or your week. You
+can add your own actions in **Settings → AI**.
+
+silo is for one person, on a server you run. It is not a file store, a web archive, or a team
+tool. It never summarizes or classifies links by itself. Your agent does that, or the Librarian
+if you turn AI on.
 
 ## Screenshots
 
-The web UI (`@silo/web`, React + Vite in the "Oat" design system), seeded with real articles by
+Captured from a library seeded with real articles by
 [`scripts/screenshots/run.sh`](scripts/screenshots/run.sh).
 
 <table>
@@ -87,13 +90,13 @@ The web UI (`@silo/web`, React + Vite in the "Oat" design system), seeded with r
 
 ## How it works
 
-One core holds every operation; thin adapters expose it. **Anything an agent can do over MCP, a
-human can do in the web UI. They call the same core, so the two views never drift.**
+One core package holds every operation. The MCP server and the HTTP API are thin adapters over
+it, so the agent and the web UI always have the same features.
 
 ```
           agent  ──MCP──┐                 ┌── stdio  (local subprocess)
                         ├──▶  core  ◀──────┤── HTTP + token
-          human  ──HTTP─┘   (the brain)    └── HTTP + OAuth  (Claude / ChatGPT connectors)
+          human  ──HTTP─┘   (all logic)    └── HTTP + OAuth  (Claude / ChatGPT connectors)
                                 │
                         background worker  ── enrich · purge · sweep · retry
 ```
@@ -111,13 +114,13 @@ An agent operates silo through **35 MCP tools**:
   `refresh_feed` · `list_feed_posts` · `search_feed_posts` · `save_feed_post` ·
   `archive_feed_post` · `unarchive_feed_post`
 
-A background worker runs alongside: it enriches new captures, purges old trash on a cycle
-(7 / 30 / 90 days), re-enqueues anything stranded mid-enrichment, and watches the dead-letter
-queue. Theme, purge cycle, and per-source plugin toggles are stored server-side.
+A background worker runs beside them. It fetches new captures, empties old trash, retries
+captures that stalled, and alerts when jobs fail for good. Settings such as theme, trash cycle,
+and per-source toggles live on the server.
 
-Full scope map and anti-scope: [`docs/product/scope.html`](docs/product/scope.html).
+What is in scope and what is not: [`docs/product/scope.html`](docs/product/scope.html).
 
-## Getting started
+## Run it locally
 
 You need **Node 24+**, **pnpm 10+**, and Postgres with the `pgvector` extension (Docker gives you
 that in one command).
@@ -223,8 +226,8 @@ The env vars that matter for a real deployment:
 | `SILO_DATA_DIR` | api | where read-aloud voice models are cached (about 0.6 GB); mount a volume here in Docker |
 | `SILO_BROWSER_WS_ENDPOINT` | api | optional headless browser for pages a plain fetch cannot read (`browser` compose profile) |
 
-Behind a reverse proxy, `SILO_MCP_ALLOWED_HOSTS` is the one that bites: the MCP SDK's
-DNS-rebinding guard rejects any `Host` it wasn't told to trust. Full walkthrough (Dokploy +
+Behind a reverse proxy, you must set `SILO_MCP_ALLOWED_HOSTS`. The MCP SDK's DNS-rebinding
+guard rejects any `Host` that is not on that list. Full walkthrough (Dokploy +
 Traefik, TLS, the MCP-URL resolution order): **[`docs/deploy.md`](docs/deploy.md)**.
 
 ### Embed the web UI
@@ -257,12 +260,11 @@ Reach silo from outside the app. Each client is released independently
 
 ## Architecture
 
-A TypeScript monorepo. Every operation goes through one core; adapters only translate to core
-calls, so the web UI and the agent can never drift.
+A TypeScript monorepo. Adapters only translate requests into core calls.
 
 ```
 packages/
-  core/        the brain - all operations + data access
+  core/        all operations and data access
   db/          Postgres schema, migrations, queries (Drizzle)
   worker/      background enrichment + scheduled jobs (purge / sweep / DLQ) ─▶ core
   queue/       pg-boss setup shared by the worker and API                   ─▶ core
