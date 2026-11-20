@@ -8,7 +8,7 @@
 [![Node](https://img.shields.io/badge/node-%E2%89%A524-3c873a.svg)](package.json)
 [![MCP](https://img.shields.io/badge/protocol-MCP-6c5ce7.svg)](https://modelcontextprotocol.io)
 
-Feed in web material — links, Twitter/X posts, HN posts, videos — captured with rich
+Feed in web material (links, Twitter/X posts, HN posts, videos), captured with rich
 metadata and full text, organized by tags and one note field, searchable, and served
 over **MCP** so an external agent does the intelligence.
 
@@ -30,10 +30,10 @@ brew install amitray007/tap/silo
 - **Capture** a URL → silo canonicalizes and dedups it, then a background worker fetches it
   (SSRF-safe), extracts a readable card (title, description, site, image, full text via
   Readability), and files it.
-- **Search & browse** — full-text search across title, description, extracted text, notes,
+- **Search & browse**: full-text search across title, description, extracted text, notes,
   **and** tags; open one link's full detail; browse newest-first, filtered by tag or capture
   status; all paginated.
-- **Organize** — edit the note, add/remove tags (case-insensitive), trash and restore, and
+- **Organize**: edit the note, add/remove tags (case-insensitive), trash and restore, and
   retry a degraded capture.
 - **Read** in a clean reader with type settings, a pace guide that remembers where you stopped,
   and colored highlights with notes. The **Live** tab shows the original page. Pages behind a
@@ -48,7 +48,7 @@ brew install amitray007/tap/silo
   your week or your highlights. Add your own actions in **Settings → AI**.
 - **Follow feeds**: subscribe to RSS or Atom. Posts land in the feed, and you save the good ones
   to the library.
-- **Rich per-source previews** — Hacker News, GitHub, YouTube, and X links get source-specific
+- **Rich per-source previews**: Hacker News, GitHub, YouTube, and X links get source-specific
   data (points/comments, stars/forks/language, channel/thumbnail, author/post text) via a small
   plugin registry; each source is togglable in Settings. With AI on, saved X posts get a short
   title written by your model.
@@ -56,9 +56,9 @@ brew install amitray007/tap/silo
   copied, or served over MCP. You choose which parameters count, for every site or per site.
 - **Import and export** your library as JSON. Imported links land at once and enrich in the
   background.
-- **Runs itself** — scheduled jobs purge old trash on a cycle, re-enqueue any capture stranded
+- **Runs itself**: scheduled jobs purge old trash on a cycle, re-enqueue any capture stranded
   mid-enrichment, and alert on the dead-letter queue.
-- **Two front doors, one core** — everything an agent can do over **MCP**, a human can do in
+- **Two front doors, one core**: everything an agent can do over **MCP**, a human can do in
   the web UI over HTTP. Both call one core, so they can never drift.
 
 It's single-user, self-hosted, and private. Deliberately **not** a file store, not a content
@@ -88,7 +88,7 @@ The web UI (`@silo/web`, React + Vite in the "Oat" design system), seeded with r
 ## How it works
 
 One core holds every operation; thin adapters expose it. **Anything an agent can do over MCP, a
-human can do in the web UI — they call the same core, so the two views never drift.**
+human can do in the web UI. They call the same core, so the two views never drift.**
 
 ```
           agent  ──MCP──┐                 ┌── stdio  (local subprocess)
@@ -125,7 +125,7 @@ that in one command).
 ```bash
 pnpm install          # deps + git hooks
 pnpm db:up            # Postgres (pgvector) via Docker, waits for health
-cp .env.example .env  # DATABASE_URL — defaults already match db:up
+cp .env.example .env  # DATABASE_URL - defaults already match db:up
 pnpm db:migrate       # apply the schema
 ```
 
@@ -136,7 +136,7 @@ pnpm dev     # for a human: API + web UI + worker → open http://localhost:5173
 pnpm start   # for an agent: the MCP server (stdio) + worker, no web UI
 ```
 
-- **`pnpm dev`** serves the React web UI (Vite proxies `/api/*` to the API, so it's same-origin —
+- **`pnpm dev`** serves the React web UI (Vite proxies `/api/*` to the API, so it's same-origin,
   no CORS). The API binds to loopback with no auth; it's a single-user localhost surface. Renders
   light or dark.
 - **`pnpm start`** speaks MCP over stdio and enriches in-process. Point an MCP client at it (below).
@@ -148,7 +148,7 @@ pnpm start   # for an agent: the MCP server (stdio) + worker, no web UI
 
 silo speaks MCP over three transports. Pick the one that matches where your agent runs.
 
-**1 · Local subprocess (stdio)** — Claude Desktop / Claude Code on the same machine. No network,
+**1 · Local subprocess (stdio)**: Claude Desktop / Claude Code on the same machine. No network,
 no auth: the process boundary is the trust boundary. Add to your MCP config:
 
 ```json
@@ -163,9 +163,9 @@ no auth: the process boundary is the trust boundary. Add to your MCP config:
 }
 ```
 
-**2 · Remote, with a token (HTTP)** — a self-hosted silo an agent reaches over the network. Run
+**2 · Remote, with a token (HTTP)**: a self-hosted silo an agent reaches over the network. Run
 the MCP endpoint (`SILO_MCP_HTTP_PORT` + `SILO_API_TOKEN`; see [Deploy](#deploy)) on whatever host
-you choose, then point the agent at its `/mcp` URL with a bearer token — mint one in
+you choose, then point the agent at its `/mcp` URL with a bearer token. Mint one in
 **Settings → Access**, where the **Copy config** button generates exactly this:
 
 ```json
@@ -186,7 +186,7 @@ claude mcp add --transport http silo https://<your-mcp-host>/mcp \
   --header "Authorization: Bearer <YOUR_SILO_API_TOKEN>"
 ```
 
-**3 · URL-only connector (OAuth)** — **Claude** and **ChatGPT** hosted connectors. No token to
+**3 · URL-only connector (OAuth)**: **Claude** and **ChatGPT** hosted connectors. No token to
 copy: paste the URL into "Add custom connector" and sign in. silo implements OAuth 2.1 + PKCE,
 Dynamic Client Registration, and discovery, so the whole flow is URL-only.
 
@@ -194,16 +194,16 @@ Dynamic Client Registration, and discovery, so the whole flow is URL-only.
 https://<your-mcp-host>/mcp
 ```
 
-> `<your-mcp-host>` is any host you point at the MCP endpoint — pick the name you like. The one
+> `<your-mcp-host>` is any host you point at the MCP endpoint; pick the name you like. The one
 > rule: make it a **single-level** subdomain (e.g. `mcp-links.example.com`), **not** a nested one
-> like `mcp.links.example.com` — many wildcard TLS certs don't cover a second level, and the OAuth
+> like `mcp.links.example.com`. Many wildcard TLS certs don't cover a second level, and the OAuth
 > discovery flow then fails at the proxy. Details:
 > [`docs/methods/mcp-oauth.md`](docs/methods/mcp-oauth.md).
 
 ## Deploy
 
-silo ships as **one Docker image** run as two roles — `api` (web UI + REST + worker) and `mcp`
-(the HTTP MCP endpoint) — over a pgvector Postgres. Run the whole stack locally:
+silo ships as **one Docker image** run as two roles, `api` (web UI + REST + worker) and `mcp`
+(the HTTP MCP endpoint), over a pgvector Postgres. Run the whole stack locally:
 
 ```bash
 docker compose -f docker-compose.prod.yml up --build
@@ -214,11 +214,11 @@ The env vars that matter for a real deployment:
 | Var | Role | What |
 |---|---|---|
 | `DATABASE_URL` | both | `postgres://silo:<pw>@postgres:5432/silo` (service name, not localhost) |
-| `SILO_API_TOKEN` | both | bearer the HTTP MCP requires — `openssl rand -hex 32` |
-| `SILO_APP_PASSWORD` | api | web-UI login password (≥16 chars) — set it, or the UI is open |
+| `SILO_API_TOKEN` | both | bearer the HTTP MCP requires: `openssl rand -hex 32` |
+| `SILO_APP_PASSWORD` | api | web-UI login password (≥16 chars); set it, or the UI is open |
 | `SILO_SESSION_SECRET` | api | cookie-signing secret (falls back to `SILO_APP_PASSWORD`) |
 | `SILO_PUBLIC_MCP_URL` | api | the exact MCP URL the "Copy config" button hands out |
-| `SILO_MCP_ALLOWED_HOSTS` | mcp | your mcp hostname(s), comma-separated — **required behind a proxy** |
+| `SILO_MCP_ALLOWED_HOSTS` | mcp | your mcp hostname(s), comma-separated, **required behind a proxy** |
 | `SILO_SECRET_KEY` | api | encrypts stored AI provider keys: `openssl rand -base64 32`. Needed only for AI features |
 | `SILO_DATA_DIR` | api | where read-aloud voice models are cached (about 0.6 GB); mount a volume here in Docker |
 | `SILO_BROWSER_WS_ENDPOINT` | api | optional headless browser for pages a plain fetch cannot read (`browser` compose profile) |
@@ -245,15 +245,15 @@ web bundle together, then reload existing tabs so they send the new header.
 
 ## Clients
 
-Reach silo from outside the app — each released independently
+Reach silo from outside the app. Each client is released independently
 ([`docs/releasing.md`](docs/releasing.md)). Point any client at your silo's base URL + an API token
 (mint one in **Settings → Access**).
 
-- **CLI** — capture / search / list / open from the terminal: `brew install amitray007/tap/silo`
+- **CLI**: capture / search / list / open from the terminal: `brew install amitray007/tap/silo`
   (or a tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases)).
-- **Chrome extension** — `silo-capture-*.zip` from the latest
+- **Chrome extension**: `silo-capture-*.zip` from the latest
   [`chrome-v*` release](https://github.com/amitray007/silo/releases), loaded unpacked.
-- **Raycast extension** — from the Raycast Store (search "silo").
+- **Raycast extension**: from the Raycast Store (search "silo").
 
 ## Architecture
 
@@ -262,14 +262,14 @@ calls, so the web UI and the agent can never drift.
 
 ```
 packages/
-  core/        the brain — all operations + data access
+  core/        the brain - all operations + data access
   db/          Postgres schema, migrations, queries (Drizzle)
   worker/      background enrichment + scheduled jobs (purge / sweep / DLQ) ─▶ core
   queue/       pg-boss setup shared by the worker and API                   ─▶ core
-  mcp/server/  MCP adapter — 35 tools                                       ─▶ core
-  api/         HTTP adapter (Hono) — REST + OAuth server                    ─▶ core
-  web/         React SPA (Vite, "Oat" design) — talks to the API over HTTP
-  app/         composition root — runs the MCP server + worker as `silo`
+  mcp/server/  MCP adapter - 35 tools                                       ─▶ core
+  api/         HTTP adapter (Hono) - REST + OAuth server                    ─▶ core
+  web/         React SPA (Vite, "Oat" design) - talks to the API over HTTP
+  app/         composition root - runs the MCP server + worker as `silo`
   cli/         the `silo` terminal client (capture / search / list / open)
   release/     release tooling for the CLI and extensions
 extensions/
@@ -293,5 +293,5 @@ gate. Tests hit a real Postgres via disposable databases. Conventions live in
 
 ## Contributing & license
 
-Contributions welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). Report vulnerabilities via
+Contributions welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md). Report vulnerabilities via
 [`SECURITY.md`](SECURITY.md). Licensed [MIT](LICENSE) © 2026 Amit Ray.
