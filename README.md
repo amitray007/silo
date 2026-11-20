@@ -49,7 +49,7 @@ your text never goes to a speech service.
 **Find.** Search the full text, titles, notes, and tags. Filter the list by tag or by capture
 status, or press ⌘K to search from anywhere.
 
-**Organize.** Add tags and one note per link. Trash a link and restore it later; silo empties
+**Organize.** Add tags and one note per link. Retry a capture that failed. Trash a link and restore it later; silo empties
 old trash on a schedule you pick (7, 30, or 90 days). Import and export the whole library as JSON.
 
 **Follow feeds.** Subscribe to RSS or Atom feeds, read new posts, and save the good ones to your
