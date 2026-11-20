@@ -5,9 +5,9 @@
 # It stands up a fully ISOLATED throwaway Postgres (never your real silo DB),
 # migrates it, seeds ~24 curated on-brand links through the real /api/ingest
 # endpoint (so silo's own enrichment fetches live metadata + covers), then
-# serves the built web app and drives `agent-browser` to capture the suite.
+# serves the built web app and drives Playwright to capture the suite.
 #
-# Requires: docker, pnpm, node/npx, and the `agent-browser` CLI on PATH.
+# Requires: docker, pnpm, node/npx, and a Playwright Chromium (or CHROME_PATH).
 #
 # Usage:
 #   scripts/screenshots/run.sh            # full flow: db → seed → serve → capture
@@ -27,7 +27,12 @@ PG_PASS="silo"
 APP_PORT="${APP_PORT:-8788}"
 BASE_URL="http://127.0.0.1:${APP_PORT}"
 API_TOKEN="shots-seed-token-local-only"
+MANIFEST="${MANIFEST:-$REPO_ROOT/shots-manifest.json}"
+# Throwaway key so the Librarian can be switched on with a placeholder provider key.
+SILO_SECRET_KEY="${SILO_SECRET_KEY:-$(openssl rand -base64 32)}"
 IMAGE="pgvector/pgvector:pg18"
+# The workspace tsx: a clean checkout has none on the root PATH.
+TSX="$REPO_ROOT/packages/app/node_modules/.bin/tsx"
 
 log() { printf '\033[1;36m[shots]\033[0m %s\n' "$*"; }
 
@@ -57,7 +62,7 @@ start_db() {
 
 migrate_db() {
   log "migrating throwaway DB…"
-  ( cd "$REPO_ROOT/packages/db" && DATABASE_URL="$DATABASE_URL" npx tsx src/migrate.ts )
+  ( cd "$REPO_ROOT/packages/db" && DATABASE_URL="$DATABASE_URL" "$TSX" src/migrate.ts )
 }
 
 build_web() {
@@ -74,10 +79,10 @@ start_app() {
   if [[ "$mode" == "seed" ]]; then env_extra+=("SILO_API_TOKEN=$API_TOKEN"); fi
   log "starting app ($mode) on $BASE_URL…"
   ( cd "$REPO_ROOT" && \
-    env DATABASE_URL="$DATABASE_URL" PORT="$APP_PORT" \
+    env DATABASE_URL="$DATABASE_URL" PORT="$APP_PORT" SILO_SECRET_KEY="$SILO_SECRET_KEY" \
         SILO_WEB_DIST="$REPO_ROOT/packages/web/dist" \
         "${env_extra[@]}" \
-        npx tsx packages/app/src/api-main.ts ) &
+        "$TSX" packages/app/src/api-main.ts ) &
   APP_PID=$!
   # wait for /health
   for _ in $(seq 1 40); do
@@ -96,14 +101,16 @@ stop_app() {
 seed() {
   log "seeding curated links via /api/ingest…"
   ( cd "$REPO_ROOT" && \
-    DATABASE_URL="$DATABASE_URL" INGEST_URL="$BASE_URL" SILO_API_TOKEN="$API_TOKEN" \
-    npx tsx scripts/screenshots/seed.ts )
+    DATABASE_URL="$DATABASE_URL" INGEST_URL="$BASE_URL" SILO_API_TOKEN="$API_TOKEN" MANIFEST="$MANIFEST" \
+    "$TSX" scripts/screenshots/seed.ts )
 }
 
 capture() {
   log "capturing screenshots into $OUT_DIR…"
   mkdir -p "$OUT_DIR"
-  BASE_URL="$BASE_URL" OUT_DIR="$OUT_DIR" bash "$REPO_ROOT/scripts/screenshots/capture.sh"
+  ( cd "$REPO_ROOT" && \
+    BASE_URL="$BASE_URL" OUT_DIR="$OUT_DIR" MANIFEST="$MANIFEST" \
+    node "$REPO_ROOT/scripts/screenshots/capture.mjs" )
 }
 
 cleanup() {

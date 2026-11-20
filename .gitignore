@@ -42,3 +42,6 @@ yarn-error.log*
 CLAUDE.local.md
 docs/design/refs/
 .gstack/
+
+# README screenshot harness id manifest
+shots-manifest.json
